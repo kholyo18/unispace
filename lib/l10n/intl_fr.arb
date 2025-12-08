@@ -1,0 +1,118 @@
+
+{
+  "@@locale": "fr",
+  "sections": "Sections",
+  "majors": "Spécialis",
+  "comments": "Commentaires",
+  "comment": "Commentaire",
+  "writeYourComment": "Écrivez votre commentaire",
+  "publish": "Publier",
+  "cancel": "Annuler",
+  "posted": "Publication",
+  "searchClipboard": "Rechercher dans le presse-papiers",
+  "note": "Note",
+  "title": "Titre",
+  "content": "Contenu",
+  "save": "Enregistrer",
+  "pinNote": "Épingler la note",
+  "noNotesYet": "Aucune note pour le moment",
+  "archive": "Archives",
+  "home": "Accueil",
+  "community": "Communauté",
+  "viewAll": "Voir tout",
+  "faculties": "Facultés",
+  "clipboard": "Presse-papiers",
+  "changeTheme": "Changer le thème",
+  "changeLanguage": "Changer la langue",
+  "resetPassword": "Réinitialiser le mot de passe",
+  "logout": "Se déconnecter",
+  "login": "Se connecter",
+  "aboutApp": "À propos de l'application",
+  "privacyPolicy": "Politique de confidentialité",
+  "welcomeEmoji": "Bienvenue 👋",
+  "homeSubtitle": "Parcourez les facultés, calculez votre moyenne, partagez vos idées et notez facilement.",
+  "searchFaculty": "Rechercher une faculté...",
+  "quickCalc": "Calcul rapide",
+  "welcomeUniSpace": "Bienvenue sur UniSpace",
+  "email": "E-mail",
+  "password": "Mot de passe",
+  "resetSent": "Le lien de réinitialisation a été envoyé",
+  "resetFailed": "Échec de l’envoi : {e}",
+  "notRegistered": "Non enregistré",
+  "searchClipboard": "Rechercher dans le presse-papiers…",
+  "pinned": "Épinglées",
+  "otherNotes": "Autres notes",
+  "note": "Note",
+  "title": "Titre",
+  "content": "Contenu",
+  "pinNote": "Épingler la note",
+  "noPostsYet": "Aucune publication pour le moment",
+  "startDiscussion": "Commencez la première discussion dans la communauté et partagez votre expérience avec vos collègues.",
+  "createPost": "Publication",
+
+  "newPost": "Nouvelle publication",
+  "mediaUrl": "Lien image/vidéo",
+  "hashtag": "#",
+  "share": "Partager",
+  "report": "Signaler",
+  "commentsCount": "Commentaires ({count})",
+  "writeComment": "Écrivez votre commentaire…",
+  "quickCalc2": "Calcul rapide",
+  "add": "Ajouter",
+  "calculate": "Calculer",
+  "Pass": " Réussi",
+  "Fail": " Échoué",
+  "credits": "Crédits : {value}",
+  "lightMode": "Mode clair",
+  "darkMode": "Mode sombre",
+  "systemMode": "Mode système",
+  "resetFailed": "Échec de l'envoi : {e}",
+  "aboutAppDetails": "UniSpace ne collecte pas de données personnelles en dehors de Firebase. Toutes les données sont sécurisées."
+,"chooseTheme": "Choisir le thème"
+,"light": "Clair"
+,"dark": "Sombre"
+,"system": "Système"
+,"chooseLanguage": "Choisir la langue"
+,"arabic": "Arabe"
+,"register": "S'inscrire"
+,"title": "Titre"
+,"post": "Votre publication a été publiée ✅"
+,"createPoste": "Créer une publication"
+,"majors": "Spécialités"
+,"oneMajor": "Une spécialité"
+,"noMajorsYet": "Aucune spécialité enregistrée pour le moment"
+
+,"facultyEconomics": "Faculté des sciences économiques, commerciales et des sciences de gestion"
+,"commentsCount": "Commentaires ({count})"
+,"basicEducationDept": "Département de l'enseignement de base"
+,"basicEducation": "Enseignement de base",
+  "managementSciencesDept": "Département des sciences de gestion",
+  "managementSciences": "Sciences de gestion",
+  "businessAdministration": "Administration des affaires",
+  "financialManagement": "Gestion financière",
+  "humanResourcesManagement": "Gestion des ressources humaines",
+  "corporateFinancialManagement": "Gestion financière des entreprises"
+,"commercialSciencesDept": "Département des sciences commerciales",
+  "commercialSciences": "Sciences commerciales",
+  "financeInternationalTrade": "Finance et commerce international",
+  "marketing": "Marketing",
+  "servicesMarketing": "Marketing des services",
+  "hotelTourismMarketing": "Marketing hôtelier et touristique"
+,"financialAccountingDept": "Département des sciences financières et comptables",
+  "financialAccounting": "Sciences financières et comptables",
+  "finance": "Finance",
+  "accounting": "Comptabilité",
+  "accountingTaxation": "Comptabilité et fiscalité",
+  "corporateFinance": "Finance d'entreprise"
+,"economicsDept": "Département des sciences économiques",
+  "economics": "Sciences économiques",
+  "monetaryFinancialEconomics": "Économie monétaire et financière"
+,"internationalEconomics": "Économie internationale"
+,"noSubjectsThisSemester": "Aucune matière dans ce semestre."
+,"credits": "Crédits :",
+  "coefficient": "Coefficient :"
+,"close": "Fermer"
+,"studyResults": "Résultats d'étude",
+  "notesTdTpExam": "Notes (TD/TP/Exam)"
+
+}

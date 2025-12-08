@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="assets/brand/logo-horizontal.svg" width="720" alt="Fachub Logo"/>
+  <img src="assets/brand/logo-horizontal.svg" width="720" alt="UniSpace Logo"/>
 </p>
 <p align="center">
-  <img src="assets/screenshots/fachub_mockup.png" width="720" alt="Fachub App Preview"/>
+  <img src="assets/screenshots/UniSpace_mockup.png" width="720" alt="UniSpace App Preview"/>
 </p>
 
-# Fachub 🎓💬
+# UniSpace 🎓💬
 حساب المعدّل الجامعي + شات طلابي (Online عبر Firebase أو Offline محليًا).  
 تطبيق Flutter بالألوان الأساسية **أخضر** `#16A34A` و **أزرق** `#2563EB`.
 

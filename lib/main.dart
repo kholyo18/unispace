@@ -1,8 +1,10 @@
 // ============================================================================
-// Fachub — main.dart (UPDATED: BottomBar + Notes + Reddit-like Community + Table)
+// UniSpace — main.dart (UPDATED: BottomBar + Notes + Reddit-like Community + Table)
 // PART 1/3
 // ============================================================================
-
+import 'dart:convert';
+import 'package:hive/hive.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -26,16 +28,35 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:flutter/services.dart' show rootBundle;
+
+
+
 
 import 'firebase_options.dart';
+import 'generated/l10n.dart';
 import 'ui/theme.dart';
 import 'ui/widgets/widgets.dart';
+import './moduls2.dart';
+import './moduls.dart';
+import 'module/moduls.dart';
+import 'package:google_fonts/google_fonts.dart';
+//import 'package: UniSpace/generated/l10n.dart';
+import 'package:translator/translator.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+Future<void> openPdf(String filePath) async {
+  final result = await OpenFilex.open(filePath);
+  print(result); // Optional: لمراجعة حالة الفتح
+}
 
 // ============================================================================
 // Branding
 // ============================================================================
-const kFachubGreen = Color(0xFF2F9E44);
-const kFachubBlue  = Color(0xFF3557D5);
+const kUniSpaceGreen = Color(0xFFB2DFDB);
+const kUniSpaceBlue  = Color(0xFF004D40);
 const kNoteYellow  = Color(0xFFFFF3C4);
 
 // ============================================================================
@@ -44,22 +65,27 @@ const kNoteYellow  = Color(0xFFFFF3C4);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const FachubApp());
+  await Hive.initFlutter();
+
+  // تسجيل Hive Adapter
+  Hive.registerAdapter(ModuleModelAdapter());
+  runApp(const UniSpaceApp());
 }
 
 // ============================================================================
 // App root (Theme + Locale)  — مع حفظ التفضيلات
 // ============================================================================
-class FachubApp extends StatefulWidget {
-  const FachubApp({super.key});
-  static _FachubAppState of(BuildContext context) =>
-      context.findAncestorStateOfType<_FachubAppState>()!;
+
+class UniSpaceApp extends StatefulWidget {
+  const UniSpaceApp({super.key});
+  static _UniSpaceAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_UniSpaceAppState>()!;
 
   @override
-  State<FachubApp> createState() => _FachubAppState();
+  State<UniSpaceApp> createState() => _UniSpaceAppState();
 }
 
-class _FachubAppState extends State<FachubApp> {
+class _UniSpaceAppState extends State<UniSpaceApp> {
   ThemeMode _themeMode = ThemeMode.system;
   Locale _locale = const Locale('ar');
 
@@ -100,18 +126,19 @@ class _FachubAppState extends State<FachubApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fachub',
+      title: 'UniSpace',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: _themeMode,
       locale: _locale,
-      supportedLocales: const [Locale('ar'), Locale('fr'), Locale('en')],
-      localizationsDelegates: const [
+      localizationsDelegates: [
+        S.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      supportedLocales: S.delegate.supportedLocales,
       home: const AuthGate(),
     );
   }
@@ -127,7 +154,7 @@ class AppEndDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final app = FachubApp.of(context);
+    final app = UniSpaceApp.of(context);
 
     return SafeArea(
       child: Drawer(
@@ -136,53 +163,38 @@ class AppEndDrawer extends StatelessWidget {
           children: [
             UserAccountsDrawerHeader(
               decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [kFachubBlue, kFachubGreen]),
+                gradient: LinearGradient(colors: [kUniSpaceBlue, kUniSpaceGreen]),
               ),
               accountName: Text(user?.email?.split('@').first ?? 'Guest',
                   style: const TextStyle(fontWeight: FontWeight.w700)),
               accountEmail: Text(user?.email ?? 'غير مسجّل'),
               currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
-                child: Icon(Icons.person, color: kFachubBlue, size: 36),
+                child: Icon(Icons.person, color: kUniSpaceBlue, size: 36),
               ),
             ),
 
             // تنقّل سريع
+
+
+            // ListTile(
+            //   leading: const Icon(Icons.calculate_outlined),
+            //   title: const Text('حاسبة المعدل'),
+            //   onTap: () {
+            //     Navigator.push
+            //       (context,
+            //         MaterialPageRoute(builder: (_) => const QuickAverageScreen()));
+            //   },
+            // ),
             ListTile(
-              leading: const Icon(Icons.home_outlined),
-              title: const Text('الصفحة الرئيسية'),
+              leading: const Icon(Icons.note_alt_outlined),
+              title: Text(S.of(context).clipboard),
+
               onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const HomeShell()),
-                  (_) => false,
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotesScreen()),
                 );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.calculate_outlined),
-              title: const Text('حاسبة المعدل'),
-              onTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const CalculatorHubScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.menu_book_outlined),
-              title: const Text('الدراسة (كليّات → تخصّصات → جدول)'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => FacultiesScreen(faculties: demoFaculties),
-                ));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.public_outlined),
-              title: const Text('مجتمع Fachub'),
-              onTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const CommunityScreen()));
               },
             ),
 
@@ -190,14 +202,15 @@ class AppEndDrawer extends StatelessWidget {
 
             // المظهر واللغة
             ListTile(
+
               leading: const Icon(Icons.color_lens_outlined),
-              title: const Text('تغيير المظهر'),
+              title: Text(S.of(context).changeTheme),
               subtitle: Text(
                 app._themeMode == ThemeMode.light
-                    ? 'الوضع الفاتح'
+                    ? S.of(context).lightMode
                     : app._themeMode == ThemeMode.dark
-                        ? 'الوضع الداكن'
-                        : 'حسب النظام',
+                        ? S.of(context).darkMode
+                        : S.of(context).systemMode,
               ),
               onTap: () {
                 showModalBottomSheet(
@@ -208,12 +221,12 @@ class AppEndDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.language_outlined),
-              title: const Text('تغيير اللغة'),
+              title: Text(S.of(context).changeLanguage),
               subtitle: Text(_langName(app._locale.languageCode)),
               onTap: () {
                 showModalBottomSheet(
                   context: context,
-                  builder: (_) => _LanguageSheet(app: app),
+                  builder: (_) => _LanguageSheet(),
                 );
               },
             ),
@@ -224,14 +237,14 @@ class AppEndDrawer extends StatelessWidget {
             if (user != null) ...[
               ListTile(
                 leading: const Icon(Icons.lock_reset),
-                title: const Text('إعادة تعيين كلمة المرور'),
+                title: Text(S.of(context).resetPassword),
                 onTap: () async {
                   try {
                     await FirebaseAuth.instance
                         .sendPasswordResetEmail(email: user.email!);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('تم إرسال رابط إعادة التعيين')),
+                         SnackBar(content: Text(S.of(context).resetSent),),
                       );
                     }
                   } catch (e) {
@@ -245,7 +258,7 @@ class AppEndDrawer extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.logout, color: Colors.redAccent),
-                title: const Text('تسجيل الخروج'),
+                title: Text(S.of(context).logout),
                 onTap: () async {
                   await FirebaseAuth.instance.signOut();
                   if (!context.mounted) return;
@@ -258,7 +271,7 @@ class AppEndDrawer extends StatelessWidget {
             ] else ...[
               ListTile(
                 leading: const Icon(Icons.login),
-                title: const Text('تسجيل الدخول'),
+                title: Text(S.of(context).login),
                 onTap: () {
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute(builder: (_) => const SignInScreen()),
@@ -272,14 +285,14 @@ class AppEndDrawer extends StatelessWidget {
             // حول
             ListTile(
               leading: const Icon(Icons.info_outline),
-              title: const Text('حول التطبيق'),
+              title: Text(S.of(context).aboutApp),
               onTap: () => showAboutDialog(
                 context: context,
-                applicationName: 'Fachub',
+                applicationName: 'UniSpace',
                 applicationVersion: '1.0.0',
                 applicationIcon: const CircleAvatar(
-                  backgroundColor: kFachubBlue,
-                  child: Icon(Icons.school, color: Colors.white),
+                  backgroundColor: kUniSpaceBlue,
+                  child: Icon(Icons.school, color: Colors.teal),
                 ),
                 children: const [
                   Text('منصة لحساب المعدل الجامعي ومجتمع للطلبة، مع تدوين ملاحظات.'),
@@ -288,14 +301,14 @@ class AppEndDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.privacy_tip_outlined),
-              title: const Text('سياسة الخصوصية'),
+              title: Text(S.of(context).privacyPolicy),
+
               onTap: () {
                 showDialog(
                   context: context,
-                  builder: (_) => const AlertDialog(
-                    title: Text('سياسة الخصوصية'),
-                    content: Text(
-                        'Fachub لا يجمع بيانات شخصية خارج Firebase. جميع البيانات آمنة.'),
+                  builder: (_) =>  AlertDialog(
+                    title: Text(S.of(context).privacyPolicy),
+                    content: Text(S.of(context).aboutAppDetails),
                   ),
                 );
               },
@@ -304,7 +317,7 @@ class AppEndDrawer extends StatelessWidget {
             const SizedBox(height: 12),
             Center(
               child: Text(
-                'Fachub © ${DateTime.now().year}',
+                'UniSpace © ${DateTime.now().year}',
                 style: const TextStyle(color: Colors.grey),
               ),
             ),
@@ -328,30 +341,32 @@ class AppEndDrawer extends StatelessWidget {
 }
 
 class _ThemeModeSheet extends StatelessWidget {
-  final _FachubAppState app;
+  final _UniSpaceAppState app;
   const _ThemeModeSheet({required this.app});
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const ListTile(title: Text('اختر المظهر')),
+         ListTile(title: Text(S.of(context).chooseTheme),),
         RadioListTile<ThemeMode>(
           value: ThemeMode.light,
           groupValue: app._themeMode,
-          title: const Text('فاتح'),
+          title: Text(S.of(context).light),
           onChanged: (v) => _apply(context, v!),
         ),
         RadioListTile<ThemeMode>(
           value: ThemeMode.dark,
           groupValue: app._themeMode,
-          title: const Text('داكن'),
+          title: Text(S.of(context).dark),
+
           onChanged: (v) => _apply(context, v!),
         ),
         RadioListTile<ThemeMode>(
           value: ThemeMode.system,
           groupValue: app._themeMode,
-          title: const Text('حسب النظام'),
+          title: Text(S.of(context).system),
+
           onChanged: (v) => _apply(context, v!),
         ),
       ]),
@@ -363,43 +378,130 @@ class _ThemeModeSheet extends StatelessWidget {
     Navigator.pop(context);
   }
 }
-
 class _LanguageSheet extends StatelessWidget {
-  final _FachubAppState app;
-  const _LanguageSheet({required this.app});
+  const _LanguageSheet({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final app = UniSpaceApp.of(context);
+
     return SafeArea(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const ListTile(title: Text('اختر اللغة')),
-        RadioListTile<String>(
-          value: 'ar',
-          groupValue: app._locale.languageCode,
-          title: const Text('العربية'),
-          onChanged: (_) => _apply(context, const Locale('ar')),
-        ),
-        RadioListTile<String>(
-          value: 'fr',
-          groupValue: app._locale.languageCode,
-          title: const Text('Français'),
-          onChanged: (_) => _apply(context, const Locale('fr')),
-        ),
-        RadioListTile<String>(
-          value: 'en',
-          groupValue: app._locale.languageCode,
-          title: const Text('English'),
-          onChanged: (_) => _apply(context, const Locale('en')),
-        ),
-      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: Text(S.of(context).chooseLanguage),
+
+          ),
+
+          RadioListTile<String>(
+            value: 'ar',
+            groupValue: app._locale.languageCode,
+            title: Text(S.of(context).arabic),
+
+            onChanged: (_) {
+              app.setLocale(const Locale('ar'));
+              Navigator.pop(context);
+            },
+          ),
+
+          RadioListTile<String>(
+            value: 'fr',
+            groupValue: app._locale.languageCode,
+            title: const Text("Français"),
+            onChanged: (_) {
+              app.setLocale(const Locale('fr'));
+              Navigator.pop(context);
+            },
+          ),
+
+          RadioListTile<String>(
+            value: 'en',
+            groupValue: app._locale.languageCode,
+            title: const Text("English"),
+            onChanged: (_) {
+              app.setLocale(const Locale('en'));
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
     );
   }
+}
+class AutoTranslate {
+  static final translator = GoogleTranslator();
 
-  void _apply(BuildContext context, Locale l) {
-    app.setLocale(l);
-    Navigator.pop(context);
+  static Future<String> tr(BuildContext context, String text) async {
+    final lang = UniSpaceApp.of(context)._locale.languageCode;
+
+    // إذا كانت نفس اللغة → لا حاجة للترجمة
+    if (lang == 'ar') return text;
+
+    try {
+      final translation = await translator.translate(text, to: lang);
+      return translation.text;
+    } catch (_) {
+      return text; // إذا فشلت الترجمة
+    }
   }
 }
+final translator = GoogleTranslator(); // كائن الترجمة
+
+/// ترجمة النص حسب لغة التطبيق
+Future<String> translateSubject(BuildContext context, String subject) async {
+  try {
+    // جلب اللغة المختارة من التطبيق
+    final lang = UniSpaceApp.of(context)._locale.languageCode;
+
+    // إذا كانت العربية → نعيد النص كما هو
+    if (lang == 'ar') return subject;
+
+    // ترجمة للنص حسب اللغة المختارة
+    var translation = await translator.translate(subject, to: lang);
+    return translation.text;
+  } catch (e) {
+    // fallback عند حدوث خطأ
+    return subject;
+  }
+}
+// class _LanguageSheet extends StatelessWidget {
+//   final _UniSpaceAppState app;
+//   const _LanguageSheet({required this.app});
+//
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return SafeArea(
+//       child: Column(mainAxisSize: MainAxisSize.min, children: [
+//         const ListTile(title: Text('اختر اللغة')),
+//         RadioListTile<String>(
+//           value: 'ar',
+//           groupValue: app._locale.languageCode,
+//           title: const Text('العربية'),
+//           onChanged: (_) => _apply(context, const Locale('ar')),
+//         ),
+//         RadioListTile<String>(
+//           value: 'fr',
+//           groupValue: app._locale.languageCode,
+//           title: const Text('Français'),
+//           onChanged: (_) => _apply(context, const Locale('fr')),
+//         ),
+//         RadioListTile<String>(
+//           value: 'en',
+//           groupValue: app._locale.languageCode,
+//           title: const Text('English'),
+//           onChanged: (_) => _apply(context, const Locale('en')),
+//         ),
+//       ]),
+//     );
+//   }
+//
+//   void _apply(BuildContext context, Locale l) {
+//     app.setLocale(l);
+//     Navigator.pop(context);
+//   }
+// }
 
 class _DrawerLeading extends StatelessWidget {
   final bool showBack;
@@ -499,8 +601,9 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      body: Center(
+      backgroundColor: Colors.blueGrey[700],
+      body:
+      Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Card(
@@ -511,27 +614,28 @@ class _SignInScreenState extends State<SignInScreen> {
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.school_rounded, color: kFachubBlue, size: 64),
+                const Icon(Icons.school_rounded, color: kUniSpaceBlue, size: 64),
                 const SizedBox(height: 12),
-                const Text("مرحبًا بك في Fachub",
-                    style:
+                Text(S.of(context).welcomeUniSpace,
+                style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
                 TextField(
                   controller: email,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
+                  decoration:  InputDecoration(
                     prefixIcon: Icon(Icons.email_outlined),
-                    labelText: "البريد الإلكتروني",
+                    labelText: S.of(context).email,
+
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: password,
                   obscureText: true,
-                  decoration: const InputDecoration(
+                  decoration:  InputDecoration(
                     prefixIcon: Icon(Icons.lock_outline),
-                    labelText: "كلمة المرور",
+                    labelText: S.of(context).password,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -539,12 +643,14 @@ class _SignInScreenState extends State<SignInScreen> {
                   FilledButton.icon(
                     onPressed: loading ? null : _login,
                     icon: const Icon(Icons.login),
-                    label: const Text("دخول"),
+                    label: Text(S.of(context).login),
+
                   ),
                   OutlinedButton.icon(
                     onPressed: loading ? null : _register,
                     icon: const Icon(Icons.person_add_alt),
-                    label: const Text("تسجيل"),
+                    label: Text(S.of(context).register),
+
                   ),
                 ]),
               ]),
@@ -605,6 +711,7 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
           CommunityScreen(),
           // الملاحظات الاحترافية
           NotesScreen(),
+
         ],
       ),
       bottomNavigationBar: _BottomBar(
@@ -613,32 +720,32 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
         pageCount: 3,
         onTap: _go,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: _NoteFab(onTap: () => _go(2)),
+      //floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+       //floatingActionButton: _NoteFab(onTap: () => _go(2)),
     );
   }
 }
 
 // زر الملاحظات في المنتصف
-class _NoteFab extends StatelessWidget {
-  final VoidCallback onTap;
-  const _NoteFab({required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: SizedBox(
-        width: 56,
-        height: 56,
-        child: FloatingActionButton(
-          elevation: 3,
-          onPressed: onTap,
-          child: const Icon(Icons.note_alt_outlined, size: 26),
-        ),
-      ),
-    );
-  }
-}
+// class _NoteFab extends StatelessWidget {
+//   final VoidCallback onTap;
+//   const _NoteFab({required this.onTap});
+//   @override
+//   Widget build(BuildContext context) {
+//     return Padding(
+//       padding: const EdgeInsets.only(bottom: 16),
+//       child: SizedBox(
+//         width: 56,
+//         height: 56,
+//         child: FloatingActionButton(
+//           elevation: 3,
+//           onPressed: onTap,
+//           child: const Icon(Icons.note_alt_outlined, size: 26),
+//         ),
+//       ),
+//     );
+//   }
+// }
 
 // شريط سفلي مع شكل احترافي
 class _BottomBar extends StatefulWidget {
@@ -705,24 +812,27 @@ class _BottomBarState extends State<_BottomBar> {
       onPanEnd: _handlePanEnd,
       onPanCancel: () => _handlePanEnd(),
       child: BottomAppBar(
-        height: 68,
+        height: 60,
         shape: const CircularNotchedRectangle(),
         notchMargin: 8,
         child: Row(
           children: [
             Expanded(
               child: _BarItem(
+
                 icon: Icons.home_outlined,
-                label: 'الرئيسية',
+                label:S.of(context).home,
+
                 selected: widget.index == 0,
                 onTap: () => widget.onTap(0),
+
               ),
             ),
             const SizedBox(width: 56),
             Expanded(
               child: _BarItem(
                 icon: Icons.public_outlined,
-                label: 'المجتمع',
+                label: S.of(context).community,
                 selected: widget.index == 1,
                 onTap: () => widget.onTap(1),
               ),
@@ -756,15 +866,15 @@ class _BarItem extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
         decoration: BoxDecoration(
           color: selected ? scheme.primary.withOpacity(.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, color: c),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(color: c, fontSize: 12)),
+          const SizedBox(height: 0),
+          Text(label, style: TextStyle(color: c, fontSize: 10)),
         ]),
       ),
     );
@@ -774,13 +884,15 @@ class _BarItem extends StatelessWidget {
 // ============================================================================
 // Home Landing — كروت كليات احترافية + دخول إلى Navigator الدراسة
 // ============================================================================
+
 class HomeLandingScreen extends StatelessWidget {
   const HomeLandingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.canPop(context);
-    final faculties = demoFaculties.take(6).toList();
+    final faculties = getDemoFaculties(context).take(6).toList();
+
     final quickFaculty = faculties.isNotEmpty ? faculties.first : null;
     final gridFaculties =
         quickFaculty == null ? faculties : faculties.skip(1).toList(growable: false);
@@ -793,13 +905,37 @@ class HomeLandingScreen extends StatelessWidget {
     }
 
     return AppScaffold(
+       // endDrawer:  AppEndDrawer(),
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('Fachub • الرئيسية'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
+        titleSpacing: 0, // حتى يلتصق المحتوى باليسار
+        title: Row(
+          textDirection: TextDirection.ltr,
+          //mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () {
+                Scaffold.of(context).openEndDrawer(); // لأنك تستخدم endDrawer
+              },
+            ),
+            const SizedBox(width: 4),
+            Align( alignment: Alignment.centerLeft,
+                child: Text(
+              'UniSpace',
+              style: GoogleFonts.pacifico(
+                textStyle: Theme.of(context).textTheme.displayLarge,
+                fontSize: 30,
+                fontWeight: FontWeight.w500,
+                fontStyle: FontStyle.italic,
+                color: Colors.teal[900],
+              ),
+            )),
+          ],
+        ),
       ),
-      endDrawer: const AppEndDrawer(),
+
+
       padding: EdgeInsets.zero,
       body: CustomScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -807,11 +943,60 @@ class HomeLandingScreen extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             sliver: SliverToBoxAdapter(
-              child: InfoCard(
-                leadingIcon: Icons.school_outlined,
-                title: 'مرحباً بك 👋',
-                subtitle:
-                    'تصفح الكليات، احسب معدلك، شارك أفكارك، ودوّن ملاحظاتك بسهولة.',
+
+              child: Material(
+                color: Colors.transparent, // للحفاظ على خلفية InfoCard
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    textTheme: Theme.of(context).textTheme.apply(
+                      bodyColor: Colors.white, // لون النصوص
+                      displayColor: Colors.white,
+                    ),
+                  ),
+                  child: InfoCard(
+                    backgroundColor:Theme.of(context).colorScheme.onPrimaryFixedVariant,
+                    leadingIcon: Icons.school_outlined,
+                    title: S.of(context).welcomeEmoji,
+                    subtitle: S.of(context).homeSubtitle,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(1, 12, 1, 10),
+            sliver: SliverToBoxAdapter(
+              child: Container(
+
+                height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  onChanged: (value) {
+                    // منطق البحث لتصفية الكليات لاحقًا
+                  },
+                  decoration: InputDecoration(
+                    hintText:S.of(context).searchFaculty ,
+                    hintStyle: TextStyle(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withOpacity(0.6)),
+                    border: InputBorder.none,
+                    prefixIcon: Icon(Icons.search,
+                        color: Theme.of(context).colorScheme.onSurface),
+                  ),
+                ),
               ),
             ),
           ),
@@ -820,82 +1005,101 @@ class HomeLandingScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               sliver: SliverToBoxAdapter(
                 child: SectionHeader(
-                  title: 'كليّة مقترحة',
+                  title: S.of(context).faculties,
                   trailing: TextButton(
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => FacultiesScreen(faculties: demoFaculties),
+                        builder: (_) => FacultiesScreen(faculties: getDemoFaculties(context)),
+
+
                       ),
                     ),
-                    child: const Text('عرض الكل'),
+                    child:  Text(S.of(context).viewAll),
                   ),
                 ),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               sliver: SliverToBoxAdapter(
-                child: _FacultyQuickCard(
-                  faculty: quickFaculty,
-                  onTap: () => openFaculty(quickFaculty),
+                child: Column(
+                  children: [
+                    // الحاوية السوداء: الحساب السريع
+                    InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const QuickAverageScreen()),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        width: 350,
+                        height: 60,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        alignment: Alignment.centerLeft,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface, // لون الحاوية أسود
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              blurRadius: 10,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children:  [Row(
+                              children: [
+                            Icon(Icons.calculate_outlined,
+                                color: Theme.of(context).colorScheme.onSurface, size: 28),
+                            SizedBox(width: 12),
+                            Text(S.of(context).quickCalc,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )]),
+                            Icon(
+                               Icons.arrow_forward_ios,
+                               color: Theme.of(context).colorScheme.onSurface,
+                               size: 20,    )
+                          ],
+                        ),
+
+                      ),
+                    ),
+
+
+                  ],
                 ),
               ),
             ),
-          ] else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              sliver: const SliverToBoxAdapter(
-                child: SectionHeader(title: 'الكليات المتاحة'),
-              ),
-            ),
-          if (gridFaculties.isNotEmpty) ...[
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              sliver: const SliverToBoxAdapter(
-                child: SectionHeader(title: 'باقي الكليات'),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              sliver: SliverGrid(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final faculty = gridFaculties[index];
-                    return _FacultyTile(
-                      faculty: faculty,
-                      onTap: () => openFaculty(faculty),
+                      (context, index) {
+                    final faculty = getDemoFaculties(context)[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      child: _FacultyQuickCard(
+                        faculty: faculty,
+                        onTap: () => openFaculty(faculty),
+                      ),
                     );
                   },
-                  childCount: gridFaculties.length,
-                ),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.2,
+                  childCount: getDemoFaculties(context).length,
                 ),
               ),
             ),
           ],
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-            sliver: SliverToBoxAdapter(
-              child: PrimaryButton(
-                label: 'استعراض كل الكليات',
-                icon: Icons.menu_book_outlined,
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => FacultiesScreen(faculties: demoFaculties),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
-      ),
-    );
+      ));
   }
 }
 
@@ -910,11 +1114,7 @@ class _FacultyQuickCard extends StatelessWidget {
     final theme = Theme.of(context);
     final majorsCount = faculty.majors.length;
     final tracksCount = faculty.majors.fold<int>(0, (sum, major) => sum + major.tracks.length);
-    final subtitle = majorsCount == 0
-        ? 'لا تخصصات مسجّلة بعد'
-        : majorsCount == 1
-            ? 'تخصص واحد متاح'
-            : '$majorsCount تخصصات متاحة';
+
 
     return Material(
       color: Colors.transparent,
@@ -926,14 +1126,14 @@ class _FacultyQuickCard extends StatelessWidget {
           curve: Curves.easeInOut,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
+            color: theme.colorScheme.onSecondary,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              if (theme.brightness == Brightness.light)
+              //if (theme.brightness == Brightness.light)
                 BoxShadow(
                   color: theme.colorScheme.onSurface.withOpacity(.08),
                   blurRadius: 18,
-                  offset: const Offset(0, 8),
+                  offset: const Offset(0, 20),
                 ),
             ],
           ),
@@ -945,11 +1145,11 @@ class _FacultyQuickCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 26,
-                    backgroundColor: theme.colorScheme.primary.withOpacity(.12),
+                    backgroundColor: theme.colorScheme.primary.withOpacity(.2),
                     foregroundColor: theme.colorScheme.primary,
                     child: const Icon(Icons.apartment_outlined),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       faculty.name,
@@ -959,29 +1159,23 @@ class _FacultyQuickCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
+
               Row(
                 children: [
                   Expanded(
                     child: MetricTile(
-                      label: 'مسارات',
-                      value: tracksCount.toString(),
-                      icon: Icons.track_changes,
+                      label: S.of(context).sections,
+                      value: majorsCount.toString(),
+                      icon: Icons.auto_awesome,
                       onTap: null,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: MetricTile(
-                      label: 'تخصصات',
-                      value: majorsCount.toString(),
-                      icon: Icons.auto_awesome,
+                      label:S.of(context).majors ,
+                      value: tracksCount.toString(),
+                      icon: Icons.track_changes,
                       onTap: null,
                     ),
                   ),
@@ -995,77 +1189,77 @@ class _FacultyQuickCard extends StatelessWidget {
   }
 }
 
-class _FacultyTile extends StatefulWidget {
-  const _FacultyTile({required this.faculty, required this.onTap});
-
-  final ProgramFaculty faculty;
-  final VoidCallback onTap;
-
-  @override
-  State<_FacultyTile> createState() => _FacultyTileState();
-}
-
-class _FacultyTileState extends State<_FacultyTile> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final majorsCount = widget.faculty.majors.length;
-    final subtitle = majorsCount == 0
-        ? 'لا تخصصات بعد'
-        : majorsCount == 1
-            ? 'تخصص واحد'
-            : '$majorsCount تخصصات';
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeInOut,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: _hovered
-                    ? theme.colorScheme.primary.withOpacity(.4)
-                    : theme.colorScheme.outlineVariant.withOpacity(.4),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.apartment_outlined,
-                    color: theme.colorScheme.primary, size: 32),
-                const Spacer(),
-                Text(
-                  widget.faculty.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// class _FacultyTile extends StatefulWidget {
+//   const _FacultyTile({required this.faculty, required this.onTap});
+//
+//   final ProgramFaculty faculty;
+//   final VoidCallback onTap;
+//
+//   @override
+//   State<_FacultyTile> createState() => _FacultyTileState();
+// }
+//
+// class _FacultyTileState extends State<_FacultyTile> {
+//   bool _hovered = false;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final theme = Theme.of(context);
+//     final majorsCount = widget.faculty.majors.length;
+//     final subtitle = majorsCount == 0
+//         ? 'لا تخصصات بعد'
+//         : majorsCount == 1
+//             ? 'تخصص واحد'
+//             : '$majorsCount تخصصات';
+//
+//     return MouseRegion(
+//       onEnter: (_) => setState(() => _hovered = true),
+//       onExit: (_) => setState(() => _hovered = false),
+//       child: Material(
+//         color: Colors.transparent,
+//         child: InkWell(
+//           onTap: widget.onTap,
+//           borderRadius: BorderRadius.circular(20),
+//           child: AnimatedContainer(
+//             duration: const Duration(milliseconds: 180),
+//             curve: Curves.easeInOut,
+//             padding: const EdgeInsets.all(16),
+//             decoration: BoxDecoration(
+//               color: theme.colorScheme.surface,
+//               borderRadius: BorderRadius.circular(20),
+//               border: Border.all(
+//                 color: _hovered
+//                     ? theme.colorScheme.primary.withOpacity(.4)
+//                     : theme.colorScheme.outlineVariant.withOpacity(.4),
+//               ),
+//             ),
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Icon(Icons.apartment_outlined,
+//                     color: theme.colorScheme.primary, size: 38),
+//                 const Spacer(),
+//                 Text(
+//                   widget.faculty.name,
+//                   maxLines: 2,
+//                   overflow: TextOverflow.ellipsis,
+//                   style: theme.textTheme.titleSmall,
+//                 ),
+//                 const SizedBox(height: 6),
+//                 Text(
+//                   subtitle,
+//                   style: theme.textTheme.bodySmall?.copyWith(
+//                     color: theme.colorScheme.onSurfaceVariant,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
 
 // ============================================================================
 // Notes — واجهة ملاحظات احترافية (إنشاء/بحث/تثبيت/أرشفة)
@@ -1074,6 +1268,30 @@ class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
   @override
   State<NotesScreen> createState() => _NotesScreenState();
+}
+
+class SavedNote {
+  final String subject;
+  final double td;
+  final double tp;
+  final double exam;
+  final double moy;
+  final double coef;
+  final double cred;
+
+  SavedNote({
+    required this.subject,
+    required this.td,
+    required this.tp,
+    required this.exam,
+    required this.moy,
+    required this.coef,
+    required this.cred,
+  });
+}
+
+class NotesStorage {
+  static List<SavedNote> savedNotes = [];
 }
 
 class _NotesScreenState extends State<NotesScreen> {
@@ -1115,29 +1333,63 @@ class _NotesScreenState extends State<NotesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('ملاحظاتي'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
-        actions: [
-          IconButton(onPressed: _create, icon: const Icon(Icons.add_task_outlined)),
-        ],
+        automaticallyImplyLeading: true,
+        title:  Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          textDirection: TextDirection.ltr,
+          //mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+            textDirection: TextDirection.ltr,
+              children: [
+        IconButton(
+        icon: const Icon(Icons.menu),
+        onPressed: () {
+          Scaffold.of(context).openEndDrawer(); // لأنك تستخدم endDrawer
+        },
       ),
-      endDrawer: const AppEndDrawer(),
+            Text(
+              'NotePade',
+              style: GoogleFonts.pacifico(
+                textStyle: Theme.of(context).textTheme.displayLarge,
+                fontSize: 30,
+                fontWeight: FontWeight.w500,
+                fontStyle: FontStyle.italic,
+
+              ),
+            ),
+               ]),
+            IconButton(onPressed: _create, icon: const Icon(Icons.add_circle_outline)),
+          ],
+        ),
+      //   Text('NotePade',
+      //   style: GoogleFonts.pacifico(textStyle: Theme.of(context).textTheme.displayLarge,
+      //   fontSize: 30,
+      //   fontWeight: FontWeight.w500,
+      //   fontStyle: FontStyle.italic,
+      //   //color: Colors.teal[900],
+      // ),),
+        //leading: _DrawerLeading(showBack: canPop),
+        //leadingWidth: canPop ? 96 : null,
+        // actions: [
+        //   IconButton(onPressed: _create, icon: const Icon(Icons.add_circle_outline)),
+        // ],
+      ),
+     // endDrawer: const AppEndDrawer(),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
         children: [
           TextField(
             controller: _search,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              hintText: 'ابحث داخل الملاحظات…',
+            decoration:  InputDecoration(
+              hintText: S.of(context).searchClipboard,
               prefixIcon: Icon(Icons.search),
             ),
           ),
           const SizedBox(height: 10),
           if (pinned.isNotEmpty) ...[
-            const Text('مثبّتة', style: TextStyle(fontWeight: FontWeight.w800)),
+             Text(S.of(context).pinned, style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             ...pinned.map((n) => _NoteTile(
               note: n,
@@ -1148,7 +1400,7 @@ class _NotesScreenState extends State<NotesScreen> {
             const SizedBox(height: 10),
           ],
           if (others.isNotEmpty) ...[
-            const Text('باقي الملاحظات', style: TextStyle(fontWeight: FontWeight.w800)),
+             Text(S.of(context).otherNotes, style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             ...others.map((n) => _NoteTile(
               note: n,
@@ -1157,11 +1409,12 @@ class _NotesScreenState extends State<NotesScreen> {
               onArchive: () => setState(() { _notes.remove(n); _archived.add(n); }),
             )),
           ] else if (pinned.isEmpty)
-            const EmptyState(icon: Icons.note_alt_outlined, title: 'لا توجد ملاحظات بعد'),
+             EmptyState(icon: Icons.note_alt_outlined,
+                title: S.of(context).noNotesYet),
           const SizedBox(height: 12),
           if (_archived.isNotEmpty) ...[
             const Divider(),
-            const Text('الأرشيف', style: TextStyle(fontWeight: FontWeight.w800)),
+             Text(S.of(context).archive, style: TextStyle(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             ..._archived.map((n) => _NoteTile(
               note: n,
@@ -1244,24 +1497,25 @@ class _NoteEditorState extends State<_NoteEditor> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('ملاحظة', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              Text(S.of(context).note, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               const SizedBox(height: 10),
               TextField(
                 controller: _t,
-                decoration: const InputDecoration(labelText: 'العنوان'),
+                decoration:  InputDecoration(labelText: S.of(context).title),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _b,
                 minLines: 3,
                 maxLines: 8,
-                decoration: const InputDecoration(labelText: 'المحتوى'),
+                decoration:  InputDecoration(labelText: S.of(context).content),
               ),
               const SizedBox(height: 8),
               CheckboxListTile(
                 value: _pin,
                 onChanged: (v) => setState(() => _pin = v ?? false),
-                title: const Text('تثبيت الملاحظة'),
+                title: Text(S.of(context).pinNote),
+
                 controlAffinity: ListTileControlAffinity.leading,
               ),
               const SizedBox(height: 10),
@@ -1274,7 +1528,8 @@ class _NoteEditorState extends State<_NoteEditor> {
                   Navigator.pop(context, _NoteModel(_t.text.trim(), _b.text.trim(), pinned: _pin));
                 },
                 icon: const Icon(Icons.save_outlined),
-                label: const Text('حفظ'),
+                label:Text(S.of(context).save),
+
               ),
               const SizedBox(height: 10),
             ],
@@ -1303,21 +1558,29 @@ class CommunityScreen extends StatefulWidget {
 class _CommunityScreenState extends State<CommunityScreen> {
   final List<_Post> _posts = [
     _Post(
-      author: 'student01',
-      title: 'أفضل طريقة لمراجعة Analyse 1؟',
-      body: 'شاركونا مصادر ومراجع قوية ✨',
-      votes: 12,
-      tags: const ['Analyse', 'L1', 'Math'],
+      author: 'CREATOR',
+      title: 'Coming soon ',
+      body: 'A communication platform for only and all universitys students\n'
+          '\n'
+          'BE READY FOR IT🔥',
+      votes: 100000000,
+      tags: const ['communications', 'students', 'universitys',],
     ),
+
     _Post(
-      author: 'maria',
-      title: 'ملخص خفيف لهيكلة الحاسوب',
-      body: 'عملت ملخص PDF—حاولوا تراجعوا به قبل TD.',
-      votes: 8,
-      tags: const ['Machine', 'TD'],
-      mediaUrl:
-          'https://images.unsplash.com/photo-1518779578993-ec3579fee39f?w=900',
+      author: 'CREATOR',
+      title: 'Consept of the app',
+      body: 'An app for calculating university GPAs for students\n'
+          '\nلا تتردد في مراسلتنا في حالة كانت لديك مطالب او اراء في ما يتعلق بالتطبيق '
+
+          '\n'
+          '\n'
+
+          'contact us on IG: @klause_ds\n',
+      votes: 100000000,
+      tags: const ['Consept', 'students', 'GPA',],
     ),
+
   ];
 
   void _newPost() async {
@@ -1329,7 +1592,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
     if (p != null) {
       setState(() => _posts.insert(0, p));
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('تم نشر منشورك ✅')));
+          .showSnackBar( SnackBar(content: Text(S.of(context).post)));
     }
   }
 
@@ -1339,31 +1602,54 @@ class _CommunityScreenState extends State<CommunityScreen> {
     return AppScaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('مجتمع Fachub'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
-        actions: [
-          IconButton(
-            tooltip: 'منشور جديد',
-            onPressed: _newPost,
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-        ],
+        titleSpacing: 0, // حتى يلتصق المحتوى باليسار
+        title: Row(
+          textDirection: TextDirection.ltr,
+          //mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () {
+                Scaffold.of(context).openEndDrawer(); // لأنك تستخدم endDrawer
+              },
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Community',
+              style: GoogleFonts.pacifico(
+                textStyle: Theme.of(context).textTheme.displayLarge,
+                fontSize: 30,
+                fontWeight: FontWeight.w500,
+                fontStyle: FontStyle.italic,
+
+              ),
+            ),
+          ],
+        ),
+       // leadingWidth: canPop ? 96 : null,
+        // actions: [
+        //   IconButton(
+        //     tooltip: 'منشور جديد',
+        //     onPressed: _newPost,
+        //     icon: const Icon(Icons.add_circle_outline),
+        //   ),
+        // ],
       ),
-      endDrawer: const AppEndDrawer(),
+      //endDrawer: const AppEndDrawer(),
       padding: EdgeInsets.zero,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _newPost,
         icon: const Icon(Icons.edit_note),
-        label: const Text('منشور'),
+        label: Text(S.of(context).createPost),
+
       ),
       body: _posts.isEmpty
           ? EmptyState(
               icon: Icons.public_outlined,
-              title: 'لا توجد منشورات بعد',
-              subtitle: 'ابدأ النقاش الأول في المجتمع وشارك تجربتك مع زملائك.',
+              title: S.of(context).noPostsYet,
+              subtitle: S.of(context).startDiscussion,
               action: PrimaryButton(
-                label: 'أنشئ منشوراً',
+                label: S.of(context).createPoste,
                 icon: Icons.add,
                 onPressed: _newPost,
               ),
@@ -1445,9 +1731,10 @@ class _PostCard extends StatelessWidget {
                     style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const Spacer(),
                 PopupMenuButton(
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'share', child: Text('مشاركة')),
-                    PopupMenuItem(value: 'report', child: Text('إبلاغ')),
+                  itemBuilder: (_) =>  [
+                    PopupMenuItem(value: 'share', child: Text(S.of(context).share),),
+                    PopupMenuItem(value: 'report', child:Text(S.of(context).report),
+    ),
                   ],
                 ),
               ],
@@ -1485,6 +1772,7 @@ class _PostCard extends StatelessWidget {
             ],
             const SizedBox(height: 12),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
                   onPressed: () => onVote(1),
@@ -1505,11 +1793,12 @@ class _PostCard extends StatelessWidget {
                   onPressed: () => onVote(-1),
                   icon: const Icon(Icons.arrow_downward),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 0),
                 TextButton.icon(
                   onPressed: onComment,
                   icon: const Icon(Icons.mode_comment_outlined),
-                  label: Text('تعليقات (${post.comments.length})'),
+                  label: Text(S.of(context).comments),
+//${post.comments.length})
                 ),
               ],
             ),
@@ -1555,25 +1844,25 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('منشور جديد',
+            Text(S.of(context).newPost,
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 10),
             TextField(
               controller: _title,
-              decoration: const InputDecoration(labelText: 'العنوان'),
+              decoration:  InputDecoration(labelText: S.of(context).title),
             ),
             const SizedBox(height: 6),
             TextField(
               controller: _body,
               minLines: 2,
               maxLines: 6,
-              decoration: const InputDecoration(labelText: 'المحتوى'),
+              decoration:  InputDecoration(labelText: S.of(context).content),
             ),
             const SizedBox(height: 6),
             TextField(
               controller: _media,
-              decoration: const InputDecoration(
-                  labelText: 'رابط صورة/فيديو (اختياري)'),
+              decoration: InputDecoration(
+                  labelText: S.of(context).mediaUrl),
             ),
             const SizedBox(height: 6),
             Row(
@@ -1581,7 +1870,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                 Expanded(
                   child: TextField(
                     controller: _tag,
-                    decoration: const InputDecoration(labelText: 'وسم'),
+                    decoration: const InputDecoration(labelText: '#'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1595,7 +1884,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                         });
                       }
                     },
-                    child: const Text('إضافة')),
+                    child: Text(S.of(context).add),),
               ],
             ),
             const SizedBox(height: 8),
@@ -1630,7 +1919,8 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                     ));
               },
               icon: const Icon(Icons.send),
-              label: const Text('نشر'),
+              label: Text(S.of(context).publish),
+
             ),
             const SizedBox(height: 12),
           ]),
@@ -1651,170 +1941,81 @@ class _CommentDialogState extends State<_CommentDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('تعليق'),
+      title: Text(S.of(context).comment),
       content: TextField(
         controller: _c,
         minLines: 2,
         maxLines: 4,
-        decoration: const InputDecoration(hintText: 'اكتب تعليقك…'),
+        decoration:  InputDecoration(hintText: S.of(context).writeComment,)
       ),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء')),
+            child: Text(S.of(context).cancel),),
         FilledButton(
             onPressed: () =>
                 Navigator.pop(context, _c.text.trim()),
-            child: const Text('نشر')),
+            child: Text(S.of(context).posted)),
       ],
     );
   }
 }
 
 // =========================== Calculator Hub (Quick) ==========================
-class CalculatorHubScreen extends StatelessWidget {
-  const CalculatorHubScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    final canPop = Navigator.canPop(context);
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('حاسبة المعدل'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
-      ),
-      endDrawer: const AppEndDrawer(),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.calculate_outlined),
-              title: const Text('حساب سريع (مواد + معامل)'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const QuickAverageScreen()),
-              ),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.table_chart_outlined),
-              title: const Text('جدول مفصّل (S1/S2) مثل الصورة'),
-              subtitle: const Text('مكوّنات TD/TP/EXAM وحساب آلي'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                final track = demoFaculties.first.majors.first.tracks.first;
-                final specs = createSemesterSpecsForTrack(track);
-                final sem1 = _pickSemester(specs, 'S1');
-                final sem2 = _pickSemester(specs, 'S2');
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => StudiesTableScreen(
-                      facultyName: demoFaculties.first.name,
-                      programName:
-                          '${demoFaculties.first.majors.first.name} • ${track.name}',
-                      semester1Modules: sem1,
-                      semester2Modules: sem2,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class QuickAverageScreen extends StatefulWidget {
   const QuickAverageScreen({super.key});
+
   @override
   State<QuickAverageScreen> createState() => _QuickAverageScreenState();
 }
 
 class _QuickAverageScreenState extends State<QuickAverageScreen> {
-  final subjects = <Map<String, dynamic>>[];
-  double threshold = 10, avg = 0;
+  final List<NoteData> subjects = [];
+  double threshold = 10;
+  double avg = 0;
+  double totalcred = 0;
 
-  void _add() => setState(
-      () => subjects.add({'name': 'مادة', 'coef': 1.0, 'grade': 0.0}));
+  void _add() => setState(() {
+    subjects.add(NoteData(subject: ''));
+  });
+
   void _calc() {
-    double sum = 0, csum = 0;
+    double totalWeighted = 0;
+    double totalCoef = 0;
+    double totalCred = 0;
+
     for (final s in subjects) {
-      sum += (s['grade'] ?? 0) * (s['coef'] ?? 1);
-      csum += (s['coef'] ?? 1);
+      final moy = s.moy;
+      totalWeighted += moy * s.coef;
+      totalCoef += s.coef;
+      if (moy >= 10) {
+        totalCred += s.cred;
+      }
     }
-    setState(() => avg = csum == 0 ? 0 : sum / csum);
+
+    setState(() {
+      avg = totalCoef == 0 ? 0 : totalWeighted / totalCoef;
+      totalcred = totalCred;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final canPop = Navigator.canPop(context);
     return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('حساب سريع'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
-      ),
-      endDrawer: const AppEndDrawer(),
+      appBar: AppBar(title: Text(S.of(context).quickCalc),),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
           ...subjects.asMap().entries.map((e) {
             final i = e.key;
             final s = e.value;
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      controller:
-                          TextEditingController(text: s['name'] ?? ''),
-                      onChanged: (v) => s['name'] = v,
-                      decoration:
-                          const InputDecoration(labelText: 'المادة'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: TextEditingController(
-                          text: (s['coef'] ?? 1).toString()),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (v) =>
-                          s['coef'] = double.tryParse(v) ?? 1.0,
-                      decoration:
-                          const InputDecoration(labelText: 'المعامل'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: TextEditingController(
-                          text: (s['grade'] ?? 0).toString()),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (v) =>
-                          s['grade'] = double.tryParse(v) ?? 0.0,
-                      decoration:
-                          const InputDecoration(labelText: 'العلامة'),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => setState(() => subjects.removeAt(i)),
-                    icon: const Icon(Icons.delete_outline,
-                        color: Colors.redAccent),
-                  )
-                ]),
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: NoteCardWidget(
+                key: ValueKey(s),
+                data: s,
+                onDelete: () => setState(() => subjects.removeAt(i)),
               ),
             );
           }),
@@ -1824,188 +2025,355 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
               FilledButton.icon(
                   onPressed: _add,
                   icon: const Icon(Icons.add),
-                  label: const Text('إضافة')),
+                  label: Text(S.of(context).add),),
               const SizedBox(width: 8),
               FilledButton.icon(
                   onPressed: _calc,
-                  icon: const Icon(Icons.calculate),
-                  label: const Text('احسب')),
+                  icon: const Icon(Icons.calculate,),
+                  label: Text(S.of(context).calculate),),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _add,
+                icon: const Icon(Icons.save),
+                label: Text(S.of(context).save,)),
               const Spacer(),
-              SizedBox(
-                width: 130,
-                child: TextField(
-                  decoration:
-                      const InputDecoration(labelText: 'عتبة النجاح'),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (v) =>
-                      threshold = double.tryParse(v) ?? 10,
-                ),
-              )
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            'المعدل: ${avg.toStringAsFixed(2)} — ${avg >= threshold ? "✅ ناجح" : "❌ راسب"}',
-            style: TextStyle(
-              color: avg >= threshold ? Colors.green : Colors.red,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          const SizedBox(height: 20),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(textDirection: TextDirection.ltr,
+                  children: [
+              Text(
+                'Moy: ${avg.toStringAsFixed(2)} /         ',
+                textDirection: TextDirection.ltr,
+                  style: TextStyle(fontWeight: FontWeight.w800,
+
+                      fontSize: 18),),
+                    Text(
+                      avg == 0
+                          ? '___'
+                          : (avg >= threshold ? "✅ Succeeded" : "❌ Failed"),
+                      style: TextStyle(
+                        color: avg == 0
+                            ? Colors.grey
+                            : (avg >= threshold ? Colors.green : Colors.red),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    )
+                  ]
+              ),
+              const SizedBox(height: 12),
+              Align( alignment: Alignment.centerLeft, child:
+              Text(
+                'Cred: $totalcred',textDirection: TextDirection.ltr,
+                style:
+                const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              )),
+            ],
+          )
         ],
       ),
     );
   }
 }
 
-// =================== Studies: Faculties → Majors → Tracks ====================
-class ProgramComponent {
-  final String label;   // TD / TP / EXAM / CC...
-  final double weight;  // نسبة مئوية (0..100)
-  const ProgramComponent(this.label, this.weight);
-}
+// -------------------------
+// بيانات البطاقة
+// -------------------------
+class NoteData {
+  String subject;
+  int coef;
+  int cred;
+  double td;
+  double exam;
+  double tp;
+  double Wtd;
+  double Wexam;
+  double Wtp;
 
-class ProgramModule {
-  final String name;
-  final int coef;
-  final int credits;
-  final List<ProgramComponent> components;
-  const ProgramModule({
-    required this.name,
-    required this.coef,
-    required this.credits,
-    required this.components,
+  NoteData({
+    this.subject = '',
+    this.coef = 1,
+    this.cred = 1,
+    this.td = 0,
+    this.exam = 0,
+    this.tp = 0,
+    this.Wtd = 0.4,
+    this.Wexam = 0.6,
+    this.Wtp = 0,
   });
+
+  double get moy => (td * Wtd + exam * Wexam + tp * Wtp);
 }
 
-class ProgramSemester {
-  final String label; // S1 / S2
-  final List<ProgramModule> modules;
-  const ProgramSemester({required this.label, required this.modules});
+// -------------------------
+// واجهة البطاقة
+// -------------------------
+class NoteCardWidget extends StatefulWidget {
+  final NoteData data;
+  final VoidCallback onDelete;
+
+  const NoteCardWidget({
+    super.key,
+    required this.data,
+    required this.onDelete,
+  });
+
+  @override
+  State<NoteCardWidget> createState() => _NoteCardWidgetState();
 }
 
-class ProgramTrack {
-  final String name;
-  final List<ProgramSemester> semesters; // S1,S2
-  const ProgramTrack({required this.name, required this.semesters});
-}
+class _NoteCardWidgetState extends State<NoteCardWidget> {
+  late TextEditingController nameController;
+  late TextEditingController coefController;
+  late TextEditingController credController;
+  late TextEditingController tdController;
+  late TextEditingController tpController;
+  late TextEditingController WtdController;
+  late TextEditingController WtpController;
+  late TextEditingController WexamController;
+  late TextEditingController examController;
 
-class ProgramMajor {
-  final String name;
-  final List<ProgramTrack> tracks;
-  const ProgramMajor({required this.name, required this.tracks});
-}
+  bool expanded = false;
 
-class ProgramFaculty {
-  final String name;
-  final List<ProgramMajor> majors;
-  const ProgramFaculty({required this.name, required this.majors});
-}
+  @override
+  void initState() {
+    super.initState();
+    nameController = TextEditingController(text: widget.data.subject);
+    coefController = TextEditingController(text: widget.data.coef.toString());
+    credController = TextEditingController(text: widget.data.cred.toString());
+    tdController = TextEditingController(text: widget.data.td== 0 ? '' : widget.data.td.toString());
+    examController = TextEditingController(text: widget.data.exam== 0 ? '' : widget.data.exam.toString());
+    tpController = TextEditingController(text: widget.data.tp== 0 ? '' : widget.data.tp.toString());
+    WexamController = TextEditingController(text: widget.data.Wexam.toString());
+    WtdController = TextEditingController(text: widget.data.Wtd.toString());
+    WtpController = TextEditingController(text: widget.data.Wtp.toString());
+  }
 
-// بيانات تجريبية
-final demoFaculties = <ProgramFaculty>[
-  ProgramFaculty(
-    name: 'كلية العلوم الاقتصادية',
-    majors: [
-      ProgramMajor(
-        name: 'علوم الاقتصاد',
-        tracks: [
-          ProgramTrack(
-            name: 'علوم التسيير',
-            semesters: [
-              ProgramSemester(
-                label: 'S1',
-                modules: [
-                  ProgramModule(
-                    name: 'Analyse 1',
-                    coef: 4, credits: 6,
-                    components: [
-                      ProgramComponent('TD', 30),
-                      ProgramComponent('EXAM', 70),
-                    ],
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          width: 2,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      child: Column(
+        children: [
+          // Header: Delete, Subject Name, Moy
+          Row(
+            children: [
+              IconButton(
+                  onPressed: widget.onDelete,
+                  icon: const Icon(Icons.delete, color: Colors.redAccent)),
+              Container(
+                width: 150,
+                height: 40,
+                alignment: Alignment.center,
+
+                child: TextField(
+
+                  controller: nameController,
+                  onChanged: (v) {
+                    widget.data.subject = v;
+                    setState(() {});
+                  },
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    contentPadding: EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
+                    border: InputBorder.none,
                   ),
-                  ProgramModule(
-                    name: 'Algèbre 1',
-                    coef: 3, credits: 5,
-                    components: [
-                      ProgramComponent('TD', 30),
-                      ProgramComponent('EXAM', 70),
-                    ],
-                  ),
-                  ProgramModule(
-                    name: 'Algorithmique 1',
-                    coef: 2, credits: 4,
-                    components: [
-                      ProgramComponent('TP', 20),
-                      ProgramComponent('TD', 20),
-                      ProgramComponent('EXAM', 60),
-                    ],
-                  ),
-                  ProgramModule(
-                    name: 'Structure machine 1',
-                    coef: 2, credits: 4,
-                    components: [
-                      ProgramComponent('TD', 40),
-                      ProgramComponent('EXAM', 60),
-                    ],
-                  ),
-                  ProgramModule(
-                    name: 'Terminologie scientifique',
-                    coef: 2, credits: 3,
-                    components: [ProgramComponent('EXAM', 100)],
-                  ),
-                ],
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.bold,),
+
+                ),
+              ),const SizedBox(width: 46,),
+              Container(
+                padding: const EdgeInsets.all(0),
+                decoration: BoxDecoration(
+                    color: Colors.transparent, ),
+                child: Text(
+
+                  widget.data.moy.toStringAsFixed(2),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 18),
+                ),
               ),
-              ProgramSemester(
-                label: 'S2',
-                modules: [
-                  ProgramModule(
-                    name: 'Analyse 2',
-                    coef: 4, credits: 6,
-                    components: [
-                      ProgramComponent('TD', 30),
-                      ProgramComponent('EXAM', 70),
-                    ],
-                  ),
-                  ProgramModule(
-                    name: 'Algèbre 2',
-                    coef: 2, credits: 4,
-                    components: [
-                      ProgramComponent('TD', 30),
-                      ProgramComponent('EXAM', 70),
-                    ],
-                  ),
-                  ProgramModule(
-                    name: 'Algorithmique 2',
-                    coef: 2, credits: 4,
-                    components: [
-                      ProgramComponent('TP', 20),
-                      ProgramComponent('TD', 20),
-                      ProgramComponent('EXAM', 60),
-                    ],
-                  ),
-                  ProgramModule(
-                    name: 'Probabilités & Stat.',
-                    coef: 3, credits: 5,
-                    components: [
-                      ProgramComponent('TD', 40),
-                      ProgramComponent('EXAM', 60),
-                    ],
-                  ),
-                  ProgramModule(
-                    name: 'Langue Étrangère',
-                    coef: 1, credits: 2,
-                    components: [ProgramComponent('EXAM', 100)],
-                  ),
-                ],
-              ),
+              IconButton(
+                  onPressed: () {
+                    setState(() {
+                      expanded = !expanded;
+                    });
+                  },
+                  icon: Icon(expanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down))
             ],
           ),
+          if (expanded)
+            Row(crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment:MainAxisAlignment.spaceBetween ,
+              children: [
+
+                const Divider(),
+
+                // Coef & Cred أولاً
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  //mainAxisSize: MainAxisSize.min,
+                  children: [
+                    //coef
+                    Container(
+                      width: 70,
+                      child: Column(
+                        children: [
+                          const Text("Coef"),
+                          SizedBox(width: 200,),
+                          TextField(
+                            controller: coefController,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 15),
+                            decoration: const InputDecoration(
+                              counterText: '',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 5, ),
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            maxLength: 1,
+                            onChanged: (v) {
+                              widget.data.coef = int.tryParse(v) ?? 1;
+                              setState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height:  10),
+                    //cred
+                    Container(
+                      width: 70,
+
+                      child: Column(
+                        children: [
+                          const Text("Cred"),
+                          TextField(
+                            controller: credController,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 15),
+                            decoration: const InputDecoration(
+                              counterText: '',
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 5, ),
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            maxLength: 1,
+                            onChanged: (v) {
+                              widget.data.cred = int.tryParse(v) ?? 1;
+                              setState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                //const SizedBox(width:  12),
+                Container(color: Theme.of(context).colorScheme.onSurface,height: 180,width: 1,),
+                //const SizedBox(width:  12),
+
+                Row(children: [
+
+                // wTD / wTP / wExam
+                  Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildScoreField("W.TD", WtdController, (v) {
+                      widget.data.Wtd = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    }),
+                    const SizedBox(height: 5),
+                    Container(color: Theme.of(context).colorScheme.onSurface,height: 1,width: 70,),
+                    _buildScoreField("W.TP", WtpController, (v) {
+                      widget.data.Wtp = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    }),
+                    const SizedBox(height: 5),
+                    Container(color: Theme.of(context).colorScheme.onSurface,height: 1,width: 70,),
+                    _buildScoreField("W.EX", WexamController, (v) {
+                      widget.data.Wexam = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    }),
+                  ],
+                ),
+                  const SizedBox(width:  12),
+                  // TD / TP / Exam
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildScoreField("TD", tdController, (v) {
+                        widget.data.td = double.tryParse(v) ?? 0;
+                        setState(() {});
+                      }),
+                      const SizedBox(height: 5),
+                      Container(color: Theme.of(context).colorScheme.onSurface,height: 1,width: 70,),
+                      _buildScoreField("TP", tpController, (v) {
+                        widget.data.tp = double.tryParse(v) ?? 0;
+                        setState(() {});
+                      }),
+                      const SizedBox(height: 5),
+                      Container(color: Theme.of(context).colorScheme.onSurface,height: 1,width: 70,),
+                      _buildScoreField("Exam",
+                          examController, (v) {
+                            widget.data.exam = double.tryParse(v) ?? 0;
+                            setState(() {});
+                          }),
+                    ],
+                  ),
+                ])
+              ],
+            )
         ],
       ),
-    ],
-  ),
-];
+    );
+  }
+
+  Widget _buildScoreField(
+      String label, TextEditingController controller, Function(String) onChange) {
+    return Column(
+      children: [
+        Text(label),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 70,
+          height: 40,
+          child: TextField(
+            controller: controller,
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            onChanged: (v) => onChange(v),
+            style: const TextStyle(fontSize: 15),
+            decoration: const InputDecoration(
+              contentPadding: EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
+              border: InputBorder.none,
+
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 // ===================== GPA Table Data Model (public) ========================
 class EvalWeight {
@@ -2036,6 +2404,7 @@ class SemesterSpec {
   const SemesterSpec({required this.name, required this.modules});
 }
 
+
 List<SemesterSpec> createSemesterSpecsForTrack(ProgramTrack track) {
   return track.semesters
       .map(
@@ -2056,8 +2425,9 @@ List<SemesterSpec> createSemesterSpecsForTrack(ProgramTrack track) {
       .toList(growable: false);
 }
 
-List<SemesterSpec> demoL1GpaSpecs() {
-  final track = demoFaculties.first.majors.first.tracks.first;
+List<SemesterSpec> demoL1GpaSpecs(BuildContext context) {
+  final track = getDemoFaculties(context).first.majors.first.tracks.first;
+
   return createSemesterSpecsForTrack(track);
 }
 
@@ -2081,6 +2451,7 @@ List<EvalWeight> _normalizeEvalWeights(List<ProgramComponent> components) {
 }
 
 class ModuleModel {
+
   ModuleModel({
     required this.title,
     required num coef,
@@ -2088,13 +2459,18 @@ class ModuleModel {
     required double tdWeight,
     required double tpWeight,
     required double examWeight,
-  })  : coef = coef.toDouble(),
+  })
+      : coef = coef.toDouble(),
         credits = credits.toDouble(),
         _hasTD = tdWeight > 0,
         _hasTP = tpWeight > 0,
-        wTD = tdWeight > 0 ? 0.40 : 0.0,
-        wTP = tpWeight > 0 ? 0.00 : 0.0,
-        wEX = examWeight > 0 ? 0.60 : 0.0;
+        wTD = tdWeight / 100,
+        wTP = tpWeight / 100,
+        wEX = examWeight / 100,
+        td = 0,
+        tp = 0,
+        exam = 0
+  ;
 
   final String title;
   double coef;
@@ -2107,22 +2483,32 @@ class ModuleModel {
   double? td;
   double? tp;
   double? exam;
+  double ?tdWeight = 0.4;
+  double? tpWeight = 0;
+  double? examWeight = 0.6;
+
 
   bool get hasTD => _hasTD;
   bool get hasTP => _hasTP;
 
+
+
+
   double get moy {
-    final totalW = wTD + wTP + wEX;
-    if (totalW <= 0) {
-      return 0;
-    }
-    double normalize(double weight) => weight <= 0 ? 0 : weight / totalW;
-    final v = (td ?? 0) * normalize(wTD) +
+    final totalW = wTD + wTP + wEX; // مجموع الأوزان
+    if (totalW <= 0) return 0;
+
+    double normalize(double weight) => weight / totalW;
+
+    final value = (td ?? 0) * normalize(wTD) +
         (tp ?? 0) * normalize(wTP) +
         (exam ?? 0) * normalize(wEX);
-    return double.parse(v.toStringAsFixed(2));
+
+    return double.parse(value.toStringAsFixed(2));
   }
 }
+
+
 
 class SemesterModel {
   SemesterModel({
@@ -2165,6 +2551,7 @@ class SemesterModel {
   void recompute() => _onChanged();
 
   double moduleAverage(ModuleModel module) {
+
     return module.moy;
   }
 
@@ -2188,8 +2575,40 @@ class SemesterModel {
   }
 
   double creditsEarned() {
-    return modules.fold<double>(0, (sum, module) => sum + moduleCreditsEarned(module));
+    return modules.fold<double>
+      (0, (sum, module) => sum + moduleCreditsEarned(module));
   }
+  SemesterModel convertProgramSemester(
+      ProgramSemester ps,
+      VoidCallback onChanged,
+      ) {
+    return SemesterModel(
+      name: ps.label,
+      onChanged: onChanged,
+      modules: ps.modules.map((m) {
+        // تحويل ProgramComponent إلى أوزان TD/TP/EXAM
+        double td = 0;
+        double tp = 0;
+        double exam = 0;
+
+        for (var c in m.components) {
+          if (c.label.toUpperCase() == 'TD') td = c.weight.toDouble();
+          if (c.label.toUpperCase() == 'TP') tp = c.weight.toDouble();
+          if (c.label.toUpperCase() == 'EXAM') exam = c.weight.toDouble();
+        }
+
+        return ModuleModel(
+          title: m.name,
+          coef: m.coef,
+          credits: m.credits,
+          tdWeight: td,
+          tpWeight: tp,
+          examWeight: exam,
+        );
+      }).toList(),
+    );
+  }
+
 }
 
 // ---------- Table helpers ----------
@@ -2301,12 +2720,10 @@ class FacultiesScreen extends StatelessWidget {
     final canPop = Navigator.canPop(context);
     return AppScaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('الدراسة • الكليات'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
+        automaticallyImplyLeading: true,
+        title: Text(S.of(context).faculties),
+
       ),
-      endDrawer: const AppEndDrawer(),
       padding: EdgeInsets.zero,
       body: ListView.separated(
         itemCount: faculties.length,
@@ -2317,9 +2734,9 @@ class FacultiesScreen extends StatelessWidget {
           final theme = Theme.of(context);
           final majorsCount = f.majors.length;
           final subtitleText = majorsCount == 0
-              ? 'لا تخصصات مسجّلة بعد'
+              ? S.of(context).noMajorsYet
               : majorsCount == 1
-                  ? 'تخصص واحد'
+                  ? S.of(context).oneMajor
                   : '$majorsCount تخصصات';
           return Card(
             margin: EdgeInsets.zero,
@@ -2340,10 +2757,7 @@ class FacultiesScreen extends StatelessWidget {
                   foregroundColor: theme.colorScheme.primary,
                   child: const Icon(Icons.apartment_rounded),
                 ),
-                title: Text(
-                  f.name,
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
+                title: Text(f.name),
                 subtitle: Text(
                   subtitleText,
                   style: theme.textTheme.bodySmall
@@ -2369,16 +2783,14 @@ class FacultyMajorsScreen extends StatelessWidget {
     final canPop = Navigator.canPop(context);
     return AppScaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text('الدراسة • ${faculty.name}'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
+        automaticallyImplyLeading:true,
+        title: Text(faculty.name)
       ),
       endDrawer: const AppEndDrawer(),
       padding: EdgeInsets.zero,
       body: ListView.separated(
         itemCount: faculty.majors.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (_, __) => const Divider(height: 5),
         itemBuilder: (_, i) {
           final m = faculty.majors[i];
           return ListTile(
@@ -2407,52 +2819,105 @@ class FacultyMajorsScreen extends StatelessWidget {
 class MajorTracksScreen extends StatelessWidget {
   final ProgramMajor major;
   final ProgramFaculty faculty;
-  const MajorTracksScreen({super.key, required this.major, required this.faculty});
+
+  const MajorTracksScreen({
+    super.key,
+    required this.major,
+    required this.faculty,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final canPop = Navigator.canPop(context);
+    // تجميع التراكات حسب المستوى
+    final Map<String, List<ProgramTrack>> tracksByLevel = {};
+    for (var track in major.tracks) {
+      tracksByLevel.putIfAbsent(track.level, () => []).add(track);
+    }
+
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text('الدراسة • ${major.name}'),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
-        actions: const [],
+        automaticallyImplyLeading: true,
+        title: Text(major.name,)
       ),
       endDrawer: const AppEndDrawer(),
-      body: ListView.separated(
-        itemCount: major.tracks.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (_, i) {
-          final t = major.tracks[i];
-          return ListTile(
-            leading: const Icon(Icons.view_stream_outlined),
-            title: Text(t.name),
-            subtitle: const Text('S1 + S2'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              final specs = createSemesterSpecsForTrack(t);
-              final sem1 = _pickSemester(specs, 'S1');
-              final sem2 = _pickSemester(specs, 'S2');
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => StudiesTableScreen(
-                    facultyName: faculty.name,
-                    programName: '${major.name} • ${t.name}',
-                    semester1Modules: sem1,
-                    semester2Modules: sem2,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ...tracksByLevel.entries.map((entry) {
+            final level = entry.key;
+            final tracks = entry.value;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Align( alignment: Alignment.centerLeft, child:
+                // عنوان المستوى
+                Text(
+                  level,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                ),
-              );
-            },
-          );
-        },
+                )),
+
+                const SizedBox(height: 12),
+
+                // قائمة التخصصات داخل المستوى مع فاصل بين كل عنصر
+                ...tracks.map((track) {
+                  return Column(
+                    children: [
+                      Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .outline
+                                .withOpacity(.4),
+                          ),
+                        ),
+                        child: ListTile(
+                          leading: const Icon(Icons.view_stream_outlined),
+                          title: Text(track.name),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            final specs = createSemesterSpecsForTrack(track);
+                            final sem1 = _pickSemester(specs, 'S1');
+                            final sem2 = _pickSemester(specs, 'S2');
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => StudiesTableScreen(
+                                  facultyName: track.name,
+                                  programName:
+                                  '${major.name} • ${track.name}',
+                                  semester1Modules: sem1,
+                                  semester2Modules: sem2,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      // الفاصل بين التخصصات
+                      const SizedBox(height: 14),
+                    ],
+                  );
+                }).toList(),
+
+                // فاصل بين المستويات
+                const SizedBox(height: 25),
+              ],
+            );
+          }).toList(),
+        ],
       ),
     );
   }
 }
+
+
 
 // ========================== UI: Studies GPA Table ============================
 class StudiesTableScreen extends StatefulWidget {
@@ -2472,6 +2937,28 @@ class StudiesTableScreen extends StatefulWidget {
   @override
   State<StudiesTableScreen> createState() => _StudiesTableScreenState();
 }
+class _KeepAlive extends StatefulWidget {
+  final Widget child;
+
+  const _KeepAlive({required this.child});
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // مهم لمنع ضياع الحالة
+    return widget.child;
+  }
+}
+
 
 class _StudiesTableScreenState extends State<StudiesTableScreen>
     with SingleTickerProviderStateMixin {
@@ -2479,12 +2966,29 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   late SemesterModel _semester1;
   late SemesterModel _semester2;
 
+  int currentIndex = 0; // ← هذا يمثل index الحالي
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _initSemesters();
+
+    // الاستماع لتغييرات الـ index عند التمرير أو الضغط على الـ Tab
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) return; // تجاهل أثناء التغيير عن طريق الضغط
+      setState(() {
+        currentIndex = _tabController.index;
+      });
+      Future.microtask(() async {
+        await loadSemesterNotes();});
+    });
+
+
+
+
   }
+
 
   void _initSemesters() {
     _semester1 = SemesterModel.fromSpec(
@@ -2496,6 +3000,62 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
       onChanged: () => setState(() {}),
     );
   }
+  /// ==================== حفظ بيانات الفصل الحالي باستخدام Hive ====================
+  Future<void> saveCurrentSemesterNotes() async {
+    final currentSemester = currentIndex == 0 ? _semester1 : _semester2;
+
+    final box =
+    await Hive.openBox<ModuleModel>('semester_${currentIndex}_notes');
+
+    await box.clear(); // حذف البيانات القديمة
+    await box.addAll(currentSemester.modules);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Semester notes saved ✅")),
+    );
+  }
+
+  /// ==================== تحميل بيانات الفصل الحالي من Hive ====================
+  Future<void> loadSemesterNotes() async {
+    final boxName = 'semester_${currentIndex}_notes';
+    final box = await Hive.openBox<ModuleModel>(boxName);
+
+    final currentSemester = currentIndex == 0 ? _semester1 : _semester2;
+
+    // إذا لم تكن هناك بيانات محفوظة، لا نفعل شيئًا
+    if (box.isEmpty) return;
+
+    // نتأكد من أن عدد العناصر متطابق
+    if (box.length != currentSemester.modules.length) {
+      // اختياري: يمكنك مسح الـ box إذا كان غير متوافق
+      // await box.clear();
+      return;
+    }
+
+    // نُحمّل القيم المحفوظة **فوق** النموذج الحالي (بدون إنشاء جديد)
+    for (int i = 0; i < currentSemester.modules.length; i++) {
+      final stored = box.getAt(i);
+      if (stored != null) {
+        final module = currentSemester.modules[i];
+        // نُحمّل القيم القابلة للتغيير فقط
+        module.td = stored.td;
+        module.tp = stored.tp;
+        module.exam = stored.exam;
+        module.coef=stored.coef;
+
+        // يمكنك أيضًا تحميل coef و credits إذا كانت قابلة للتغيير
+        // module.coef = stored.coef;
+         module.credits = stored.credits;
+      }
+    }
+
+    // نُجبر التحديث
+    if (mounted) setState(() {});
+  }
+
+
+
+
 
   @override
   void didUpdateWidget(covariant StudiesTableScreen oldWidget) {
@@ -2511,52 +3071,100 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     _tabController.dispose();
     super.dispose();
   }
-
   Widget _buildSemesterTabContent(SemesterModel semester) {
     return Builder(
       builder: (context) {
         final bottomInset = MediaQuery.of(context).viewInsets.bottom;
         const summaryPadding = 220.0;
+
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
           child: SingleChildScrollView(
-            key: ValueKey('${semester.name}_${semester.modules.length}'),
-            padding: EdgeInsets.fromLTRB(0, 8, 0, summaryPadding + bottomInset),
+            //key: ValueKey('${semester.name}_${semester.modules.length}'),
+            padding: EdgeInsets.fromLTRB(0, 8, 0, bottomInset),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child: buildSemesterTable(context, semester),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // محتوى الجدول الخاص بالفصل
+                buildSemesterTable(context, semester),
+
+                const SizedBox(height: 16),
+
+                // بطاقة الملخص السنوي داخل التمرير
+                if (_tabController.index == 0)
+                _AnnualSummaryCard(
+                  semester1: _semester1,
+                  semester2: _semester2,
+                  showS1: true,
+                  showS2: false,
+                  showAnnual: false,
+                ),
+                if (_tabController.index == 1)
+                _AnnualSummaryCard(
+                  semester1: _semester1,
+                  semester2: _semester2,
+                  showS1: false,
+                  showS2: true,
+                  showAnnual: true,
+                )
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildStickyHeader(BuildContext context) {
-    final theme = Theme.of(context);
-    final subtle = theme.textTheme.bodySmall?.color?.withOpacity(.7);
-    return Material(
-      elevation: 2,
-      color: theme.colorScheme.surface,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.programName,
-              style:
-                  theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              widget.facultyName,
-              style: theme.textTheme.bodyMedium?.copyWith(color: subtle),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
+
+
+  // Widget _buildSemesterTabContent(SemesterModel semester) {
+  //   return Builder(
+  //     builder: (context) {
+  //       final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+  //       const summaryPadding = 220.0;
+  //       return AnimatedSwitcher(
+  //         duration: const Duration(milliseconds: 250),
+  //         child: SingleChildScrollView(
+  //           key: ValueKey('${semester.name}_${semester.modules.length}'),
+  //           padding: EdgeInsets.fromLTRB(0, 8, 0, summaryPadding + bottomInset),
+  //           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+  //           child: buildSemesterTable(context, semester),
+  //         ),
+  //       );
+  //
+  //     },
+  //   );
+  // }
+
+  // Widget _buildStickyHeader(BuildContext context) {
+  //   final theme = Theme.of(context);
+  //   final subtle = theme.textTheme.bodySmall?.color?.withOpacity(.7);
+  //   return Material(
+  //     elevation: 2,
+  //     color: theme.colorScheme.surface,
+  //     child: Container(
+  //       width: double.infinity,
+  //       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+  //       child: Column(
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           Text(
+  //             widget.programName,
+  //             style:
+  //                 theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+  //           ),
+  //           // const SizedBox(height: 10),
+  //           // Text(
+  //           //   widget.facultyName,
+  //           //   style: theme.textTheme.bodyMedium?.copyWith(color: subtle),
+  //           // ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -2565,263 +3173,160 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     final canPop = Navigator.canPop(context);
 
     return AppScaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text(widget.facultyName),
-        leading: _DrawerLeading(showBack: canPop),
-        leadingWidth: canPop ? 96 : null,
-      ),
-      endDrawer: const AppEndDrawer(),
-      padding: EdgeInsets.zero,
-      bottomNavigationBar: Builder(
-        builder: (context) {
-          final inset = MediaQuery.of(context).viewInsets.bottom;
-          return AnimatedPadding(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + inset),
-            child: SafeArea(
-              top: false,
-              child: _AnnualSummaryCard(semester1: sem1, semester2: sem2),
+      // appBar: AppBar(
+      //   automaticallyImplyLeading: true,
+      //   title: Text(widget.facultyName),
+      //   leading: _DrawerLeading(showBack: canPop),
+      //   leadingWidth: canPop ? 96 : null,
+      // ),
+      body:
+      NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverAppBar(
+            pinned: false,
+            floating: true,
+            snap: true,
+            expandedHeight: 50,
+            actionsIconTheme: IconThemeData(
+              color: Theme.of(context).colorScheme.onSurface
+                ,size: 15
             ),
-          );
-        },
-      ),
-      body: Column(
-        children: [
-          _buildStickyHeader(context),
-          Material(
-            color: Theme.of(context).colorScheme.surface,
-            child: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'S1'),
-                Tab(text: 'S2'),
-              ],
-            ),
+            flexibleSpace:
+            FlexibleSpaceBar(
+              background: Padding(
+                padding:  EdgeInsets.symmetric(horizontal: 0, vertical: 1),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(width: 45),
+                // النص طويل
+                Expanded(
+                child: Text(
+                widget.facultyName+' :',
+                  style: TextStyle(fontSize: 20,
+                      color: Theme.of(context).colorScheme.onSurface),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // زر الحفظ
+              IconButton(
+                icon: Icon(Icons.save, color: Theme.of(context).colorScheme.onSurface ),
+                onPressed: saveCurrentSemesterNotes,
+                tooltip: "Save current semester",
+                iconSize:  25,
+              ),
+                    IconButton(
+                      icon:  Icon(Icons.insert_drive_file_rounded,
+                          color: Theme.of(context).colorScheme.onSurface),
+                      iconSize: 25,
+                      tooltip: "Download as PDF",
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ResultsScreen(
+                              semester1: _semester1,
+                              semester2: _semester2,
+                              programLabel: '${widget.programName}',
+                            ),
+                          ),
+                        );
+                      },
+                    )
+
+                  ]
+                )
+              )
+            )
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildSemesterTabContent(sem1),
-                _buildSemesterTabContent(sem2),
-              ],
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: TabBarDelegate(
+              TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'S1'),
+                  Tab(text: 'S2'),
+                ],
+              ),
             ),
           ),
         ],
-      ),
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _KeepAlive(child: _buildSemesterTabContent(sem1)),
+            _KeepAlive(child: _buildSemesterTabContent(sem2)),
+          ],
+        ),
+      )
     );
   }
 }
 
-Widget buildSemesterTable(BuildContext context, SemesterModel sem) {
-  return Card(
-    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    child: Directionality(
-      textDirection: TextDirection.rtl,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 400) {
-            return _buildNarrowList(
-              context,
-              sem.modules,
-              moduleAverage: sem.moduleAverage,
-              onRecompute: sem.recompute,
-            );
-          }
-          return _buildWideTable(
-            context,
-            sem.modules,
-            moduleAverage: sem.moduleAverage,
-            moduleCreditsEarned: sem.moduleCreditsEarned,
-            onRecompute: sem.recompute,
-          );
-        },
-      ),
-    ),
-  );
+class TabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar _tabBar;
+  TabBarDelegate(this._tabBar);
+
+  @override
+  double get minExtent => _tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => _tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    // Material يعطي خلفية ورفع مناسب للـ TabBar
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      child: _tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant TabBarDelegate oldDelegate) {
+    // عدّل إلى true لو أردت إعادة البناء عند تغيّر محتوى الـ TabBar
+    return false;
+  }
 }
 
-Widget _buildWideTable(
-  BuildContext context,
-  List<ModuleModel> modules, {
-  required double Function(ModuleModel module) moduleAverage,
-  required double Function(ModuleModel module) moduleCreditsEarned,
-  required VoidCallback onRecompute,
-}) {
-  return SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 760),
-      child: DataTable(
-        headingRowHeight: 44,
-        dataRowMinHeight: 48,
-        dataRowMaxHeight: 56,
-        horizontalMargin: 12,
-        columnSpacing: 18,
-        headingTextStyle: const TextStyle(fontWeight: FontWeight.w700),
-        columns: [
-          DataColumn(label: _cell('Module', bold: true)),
-          DataColumn(label: _cell('Coef', bold: true, center: true), numeric: true),
-          DataColumn(label: _cell('Cred', bold: true, center: true), numeric: true),
-          DataColumn(label: _cell('Notes (TD / TP / EXAM)', bold: true)),
-          DataColumn(label: _cell('Poids (TD / TP / EXAM)', bold: true)),
-          DataColumn(label: _cell('Moyenne module', bold: true, center: true), numeric: true),
-          DataColumn(label: _cell('Cred Mod', bold: true, center: true), numeric: true),
-        ],
-        rows: modules.map((m) {
-          final noteCells = Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (m.hasTD)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 4, end: 4),
-                    child: _NumField(
-                      value: m.td,
-                      width: 64,
-                      decimalPlaces: 2,
-                      onChanged: (v) {
-                        m.td = v;
-                        onRecompute();
-                      },
-                      inputRangePattern:
-                          RegExp(r'^(?:|[0-1]?\d(?:[.]\d{0,2})?|20(?:[.]0{0,2})?)$'),
-                    ),
-                  ),
-                if (m.hasTP)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 4, end: 4),
-                    child: _NumField(
-                      value: m.tp,
-                      width: 64,
-                      decimalPlaces: 2,
-                      onChanged: (v) {
-                        m.tp = v;
-                        onRecompute();
-                      },
-                      inputRangePattern:
-                          RegExp(r'^(?:|[0-1]?\d(?:[.]\d{0,2})?|20(?:[.]0{0,2})?)$'),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 4, end: 4),
-                  child: _NumField(
-                    value: m.exam,
-                    width: 64,
-                    decimalPlaces: 2,
-                    onChanged: (v) {
-                      m.exam = v;
-                      onRecompute();
-                    },
-                    inputRangePattern:
-                        RegExp(r'^(?:|[0-1]?\d(?:[.]\d{0,2})?|20(?:[.]0{0,2})?)$'),
-                  ),
-                ),
-              ],
-            ),
-          );
 
-          final weightCells = Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (m.hasTD)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 4, end: 4),
-                    child: _NumField(
-                      value: m.wTD,
-                      width: 72,
-                      decimalPlaces: 4,
-                      onChanged: (v) {
-                        if (!m.hasTD) return;
-                        m.wTD = v ?? 0;
-                        onRecompute();
-                      },
-                    ),
-                  ),
-                if (m.hasTP)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 4, end: 4),
-                    child: _NumField(
-                      value: m.wTP,
-                      width: 72,
-                      decimalPlaces: 4,
-                      onChanged: (v) {
-                        if (!m.hasTP) return;
-                        m.wTP = v ?? 0;
-                        onRecompute();
-                      },
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 4, end: 4),
-                  child: _NumField(
-                    value: m.wEX,
-                    width: 72,
-                    decimalPlaces: 4,
-                    onChanged: (v) {
-                      m.wEX = v ?? 0;
-                      onRecompute();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
 
-          return DataRow(
-            cells: [
-              DataCell(_cell(m.title, bold: true)),
-              DataCell(
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: _NumField(
-                    value: m.coef,
-                    width: 72,
-                    decimalPlaces: 2,
-                    onChanged: (v) {
-                      if (v != null) {
-                        m.coef = v;
-                        onRecompute();
-                      }
-                    },
-                  ),
-                ),
+Widget buildSemesterTable(BuildContext context, SemesterModel sem) {
+  return Padding(
+    padding: const EdgeInsets.all(5),
+    child: SingleChildScrollView(
+      child: Column(
+        children: sem.modules.map((module) {
+          return Column(
+            children: [
+              NoteCard(
+                coef: module.coef,
+                cred: module.credits,
+                subject: module.title,
+                wTD: module.wTD,
+                wEX: module.wEX,
+                wTP: module.wTP,
+
+                onChanged: (td, exam, moy, coef, cred) {
+                  module.td = td;
+                  module.exam = exam;
+                  module.coef = coef;
+                  module.credits = cred;
+                  module.wTD = module.wTD;
+                  module.wEX = module.wEX;
+                  module.wTP = module.wTP;
+
+                  // يعيد حساب كل شيء
+                  sem.recompute();
+
+                  // لتحديث الواجهة
+                  (context as Element).markNeedsBuild();
+
+                },
               ),
-              DataCell(
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: _NumField(
-                    value: m.credits,
-                    width: 72,
-                    decimalPlaces: 2,
-                    onChanged: (v) {
-                      if (v != null) {
-                        m.credits = v;
-                        onRecompute();
-                      }
-                    },
-                  ),
-                ),
-              ),
-              DataCell(noteCells),
-              DataCell(weightCells),
-              DataCell(
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: _cell(moduleAverage(m).toStringAsFixed(2), center: true),
-                ),
-              ),
-              DataCell(
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: _cell(moduleCreditsEarned(m).toStringAsFixed(2), center: true),
-                ),
-              ),
+              const SizedBox(height: 20),
             ],
           );
         }).toList(),
@@ -2830,394 +3335,889 @@ Widget _buildWideTable(
   );
 }
 
-Widget _buildNarrowList(
-  BuildContext context,
-  List<ModuleModel> modules, {
-  required double Function(ModuleModel module) moduleAverage,
-  required VoidCallback onRecompute,
-}) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Column(
-      children: [
-        for (var i = 0; i < modules.length; i++) ...[
-          if (i > 0) const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: _ModuleCard(
-              module: modules[i],
-              moduleAverage: moduleAverage,
-              onRecompute: onRecompute,
+/// بطاقة المادة NoteCard
+class NoteCard extends StatefulWidget {
+  final double coef;
+  final double cred;
+  final String subject;
+  final double wTD;
+  final double wEX;
+  final double wTP;
+  final Function(double td, double exam, double moy, double coef, double cred) onChanged;
+
+
+
+  const NoteCard({
+    super.key,
+
+    required this.coef,
+    required this.cred,
+    required this.subject,
+    required this.onChanged,
+    required this.wTD,
+    required this.wEX,
+    required this.wTP,
+
+  });
+
+  @override
+  State<NoteCard> createState() => _NoteCardState();
+}
+class NoteResult {
+  final double td;
+  final double tp;
+  final double exam;
+  final double moy;
+  final double coef;
+  final double cred;
+
+  NoteResult(
+      this.td,
+      this.tp,
+      this.exam,
+      this.moy,
+      this.coef,
+      this.cred);
+}
+
+class _NoteCardState extends State<NoteCard> {
+  double td = 0.0;
+  double tp = 0.0;
+  double exam = 0.0;
+  double moy = 0.0;
+
+  late double coef;
+  late double cred;
+  late double wTD;
+  late double wEX;
+  late double wTP;
+
+  @override
+  void initState() {
+    super.initState();
+    cred = widget.cred; // نهيئه بالقيمة الأصلية
+    coef = widget.coef;
+    wTD = widget.wTD;
+    wEX = widget.wEX;
+    wTP = widget.wTP;
+  }
+  void onTDChanged(String v) {
+    setState(() {
+      td = double.tryParse(v) ?? 0.0;
+      calculateMoy();
+      notifyParent();
+    });
+  }
+  void notifyParent() {
+    widget.onChanged(td, exam, moy, coef, cred);
+  }
+  void onExamChanged(String v) {
+    setState(() {
+      exam = double.tryParse(v) ?? 0.0;
+      calculateMoy();
+      notifyParent();
+    });
+  }
+  void onTPChanged(String v) {
+    setState(() {
+      tp = double.tryParse(v) ?? 0.0;
+      calculateMoy();
+      notifyParent();
+    });
+  }
+  void calculateMoy() {
+// هنا معادلة حساب المعدل
+    moy = (td * wTD) + (exam * wEX) + (tp * wTP);
+  }
+  void updateCred(double newValue) {
+    setState(() {
+      cred = newValue;
+      notifyParent();
+    });
+  }
+  void updateCoef(double newValue) {
+    setState(() {
+      coef = newValue;
+      notifyParent();
+    });
+  }
+  void _showWeightsDialog() {
+    TextEditingController wTDController = TextEditingController(text: wTD.toString());
+    TextEditingController wEXController = TextEditingController(text: wEX.toString());
+    TextEditingController wTPController = TextEditingController(text: wTP.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(S.of(context).editWeights),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              FutureBuilder<String>(
+                future: translateSubject(context,widget.subject),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Text('...'); // أثناء التحميل
+                  } else if (snapshot.hasError) {
+                    return Text(widget.subject); // fallback عند الخطأ
+                  } else {
+                    return Text(
+                      textAlign: TextAlign.start,
+                      snapshot.data!,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 15,),
+              TextField(
+                controller: wTDController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: "W. TD"),
+                  textAlign: TextAlign.center
+              ),const SizedBox(height: 10,),
+              TextField(
+                controller: wEXController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: "W. EXAM",),
+                textAlign: TextAlign.center,
+              ),const SizedBox(height: 10,),
+              TextField(
+                controller: wTPController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: "W. TP"),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  wTD = double.tryParse(wTDController.text) ?? wTD;
+                  wEX = double.tryParse(wEXController.text) ?? wEX;
+                  wTP = double.tryParse(wTPController.text) ?? wTP;
+                  calculateMoy();
+                  notifyParent();
+                });
+                Navigator.pop(context);
+              },
+              child: Text("OK"),
             ),
+          ],
+        );
+      },
+    );
+  }
+
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: double.infinity,height: 218,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(30),
+          border:  Border.all(
+        width: 3,
+        color: moy == 0
+            ? Theme.of(context).colorScheme.onSurface
+            : moy < 10
+            ? Colors.red
+            : Colors.green,
+      ),
+
+      ),
+      child: Column(
+        children: [
+          //------------------ الصف العلوي --------------------
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // اسم المادة
+              Expanded(
+                child:
+                Column(
+                  children: [
+
+                      FutureBuilder<String>(
+                        future: translateSubject(context,widget.subject),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return Text('...'); // أثناء التحميل
+                          } else if (snapshot.hasError) {
+                            return Text(widget.subject); // fallback عند الخطأ
+                          } else {
+                            return Text(
+                              snapshot.data!,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+
+                    Container(
+
+                      child:
+                      const SizedBox(width: 10, height: 15,),
+                    ),
+                  ],
+                ),),
+              Row(
+
+                children: [
+                  // Coef
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Text("Coef", style: TextStyle(fontSize: 14)),
+                      const SizedBox(height: 2),
+                      Container(
+                        width: 60,
+                        height: 30,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(40),
+                            border: Border.all(
+                              width: 1,
+                              color: Theme.of(context).colorScheme.onSurface,)
+                        ),
+                        child:
+
+                            TextField(
+                              controller: TextEditingController(text: coef.toStringAsFixed(0)),
+                              keyboardType: TextInputType.number,
+                              onChanged: (v) {
+                                final newValue = double.tryParse(v);
+                                if (newValue != null) setState(() => coef = newValue);
+
+                              }
+                              ,
+                              style: const TextStyle(fontSize: 15),
+                              textAlign: TextAlign.center,
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
+                                border: InputBorder.none, // إزالة الحد الافتراضي إذا تريد
+                              ),
+                            ),
+
+
+
+                      ),
+
+                    ],
+                  ),
+
+                  const SizedBox(width: 5),
+
+                  // Cred
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Text("Cred", style: TextStyle(fontSize: 14)),
+                      const SizedBox(height: 2),
+                      Container(
+                        width: 60,
+                        height: 30,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(40),
+                            border: Border.all(
+                              width: 1,
+                              color: Theme.of(context).colorScheme.onSurface,)
+                        ),
+                         child:
+                         TextField(
+                           controller:
+                           TextEditingController(text: cred.toStringAsFixed(0)),
+                           keyboardType: TextInputType.number,
+                           onChanged: (v) {
+                             final newValue = double.tryParse(v);
+                             if (newValue != null) setState(() => cred = newValue);
+
+                           },
+                           style: const TextStyle(fontSize: 15),
+                           textAlign: TextAlign.center,
+                           decoration: const InputDecoration(
+                             contentPadding: EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
+                             border: InputBorder.none, // إزالة الحد الافتراضي إذا تريد
+                           ),
+                         )
+
+
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+
+
+
+            ],
+          ),
+
+          const SizedBox(height: 5),
+          Container(height: 2,
+            color: moy == 0
+              ? Theme.of(context).colorScheme.onSurface
+          : moy < 10
+      ? Colors.red
+          : Colors.green,),
+
+          Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            S.of(context).notesTdTpExam,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+
+            ),),
+          IconButton(
+            icon: const Icon(Icons.info_outline, size: 20),
+            onPressed: () {
+              _showWeightsDialog();
+            },
+          ),
+
+          ]),
+
+          const SizedBox(height: 0),
+
+          //------------------ حقول TD + EXAM + MOY --------------------
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+
+              Row(children: [
+
+                // EXAM
+                if (wEX != 0)
+                Column(
+                  children: [
+                    const Text("EXAM"),
+                    const SizedBox(height: 2),
+                    Container(
+                      width: 70,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      child: TextField(
+                        textAlign: TextAlign.center,
+                        maxLength: 5,
+                        keyboardType: TextInputType.number,
+                        onChanged: (v) {
+                          final sanitized = v.replaceAll(',', '.');
+                          onExamChanged(sanitized);
+                        },
+                        decoration: const InputDecoration(
+                          contentPadding: EdgeInsets.only(top: 50, bottom: 23, left: 0, right: 0),
+                          border: InputBorder.none,
+                          counterText: '',
+
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 5,),
+
+                // TD
+                if (wTD != 0)
+                Column(
+                  children: [
+
+                    const Text("TD"),
+                    const SizedBox(height: 2),
+                    Container(
+                      width: 70,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(40),
+
+                      ),
+                      child: TextField(
+                        textAlign: TextAlign.center,
+                        maxLength: 5,
+                        keyboardType: TextInputType.number,
+                          onChanged: (v) {
+                            final sanitized = v.replaceAll(',', '.');
+                          onTDChanged(sanitized);
+                            },
+
+                        decoration: const InputDecoration(
+                          contentPadding: EdgeInsets.only(top: 50, bottom: 23, left: 0, right: 0),
+                          border: InputBorder.none,
+                          counterText: '',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 5,),
+                //TP
+                if (wTP != 0)
+                  Column(
+                    children: [
+
+                      const Text("TP"),
+                      const SizedBox(height: 2),
+                      Container(
+                        width: 70,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(40),
+
+                        ),
+                        child: TextField(
+                          textAlign: TextAlign.center,
+                          maxLength: 5,
+                          keyboardType: TextInputType.number,
+                          onChanged: (v) {
+                            final sanitized = v.replaceAll(',', '.');
+                            onTPChanged(sanitized);
+                          },
+
+                          decoration: const InputDecoration(
+                            contentPadding: EdgeInsets.only(top: 50, bottom: 23, left: 0, right: 0),
+                            border: InputBorder.none,
+                            counterText: '',
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+
+              ]),
+              // MOY
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text("Moy:        ",
+                      style: TextStyle(
+                        fontSize: 15,
+
+                      )),
+                  Text(
+                    moy.toStringAsFixed(2),
+                    style:  TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: moy == 0
+                          ? Theme.of(context).colorScheme.onSurface
+                          : moy < 10
+                          ? Colors.red
+                          : Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
-      ],
-    ),
-  );
-}
-
-class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({
-    required this.module,
-    required this.moduleAverage,
-    required this.onRecompute,
-  });
-
-  final ModuleModel module;
-  final double Function(ModuleModel module) moduleAverage;
-  final VoidCallback onRecompute;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final labelStyle = theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600);
-    final average = moduleAverage(module).toStringAsFixed(2);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                module.title,
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _LabeledValueField(
-                    label: 'Coef',
-                    value: module.coef,
-                    onChanged: (v) {
-                      if (v != null) {
-                        module.coef = v;
-                        onRecompute();
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  _LabeledValueField(
-                    label: 'Cred',
-                    value: module.credits,
-                    onChanged: (v) {
-                      if (v != null) {
-                        module.credits = v;
-                        onRecompute();
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Divider(color: theme.dividerColor.withOpacity(.7), height: 16),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Notes (TD / TP / EXAM)', style: labelStyle),
-                  const SizedBox(height: 8),
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Row(
-                      children: [
-                        _NoteField(
-                          label: 'TD',
-                          enabled: module.hasTD,
-                          value: module.td,
-                          padding: EdgeInsetsDirectional.zero,
-                          onChanged: (v) {
-                            module.td = v;
-                            onRecompute();
-                          },
-                        ),
-                        _NoteField(
-                          label: 'TP',
-                          enabled: module.hasTP,
-                          value: module.tp,
-                          onChanged: (v) {
-                            module.tp = v;
-                            onRecompute();
-                          },
-                        ),
-                        _NoteField(
-                          label: 'EXAM',
-                          enabled: true,
-                          value: module.exam,
-                          onChanged: (v) {
-                            module.exam = v;
-                            onRecompute();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Poids (TD / TP / EXAM)', style: labelStyle),
-                  const SizedBox(height: 8),
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Row(
-                      children: [
-                        _WeightField(
-                          label: 'wTD',
-                          enabled: module.hasTD,
-                          value: module.wTD,
-                          padding: EdgeInsetsDirectional.zero,
-                          onChanged: (v) {
-                            if (!module.hasTD) return;
-                            module.wTD = v ?? 0;
-                            onRecompute();
-                          },
-                        ),
-                        _WeightField(
-                          label: 'wTP',
-                          enabled: module.hasTP,
-                          value: module.wTP,
-                          onChanged: (v) {
-                            if (!module.hasTP) return;
-                            module.wTP = v ?? 0;
-                            onRecompute();
-                          },
-                        ),
-                        _WeightField(
-                          label: 'wEX',
-                          enabled: true,
-                          value: module.wEX,
-                          onChanged: (v) {
-                            module.wEX = v ?? 0;
-                            onRecompute();
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('Moy.', style: labelStyle),
-                const SizedBox(height: 4),
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: Text(
-                    average,
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _NoteField extends StatelessWidget {
-  const _NoteField({
-    required this.label,
-    required this.enabled,
-    required this.value,
-    required this.onChanged,
-    this.padding = const EdgeInsetsDirectional.only(start: 8),
-  });
-
-  final String label;
-  final bool enabled;
-  final double? value;
-  final ValueChanged<double?> onChanged;
-  final EdgeInsetsGeometry padding;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = _NumField(
-      value: value,
-      onChanged: onChanged,
-      width: 64,
-      decimalPlaces: 2,
-      inputRangePattern: RegExp(r'^(?:|[0-1]?\d(?:[.]\d{0,2})?|20(?:[.]0{0,2})?)$'),
-    );
-    final field = enabled
-        ? content
-        : IgnorePointer(child: Opacity(opacity: 0.35, child: content));
-
-    return Padding(
-      padding: padding,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          field,
-        ],
       ),
     );
   }
+
+
 }
 
-class _LabeledValueField extends StatelessWidget {
-  const _LabeledValueField({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final ValueChanged<double?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 4),
-        _NumField(
-          value: value,
-          width: 72,
-          decimalPlaces: 2,
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-}
-
-class _WeightField extends StatelessWidget {
-  const _WeightField({
-    required this.label,
-    required this.enabled,
-    required this.value,
-    required this.onChanged,
-    this.padding = const EdgeInsetsDirectional.only(start: 8),
-  });
-
-  final String label;
-  final bool enabled;
-  final double value;
-  final ValueChanged<double?> onChanged;
-  final EdgeInsetsGeometry padding;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = _NumField(
-      value: value,
-      width: 72,
-      decimalPlaces: 4,
-      onChanged: onChanged,
-    );
-    final field = enabled
-        ? content
-        : IgnorePointer(child: Opacity(opacity: 0.35, child: content));
-
-    return Padding(
-      padding: padding,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          field,
-        ],
-      ),
-    );
-  }
-}
-
+/// ------------------------ Résumé annuel -------------------------------
 class _AnnualSummaryCard extends StatelessWidget {
   const _AnnualSummaryCard({
+    Key? key,
     required this.semester1,
     required this.semester2,
-  });
+    this.showAnnual = true,
+    this.showS1 = true,
+    this.showS2 = true,
+
+  }) : super(key: key);
 
   final SemesterModel semester1;
   final SemesterModel semester2;
+
+  final bool showAnnual; // عرض الملخص السنوي
+  final bool showS1;     // عرض بطاقة S1
+  final bool showS2;     // عرض بطاقة S2
+
+
+  Widget buildInfoCard(String title, double value, IconData icon, BuildContext cx) {
+    return Container(
+      width: 150,
+      height: 63,
+      padding: const EdgeInsets.fromLTRB(15, 10, 5, 2),
+      decoration: BoxDecoration(
+        color: Theme.of(cx).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(width: 2, color: Theme.of(cx).colorScheme.onSurface),
+      ),
+      child: Column(
+        children: [Row(
+            children: [
+          Icon(icon, size: 20),
+              const SizedBox(width: 5,),
+          Text(title, style: const TextStyle(fontSize: 14)),
+          ]),
+
+          Text(
+            value.toStringAsFixed(2),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final moy1 = semester1.semesterAverage();
     final moy2 = semester2.semesterAverage();
-    final ann = double.parse(((moy1 + moy2) / 2).toStringAsFixed(2));
+    final ann = ((moy1 + moy2) / 2);
     final creds = semester1.creditsEarned() + semester2.creditsEarned();
+    final S1cred = semester1.creditsEarned();
+    final S2cred = semester2.creditsEarned();
 
-    return Card(
-      margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Résumé annuel', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
-            Row(
+
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+
+        // ---------------------- قسم S1 ----------------------
+        if (showS1)
+          Directionality(
+              textDirection: TextDirection.ltr,   // ← يمنع الانعكاس داخل البطاقة فقط
+              child:
+          Container(
+            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(35),
+              border: Border.all(width: 3, color: Theme.of(context).colorScheme.onSurface),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: MetricTile(
-                    label: 'Moyenne S1',
-                    value: moy1.toStringAsFixed(2),
-                    icon: Icons.looks_one_outlined,
-                    onTap: null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: MetricTile(
-                    label: 'Moyenne S2',
-                    value: moy2.toStringAsFixed(2),
-                    icon: Icons.looks_two_outlined,
-                    onTap: null,
-                  ),
+              Align(
+              alignment: Alignment.centerLeft,
+              child: Text("S1 Résumé",
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 10),
+                Row(
+                  textDirection: TextDirection.ltr,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    buildInfoCard("S1 Moyenne", moy1, Icons.filter_1, context),
+                    buildInfoCard("S1 Credits", S1cred, Icons.auto_graph, context),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(
+          )),
+
+        // ---------------------- قسم S2 ----------------------
+        if (showS2)
+          Directionality(
+              textDirection: TextDirection.ltr,   // ← يمنع الانعكاس داخل البطاقة فقط
+              child:
+          Container(
+            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(35),
+              border: Border.all(width: 3, color: Theme.of(context).colorScheme.onSurface),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: MetricTile(
-                    label: 'Année',
-                    value: ann.toStringAsFixed(2),
-                    icon: Icons.workspace_premium_outlined,
-                    onTap: null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: MetricTile(
-                    label: 'Total Credits',
-                    value: creds.toStringAsFixed(2),
-                    icon: Icons.auto_graph,
-                    onTap: null,
-                  ),
+              Align(
+              alignment: Alignment.centerLeft,
+              child: Text("S2 Résumé",
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 10),
+                Row(textDirection: TextDirection.ltr,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    buildInfoCard("S2 Moyenne", moy2, Icons.filter_2, context),
+                    buildInfoCard("S2 Credits", S2cred, Icons.auto_graph, context),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          )),
+
+        // ---------------------- الملخص السنوي ----------------------
+        if (showAnnual)
+    Directionality(
+    textDirection: TextDirection.ltr,   // ← يمنع الانعكاس داخل البطاقة فقط
+    child:
+          Container(
+            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(35),
+              border: Border.all(width: 3, color: Theme.of(context).colorScheme.onSurface),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              Align(
+              alignment: Alignment.centerLeft,
+              child: Text("Résumé Annual",
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+                const SizedBox(height: 10),
+                Row(textDirection: TextDirection.ltr,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    buildInfoCard("Année", ann, Icons.verified, context),
+                    buildInfoCard("Total Credits", creds, Icons.auto_graph, context),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color:
+                        Theme.of(context).colorScheme.surface
+                        ,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      width: 3,
+                      color: ann == 0
+                          ? Theme.of(context).colorScheme.onSurface
+                          : ann < 10
+                          ? Colors.red
+                          : Colors.green,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, // Résultat: في البداية
+                    children: [
+                    Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        "Résultat:",
+                        textDirection: TextDirection.ltr,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      )),
+
+                      const SizedBox(height: 0),
+
+                      // النتيجة في الوسط
+                      Center(
+                        child: Text(
+                          ann == 0
+                              ? '---'
+                              : (ann >= 10 ? '✨u Succeeded✨' : 'u Failed ❌'),
+                          style:
+                          GoogleFonts.dmMono(
+                            textStyle:
+                          TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 22,
+                            color: ann == 0
+                                ? Theme.of(context).colorScheme.onSurface
+                                : ann < 10
+                                ? Colors.red
+                                : Colors.green,
+                          )
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              ],
+            ),
+          )),
+      ],
     );
   }
 }
+
+
+
+Widget buildInfoCard(String title, double value, IconData icon) {
+  return Card(
+      //color:Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 2,
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(16),
+  child: Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+  Row(
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+  Text(title,
+  style: const TextStyle(
+  fontSize: 15,
+      fontWeight: FontWeight.w600,)),
+  Icon(icon, size: 20, ),
+  ],
+  ),
+  const SizedBox(height: 0),
+  Text(
+  value.toStringAsFixed(2),
+  style: const TextStyle(
+  fontSize: 20, fontWeight: FontWeight.bold),
+  ),
+  ],
+  ),
+  ));
+  }
+
+
+
+// class _NoteField extends StatelessWidget {
+//   const _NoteField({
+//     required this.label,
+//     required this.enabled,
+//     required this.value,
+//     required this.onChanged,
+//     this.padding = const EdgeInsetsDirectional.only(start: 8),
+//   });
+//
+//   final String label;
+//   final bool enabled;
+//   final double? value;
+//   final ValueChanged<double?> onChanged;
+//   final EdgeInsetsGeometry padding;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final content = _NumField(
+//       value: value,
+//       onChanged: onChanged,
+//       width: 64,
+//       decimalPlaces: 2,
+//       inputRangePattern: RegExp(r'^(?:|[0-1]?\d(?:[.]\d{0,2})?|20(?:[.]0{0,2})?)$'),
+//     );
+//     final field = enabled
+//         ? content
+//         : IgnorePointer(child: Opacity(opacity: 0.35, child: content));
+//
+//     return Padding(
+//       padding: padding,
+//       child: Column(
+//         mainAxisSize: MainAxisSize.min,
+//         children: [
+//           Text(label, style: Theme.of(context).textTheme.bodySmall),
+//           const SizedBox(height: 4),
+//           field,
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+// class _LabeledValueField extends StatelessWidget {
+//   const _LabeledValueField({
+//     required this.label,
+//     required this.value,
+//     required this.onChanged,
+//   });
+//
+//   final String label;
+//   final double value;
+//   final ValueChanged<double?> onChanged;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       mainAxisSize: MainAxisSize.min,
+//       crossAxisAlignment: CrossAxisAlignment.start,
+//       children: [
+//         Text(label, style: Theme.of(context).textTheme.bodySmall),
+//         const SizedBox(height: 4),
+//         _NumField(
+//           value: value,
+//           width: 72,
+//           decimalPlaces: 2,
+//           onChanged: onChanged,
+//         ),
+//       ],
+//     );
+//   }
+// }
+
+// class _WeightField extends StatelessWidget {
+//   const _WeightField({
+//     required this.label,
+//     required this.enabled,
+//     required this.value,
+//     required this.onChanged,
+//     this.padding = const EdgeInsetsDirectional.only(start: 8),
+//   });
+//
+//   final String label;
+//   final bool enabled;
+//   final double value;
+//   final ValueChanged<double?> onChanged;
+//   final EdgeInsetsGeometry padding;
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final content = _NumField(
+//       value: value,
+//       width: 72,
+//       decimalPlaces: 4,
+//       onChanged: onChanged,
+//     );
+//     final field = enabled
+//         ? content
+//         : IgnorePointer(child: Opacity(opacity: 0.35, child: content));
+//
+//     return Padding(
+//       padding: padding,
+//       child: Column(
+//         mainAxisSize: MainAxisSize.min,
+//         children: [
+//           Text(label, style: Theme.of(context).textTheme.bodySmall),
+//           const SizedBox(height: 8),
+//           field,
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+
+
 // ============================================================================
 // PART 3/3 — Helpers, Colors, Studies helpers, Compatibility adapters
 // ============================================================================
@@ -3236,31 +4236,674 @@ extension SafeStringExt on String {
 void openStudiesNavigator(BuildContext context) {
   Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => FacultiesScreen(faculties: demoFaculties)),
+    MaterialPageRoute(builder: (_) => FacultiesScreen(faculties:  getDemoFaculties(context))),
   );
 }
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////result screen///////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
 
-// زر اختصار يفتح الدراسة (للاستخدام داخل AppBar.actions)
-class StudiesActionButton extends StatelessWidget {
-  const StudiesActionButton({super.key});
+class ResultsScreen extends StatelessWidget {
+  final SemesterModel semester1;
+  final SemesterModel semester2;
+  final String programLabel; // مثال: "Licence 2ème Année" (اختياري)
+
+  const ResultsScreen({
+    Key? key,
+    required this.semester1,
+    required this.semester2,
+    this.programLabel = '',
+  }) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'الدراسة (كليات → تخصّصات → مسارات → جدول)',
-      icon: const Icon(Icons.menu_book_outlined),
-      onPressed: () => openStudiesNavigator(context),
+    // حسابات
+    final double moy1 = semester1.semesterAverage();
+    final double moy2 = semester2.semesterAverage();
+    // إذا كان أحد الفصول فارغاً، إبقاء المتوسط = 0
+    final double ann = _computeAnnual(moy1, moy2);
+    final double cred1 = semester1.creditsEarned();
+    final double cred2 = semester2.creditsEarned();
+    final double totalCred = cred1 + cred2;
+
+    final decisionColor = _decisionColor(context, ann);
+    final decisionText = _decisionText(ann);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(S.of(context).studyResults),
+
+        centerTitle: true,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final file = await PdfReportService.generateReport(
+            faculty: programLabel, // مثال: يمكنك تمرير قيمة من parameters
+            program: programLabel,
+            semester1: semester1,
+            semester2: semester2,
+          );
+          await OpenFilex.open(file.path);
+        },
+        icon: const Icon(Icons.picture_as_pdf),
+        label: const Text('PDF'),
+      ),
+
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ---------- عنوان السنة / البرنامج ----------
+            if (programLabel.isNotEmpty) ...[
+              Text(
+                programLabel,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+            ],
+            // ---------- العنوان العام + البطاقة العليا ----------
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: ann == 0
+                    ? Theme.of(context).colorScheme.surface
+                    : decisionColor.withOpacity(0.10),
+                border: Border.all(
+                  color: ann == 0
+                      ? Theme.of(context).colorScheme.outline
+                      : decisionColor,
+                  width: 2,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Align(
+                      alignment: Alignment.centerLeft,
+                    child:
+                  Text(
+                    'Decision :',
+                    textDirection: TextDirection.ltr,
+
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  )),
+                  const SizedBox(height: 8),
+
+                  Row(textDirection: TextDirection.ltr,
+                    children: [
+                      // -------- بطاقة المعدل السنوي --------
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Theme.of(context).colorScheme.surface,
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.outlineVariant,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                'Année',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 0),
+                              Text(
+                                ann == 0 ? '0.0' : ann.toStringAsFixed(2),
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: ann == 0
+                                      ? Theme.of(context).colorScheme.onSurface
+                                      : decisionColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      // -------- بطاقة الرصيد الإجمالي --------
+                      Container(
+                        width: 100,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: Theme.of(context).colorScheme.surface,
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Total Credits',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 0),
+                            Text(
+                              totalCred.toStringAsFixed(0),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      // -------- بطاقة النتيجة النهائية --------
+                      Container(
+                        width: 120,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: ann == 0
+                              ? Theme.of(context).colorScheme.surface
+                              : decisionColor,
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Résultat',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: ann == 0
+                                    ? Theme.of(context).colorScheme.onSurface
+                                    : Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 0),
+                            Text(
+                              ann == 0 ? '---' : decisionText,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: ann == 0
+                                    ? Theme.of(context).colorScheme.onSurface
+                                    : Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+
+
+            ,const SizedBox(height: 20),
+
+
+
+            // ---------- متوسط الفصل الأول و رصيده ----------
+            _buildSemesterSummaryRow('S1', moy1, cred1, context),
+            const SizedBox(height: 8),
+            _buildSemesterSummaryRow('S2', moy2, cred2, context),
+            const SizedBox(height: 12),
+
+            const Divider(),
+
+            // ---------- قوائم المواد: S1 ثم S2 ----------
+
+            _buildModuleListSection(context, 'S1 Modules', semester1.modules),
+             const SizedBox(height: 16),
+            _buildModuleListSection(context, 'S2 Modules', semester2.modules),
+
+          ],
+        ),
+      ),
     );
   }
+
+  static double _computeAnnual(double moy1, double moy2) {
+    // نعتبر 0 إن لم تكن هناك مواد؛ يمكن تعديل المنطق إذا كان مطلوباً غير ذلك
+    if (moy1 == 0 && moy2 == 0) return 0.0;
+    // لو أحدهم صفر ونريد حساب السنوي بناءً على الموجود فقط:
+    if (moy1 == 0) return double.parse(moy2.toStringAsFixed(2));
+    if (moy2 == 0) return double.parse(moy1.toStringAsFixed(2));
+    return double.parse(((moy1 + moy2) / 2).toStringAsFixed(2));
+  }
+
+  static Color _decisionColor(BuildContext cx, double ann) {
+    if (ann == 0) return Colors.grey.shade400;
+    return ann < 10 ? Colors.red : Colors.green;
+  }
+
+  static String _decisionText(double ann) {
+    if (ann == 0) return '---';
+    return ann < 10 ? 'Failed' : 'Succeed';
+  }
+
+  Widget _buildSemesterSummaryRow(String label, double moy, double creds, BuildContext ctx) {
+    final scheme = Theme.of(ctx).colorScheme;
+
+    final Color color = moy == 0
+        ? scheme.onSurface.withOpacity(0.6)
+        : (moy < 10 ? Colors.red : Colors.green);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: scheme.onSurface,
+          ),
+        ),
+
+        Row(
+          children: [
+            // بطاقة المعدل
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: color),
+                color: scheme.surface,
+              ),
+              child: Text(
+                'Moy: ${moy == 0 ? '---' : moy.toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            // بطاقة الرصيد
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: scheme.outlineVariant),
+                color: scheme.surface,
+              ),
+              child: Text(
+                'Credits: ${creds.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModuleListSection(BuildContext context, String title, List<ModuleModel> modules) {
+    final scheme = Theme.of(context).colorScheme;
+
+    if (modules.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: scheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            S.of(context).noSubjectsThisSemester,
+            style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      //crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Align(
+        alignment: Alignment.centerLeft,
+        child:
+        Text(
+          textDirection: TextDirection.ltr,
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: scheme.onSurface,
+          ),
+        )),
+        const SizedBox(height: 8),
+        ...modules.map((m) => _buildModuleRow(context, m)).toList(),
+      ],
+    );
+  }
+
+
+  Widget _buildModuleRow(BuildContext context, ModuleModel m) {
+    final scheme = Theme.of(context).colorScheme;
+
+    final grade = m.moy;
+    final gradeColor = _getGradeColor(grade);
+
+    return Card(
+      color: scheme.surface,
+      shadowColor: scheme.shadow,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+
+        title: FutureBuilder<String>(
+          future: translateSubject(context, m.title),
+          builder: (context, snapshot) {
+            return Text(
+              snapshot.data ?? m.title,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
+            );
+          },
+        ),
+
+        subtitle: Text(
+          '${S.of(context).credits}: ${m.credits.toStringAsFixed(0)}  /  '
+              '${S.of(context).coefficient}: ${m.coef.toStringAsFixed(0)}',
+          style: TextStyle(color: scheme.onSurfaceVariant),
+        ),
+
+        trailing: SizedBox(
+          width: 120,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    grade.toStringAsFixed(2),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: gradeColor,
+                    ),
+                  ),
+                  Text(
+                    _gradeLabel(grade),
+                    style: TextStyle(color: gradeColor),
+                  ),
+                ],
+              ),
+
+              const SizedBox(width: 8),
+
+              IconButton(
+                icon: Icon(Icons.info_outline, size: 20, color: scheme.onSurface),
+                onPressed: () => _showModuleWeightsDialog(context, m),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  void _showModuleWeightsDialog(BuildContext context, ModuleModel m) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: FutureBuilder<String>(
+          future: translateSubject(context,m.title),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Text('...'); // أثناء التحميل
+            } else if (snapshot.hasError) {
+              return Text(m.title); // fallback عند الخطأ
+            } else {
+              return Text(
+                snapshot.data!,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              );
+            }
+          },
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _infoRow('wTD', m.wTD),
+            _infoRow('wTP', m.wTP),
+            _infoRow('wEX', m.wEX),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context),
+              child:  Text(S.of(context).close)),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, double value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text(value.toStringAsFixed(2)),
+        ],
+      ),
+    );
+  }
+
+  Color _getGradeColor(double grade) {
+    if (grade >= 10) return Colors.green;
+    //if (grade >= 8) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _gradeLabel(double grade) {
+    if (grade >= 10) return 'SUCCEED';
+    //if (grade >= 8) return 'FAILED';
+    return 'FAILED';
+  }
 }
+class PdfReportService {
+  static Future<File> generateReport({
+    required String faculty,
+    required String program,
+    required SemesterModel semester1,
+    required SemesterModel semester2,
+  }) async {
+    final pdf = pw.Document();
+
+    // حساب المتوسطات
+    final moy1 = semester1.semesterAverage();
+    final moy2 = semester2.semesterAverage();
+    final ann = (moy1 + moy2) / 2;
+
+    final cred1 = semester1.creditsEarned();
+    final cred2 = semester2.creditsEarned();
+    final totalCred = cred1 + cred2;
+
+    final decision =
+    ann == 0 ? '---' : (ann >= 10 ? 'SUCCEED' : 'FAILED');
+    final regularFont = pw.Font.ttf(
+        await rootBundle.load("assets/fonts/Tajawal-Regular.ttf"));
+    final boldFont = pw.Font.ttf(
+        await rootBundle.load("assets/fonts/Tajawal-Bold.ttf"));
+
+    pdf.addPage(
+      pw.MultiPage(
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) =>
+        [
+          pw.Text("Université ",
+              style: pw.TextStyle(font: boldFont, fontSize: 16)),
+          pw.Text("Faculté : $faculty", style: pw.TextStyle(font: regularFont)),
+          pw.Text("Programme : $program", style: pw.TextStyle(font: regularFont)),
+          pw.SizedBox(height: 20),
+
+          _sectionTitle("DÉCISION", font: boldFont),
+          pw.SizedBox(height: 10),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text("Année : ${ann.toStringAsFixed(2)}",
+                  style: pw.TextStyle(font: regularFont,fontSize: 16)),
+
+              pw.Text("Total Crédits : $totalCred",
+              style: pw.TextStyle(font: regularFont,fontSize: 16)),
+              pw.Text("Résultat : $decision",
+                  style: pw.TextStyle(font: regularFont,fontSize: 16),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+
+          _sectionTitle("SEMESTRE 1", font: boldFont),
+          pw.SizedBox(height: 10),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children:[
+          pw.Text("Moyenne S1 : ${moy1.toStringAsFixed(2)}",
+              style: pw.TextStyle(font: regularFont,fontSize: 16)),
+          pw.Text(
+              "Crédits S1 : $cred1",
+              style: pw.TextStyle(font: regularFont,fontSize: 16))]),
+          pw.SizedBox(height: 10),
+          _modulesTable(semester1.modules, font: regularFont),
+          pw.SizedBox(height: 10),
+
+          _sectionTitle("SEMESTRE 2", font: boldFont),
+          pw.SizedBox(height: 10),
+          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children:[
+          pw.Text("Moyenne S2 : ${moy2.toStringAsFixed(2)}",
+              style: pw.TextStyle(font: regularFont,fontSize: 16)),
+          pw.Text(
+              "Crédits S2 : $cred2",
+              style: pw.TextStyle(font: regularFont,fontSize: 16)),]),
+          pw.SizedBox(height: 10),
+          _modulesTable(semester2.modules, font: regularFont),
+
+          // pw.SizedBox(height: 10),
+          // _sectionTitle("Résumé Annuel", font: boldFont),
+          // pw.SizedBox(height: 10),
+          // pw.Text("Moyenne Année : ${ann.toStringAsFixed(2)}",
+          //     style: pw.TextStyle(font: regularFont)),
+          // pw.Text("Total Crédits : $totalCred",
+          //     style: pw.TextStyle(font: regularFont)),
+          // pw.Text("Résultat Final : $decision",
+          //     style: pw.TextStyle(font: regularFont)),
+        ],
+      ),
+    );
+
+
+    final dir = await getTemporaryDirectory();
+    final file = File("${dir.path}/results.pdf");
+    return file.writeAsBytes(await pdf.save());
+  }
+
+  // ----------- Helpers -----------
+
+  static pw.Widget _sectionTitle(String text, {required pw.Font font}) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.symmetric(vertical: 8),
+      color: PdfColors.grey300,
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(
+          fontSize: 15,
+          fontWeight: pw.FontWeight.bold,
+          font: font, // استخدم الخط الممرر
+        ),
+      ),
+    );
+  }
+
+
+  static pw.Widget _modulesTable(List<ModuleModel> modules,
+      {required pw.Font font}) {
+    return pw.Table.fromTextArray(
+      headers: ["Module", "Coef", "Cred", "Moy"],
+      data: modules.map((m) {
+        return [
+          m.title,
+          m.coef.toString(),
+          m.credits.toString(),
+          m.moy.toStringAsFixed(2),
+        ];
+      }).toList(),
+      cellStyle: pw.TextStyle(fontSize: 11, font: font),
+      headerStyle: pw.TextStyle(
+        fontWeight: pw.FontWeight.bold,
+        fontSize: 12,
+        font: font,
+      ),
+      border: pw.TableBorder.all(),
+      cellAlignment: pw.Alignment.centerLeft,
+
+    );
+  }
+
+
+}
+
+
+// زر اختصار يفتح الدراسة (للاستخدام داخل AppBar.actions)
+// class StudiesActionButton extends StatelessWidget {
+//   const StudiesActionButton({super.key});
+//   @override
+//   Widget build(BuildContext context) {
+//     return IconButton(
+//       tooltip: 'الدراسة (كليات → تخصّصات → مسارات → جدول)',
+//       icon: const Icon(Icons.menu_book_outlined),
+//       onPressed: () => openStudiesNavigator(context),
+//     );
+//   }
+// }
 
 // ---------------------------------------------------------------------------
 // توافقية: بعض الأقسام القديمة كانت تستدعي CalculatorScreen بالاسم القديم.
 // حتى لا ينكسر أي استدعاء، نوفّر كلاس بنفس الاسم يشير إلى الشاشة الجديدة.
 // ---------------------------------------------------------------------------
-class CalculatorScreen extends CalculatorHubScreen {
-  const CalculatorScreen({super.key});
-}
+// class CalculatorScreen extends CalculatorHubScreen {
+//   const CalculatorScreen({super.key});
+// }
+
+
 
 // ============================================================================
-// END OF FILE — Fachub
+// END OF FILE — UniSpace
 // ============================================================================

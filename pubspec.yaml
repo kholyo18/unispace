@@ -1,5 +1,5 @@
-name: fachub
-description: Fachub - حساب المعدل الجامعي + شات طلابي متصل
+name: UniSpace
+description: UniSpace - حساب المعدل الجامعي + شات طلابي متصل
 publish_to: "none"
 
 version: 1.0.0+1
@@ -8,6 +8,7 @@ environment:
   sdk: ">=3.4.0 <4.0.0"
 
 dependencies:
+  translator: ^1.0.4+1
   flutter:
     sdk: flutter
 
@@ -34,11 +35,29 @@ dependencies:
   intl: ^0.20.2
   flutter_localizations:
     sdk: flutter
+  google_fonts: ^6.3.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  open_filex: 4.7.0
+
+
 
 dev_dependencies:
+
+  flutter_launcher_icons: ^0.13.1
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.2
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.0
+
+flutter_icons:
+  android: true
+  ios: true
+  web: true
+  windows: true
+  image_path: "assets/app_icon.png"
+
 
 flutter:
   uses-material-design: true
@@ -48,3 +67,18 @@ flutter:
     - assets/brand/
     - assets/screenshots/
     - assets/templates_dz/
+    - assets/fonts/
+
+fonts:
+  fonts:
+    - family: Pacifico
+      fonts:
+        - asset: assets/fonts/Pacifico-Regular.ttf
+
+    - family: Tajawal
+      fonts:
+        - asset: assets/fonts/Tajawal-Regular.ttf
+        - asset: assets/fonts/Tajawal-Bold.ttf
+          weight: 700
+flutter_intl:
+  enabled: true

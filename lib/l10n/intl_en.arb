@@ -1,0 +1,135 @@
+
+
+{
+  "@@locale": "en",
+  "sections": "Sections",
+  "majors": "Majors",
+  "comments": "Comments",
+  "comment": "Comment",
+  "writeYourComment": "Write your comment",
+  "publish": "Publish",
+  "cancel": "Cancel",
+  "posted": "Post",
+  "searchClipboard": "Search inside clipboard",
+  "note": "Note",
+  "title": "Title",
+  "content": "Content",
+  "save": "Save",
+  "pinNote": "Pin note",
+  "noNotesYet": "No notes yet",
+  "archive": "Archive",
+  "home": "Home",
+  "community": "Community",
+  "viewAll": "View All",
+  "faculties": "Faculties",
+  "clipboard": "Clipboard",
+  "changeTheme": "Change Theme",
+  "changeLanguage": "Change Language",
+  "resetPassword": "Reset Password",
+  "logout": "Logout",
+  "login": "Login",
+  "aboutApp": "About the App",
+  "privacyPolicy": "Privacy Policy",
+  "welcomeEmoji": "Welcome 👋",
+  "homeSubtitle": "Browse faculties, calculate your GPA, share your ideas, and write notes easily.",
+  "searchFaculty": "Search for a faculty...",
+  "quickCalc": "Quick Calculation",
+  "welcomeUniSpace": "Welcome to UniSpace",
+  "email": "Email",
+  "password": "Password",
+  "resetSent": "Reset link has been sent",
+  "resetFailed": "Failed to send: {e}",
+  "notRegistered": "Not registered",
+  "searchClipboard": "Search inside clipboard…",
+  "pinned": "Pinned",
+  "otherNotes": "Other Notes",
+  "note": "Note",
+  "title": "Title",
+  "content": "Content",
+  "pinNote": "Pin Note",
+  "noPostsYet": "No posts yet",
+  "startDiscussion": "Start the first discussion in the community and share your experience with colleagues.",
+  "createPost": "Post",
+
+  "newPost": "New Post",
+  "mediaUrl": "Image/Video URL",
+  "hashtag": "#",
+  "share": "Share",
+  "report": "Report",
+  "commentsCount": "Comments ({count})",
+  "writeComment": "Write your comment…",
+  "quickCalc2": "Quick Calc",
+  "add": "Add",
+  "calculate": "Calculate",
+  "Pass": " Passed",
+  "Fail": " Failed",
+  "credits": "Credits: {value}",
+  "lightMode": "Light Mode",
+  "darkMode": "Dark Mode",
+  "systemMode": "System Mode",
+  "resetFailed": "Failed to send: {e}",
+  "aboutAppDetails": "UniSpace does not collect personal data outside Firebase. All data is secure."
+,"chooseTheme": "Choose Theme"
+,"light": "Light"
+,"dark": "Dark"
+,"system": "System"
+,"chooseLanguage": "Choose Language"
+,"arabic": "Arabic"
+,"register": "Register"
+,"title": "Title"
+,"post": "Your post has been published ✅"
+,"createPoste": "Create a post"
+,"majors": "Majors"
+,"oneMajor": "One major"
+,"noMajorsYet": "No majors yet"
+,"editWeights": "Edit Weights"
+,"facultyEconomics": "Faculty of Economics, Commerce, and Management Sciences"
+,"commentsCount": "تعليقات ({count})"
+,"basicEducationDept": "Basic Education Department"
+,"basicEducation": "Basic Education",
+  "managementSciencesDept": "Department of Management Sciences",
+  "managementSciences": "Management Sciences",
+  "businessAdministration": "Business Administration",
+  "financialManagement": "Financial Management",
+  "humanResourcesManagement": "Human Resources Management",
+  "corporateFinancialManagement": "Corporate Financial Management"
+,"commercialSciencesDept": "Department of Commercial Sciences",
+  "commercialSciences": "Commercial Sciences",
+  "financeInternationalTrade": "Finance and International Trade",
+  "marketing": "Marketing",
+  "servicesMarketing": "Services Marketing",
+  "hotelTourismMarketing": "Hotel and Tourism Marketing"
+,"financialAccountingDept": "Department of Financial and Accounting Sciences",
+  "financialAccounting": "Financial and Accounting Sciences",
+  "finance": "Finance",
+  "accounting": "Accounting",
+  "accountingTaxation": "Accounting and Taxation",
+  "corporateFinance": "Corporate Finance"
+,"economicsDept": "Department of Economics",
+  "economics": "Economics",
+  "monetaryFinancialEconomics": "Monetary and Financial Economics"
+,"internationalEconomics": "International Economics"
+,"noSubjectsThisSemester": "No subjects in this semester."
+,"credits": "Credits:",
+  "coefficient": "Coefficient:"
+,"close": "Close"
+,"studyResults": "Study Results",
+  "notesTdTpExam": "Grades (TD/TP/Exam)"
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
