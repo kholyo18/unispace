@@ -35,15 +35,18 @@ class MessageLookup extends MessageLookupByLibrary {
     "accounting": MessageLookupByLibrary.simpleMessage("محاسبة"),
     "accountingTaxation": MessageLookupByLibrary.simpleMessage("محاسبة وجباية"),
     "add": MessageLookupByLibrary.simpleMessage("إضافة"),
+    "advancedPublicLaw": MessageLookupByLibrary.simpleMessage("قانون عام معمق"),
     "arabic": MessageLookupByLibrary.simpleMessage("العربية"),
     "archive": MessageLookupByLibrary.simpleMessage("الأرشيف"),
     "basicEducation": MessageLookupByLibrary.simpleMessage("التعليم الأساسي"),
     "basicEducationDept": MessageLookupByLibrary.simpleMessage(
       "قسم التعليم الأساسي",
     ),
+    "basicUnit": MessageLookupByLibrary.simpleMessage("الوحدة الأساسية"),
     "businessAdministration": MessageLookupByLibrary.simpleMessage(
       "إدارة أعمال",
     ),
+    "businessLaw": MessageLookupByLibrary.simpleMessage("قانون الأعمال"),
     "calculate": MessageLookupByLibrary.simpleMessage("احسب"),
     "cancel": MessageLookupByLibrary.simpleMessage("إلغاء"),
     "changeLanguage": MessageLookupByLibrary.simpleMessage("تغيير اللغة"),
@@ -60,6 +63,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "commercialSciencesDept": MessageLookupByLibrary.simpleMessage(
       "قسم علوم تجارية",
     ),
+    "commonCore": MessageLookupByLibrary.simpleMessage("جذع مشترك"),
     "community": MessageLookupByLibrary.simpleMessage("المجتمع"),
     "content": MessageLookupByLibrary.simpleMessage("المحتوى"),
     "corporateFinance": MessageLookupByLibrary.simpleMessage("مالية المؤسسة"),
@@ -69,16 +73,29 @@ class MessageLookup extends MessageLookupByLibrary {
     "createPost": MessageLookupByLibrary.simpleMessage("منشور"),
     "createPoste": MessageLookupByLibrary.simpleMessage("أنشئ منشوراً"),
     "credits": MessageLookupByLibrary.simpleMessage("رصيد:"),
+    "criminalLaw": MessageLookupByLibrary.simpleMessage(
+      "القانون الجنائي والعلوم الجنائية",
+    ),
     "dark": MessageLookupByLibrary.simpleMessage("داكن"),
     "darkMode": MessageLookupByLibrary.simpleMessage("الوضع الداكن"),
     "economics": MessageLookupByLibrary.simpleMessage("علوم اقتصادية"),
     "economicsDept": MessageLookupByLibrary.simpleMessage("قسم علوم اقتصادية"),
     "editWeights": MessageLookupByLibrary.simpleMessage("تعديل الأوزان"),
     "email": MessageLookupByLibrary.simpleMessage("البريد الإلكتروني"),
+    "energyMiningLaw": MessageLookupByLibrary.simpleMessage(
+      "قانون الطاقة والمناجم",
+    ),
+    "exploratoryUnit": MessageLookupByLibrary.simpleMessage(
+      "الوحدة الاستكشافية",
+    ),
     "faculties": MessageLookupByLibrary.simpleMessage("الكليات"),
     "facultyEconomics": MessageLookupByLibrary.simpleMessage(
       "كلية العلوم الاقتصادية والتجارية وعلوم التسيير",
     ),
+    "facultyLawPolitical": MessageLookupByLibrary.simpleMessage(
+      "كلية الحقوق والعلوم السياسية",
+    ),
+    "familyLaw": MessageLookupByLibrary.simpleMessage("قانون الأسرة"),
     "finance": MessageLookupByLibrary.simpleMessage("مالية"),
     "financeInternationalTrade": MessageLookupByLibrary.simpleMessage(
       "مالية وتجارة دولية",
@@ -97,6 +114,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "homeSubtitle": MessageLookupByLibrary.simpleMessage(
       "تصفح الكليات، احسب معدلك، شارك أفكارك، ودوّن ملاحظاتك بسهولة.",
     ),
+    "horizontalUnit": MessageLookupByLibrary.simpleMessage("الوحدة الأفقية"),
     "hotelTourismMarketing": MessageLookupByLibrary.simpleMessage(
       "تسويق فندقي وسياحي",
     ),
@@ -105,6 +123,10 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "internationalEconomics": MessageLookupByLibrary.simpleMessage(
       "اقتصاد دولي",
+    ),
+    "law": MessageLookupByLibrary.simpleMessage("حقوق"),
+    "legalProfessionsLaw": MessageLookupByLibrary.simpleMessage(
+      "قانون المهن القانونية والقضائية",
     ),
     "light": MessageLookupByLibrary.simpleMessage("فاتح"),
     "lightMode": MessageLookupByLibrary.simpleMessage("الوضع الفاتح"),
@@ -115,8 +137,14 @@ class MessageLookup extends MessageLookupByLibrary {
     "managementSciencesDept": MessageLookupByLibrary.simpleMessage(
       "قسم علوم التسيير",
     ),
+    "maritimePortLaw": MessageLookupByLibrary.simpleMessage(
+      "القانون البحري والمينائي",
+    ),
     "marketing": MessageLookupByLibrary.simpleMessage("تسويق"),
     "mediaUrl": MessageLookupByLibrary.simpleMessage("رابط صورة/فيديو"),
+    "methodologicalUnit": MessageLookupByLibrary.simpleMessage(
+      "الوحدة المنهجية",
+    ),
     "monetaryFinancialEconomics": MessageLookupByLibrary.simpleMessage(
       "اقتصاد نقدي ومالي",
     ),
@@ -137,9 +165,15 @@ class MessageLookup extends MessageLookupByLibrary {
     "password": MessageLookupByLibrary.simpleMessage("كلمة المرور"),
     "pinNote": MessageLookupByLibrary.simpleMessage("تثبيت الملاحظة"),
     "pinned": MessageLookupByLibrary.simpleMessage("مثبّتة"),
+    "politicalAdministrativeOrgs": MessageLookupByLibrary.simpleMessage(
+      "تنظيمات سياسية وإدارية",
+    ),
+    "politicalSciences": MessageLookupByLibrary.simpleMessage("علوم سياسية"),
     "post": MessageLookupByLibrary.simpleMessage("تم نشر منشورك ✅"),
     "posted": MessageLookupByLibrary.simpleMessage("منشور"),
     "privacyPolicy": MessageLookupByLibrary.simpleMessage("سياسة الخصوصية"),
+    "privateLaw": MessageLookupByLibrary.simpleMessage("قانون خاص"),
+    "publicLaw": MessageLookupByLibrary.simpleMessage("قانون عام"),
     "publish": MessageLookupByLibrary.simpleMessage("نشر"),
     "quickCalc": MessageLookupByLibrary.simpleMessage("الحساب السريع"),
     "quickCalc2": MessageLookupByLibrary.simpleMessage("حساب سريع"),
@@ -166,6 +200,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "studyResults": MessageLookupByLibrary.simpleMessage("نتائج الدراسة"),
     "system": MessageLookupByLibrary.simpleMessage("حسب النظام"),
     "systemMode": MessageLookupByLibrary.simpleMessage("حسب النظام"),
+    "taxLaw": MessageLookupByLibrary.simpleMessage("قانون جبائي"),
     "title": MessageLookupByLibrary.simpleMessage("العنوان"),
     "viewAll": MessageLookupByLibrary.simpleMessage("عرض الكل"),
     "welcomeEmoji": MessageLookupByLibrary.simpleMessage("مرحباً بك 👋"),

@@ -985,7 +985,7 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                 label: 'S1',
                 modules: [
                   ProgramModule(
-                    name: 'تفكير الاستراتيجي والتنافسي',
+                    name: 'تحليل الاستراتيجي والتنافسي',
                     coef: 2,
                     credits: 5,
                     components: [
@@ -1459,14 +1459,14 @@ ProgramComponent('EXAM', 60),
 ),
 
 ProgramModule(
-name: 'التمويل الاسلامي',
-coef: 2,
-credits: 2,
-components: [
-ProgramComponent('TD', 40),
-ProgramComponent('EXAM', 60),
-],
-),
+    name: 'التمويل الاسلامي',
+    coef: 2,
+    credits: 2,
+    components: [
+      ProgramComponent('TD', 40),
+      ProgramComponent('EXAM', 60),
+    ],
+  ),
 ProgramModule(
 name: 'ندوة في الادارة المالية',
 coef: 1,
@@ -4663,9 +4663,8 @@ ProgramComponent('EXAM', 60),
             ),
 
           ],
-        ),ProgramSemester(
-  label: 'S1',
-  modules: [])]),
+        ),
+        ]),
 // //========================================================
 // //===============السنة الرابعة اقتصاد دولي===============
 
@@ -4921,9 +4920,7 @@ ProgramComponent('EXAM', 60),
             ),
 
           ],
-        ),ProgramSemester(
-  label: 'S1',
-  modules: [])]),
+        ),]),
 
 
 ])
@@ -4931,6 +4928,6 @@ ProgramComponent('EXAM', 60),
     ],
   ),
   ProgramFaculty(
-name: 'كلية ......Coming soon',
+name: ' Coming soon',
 majors: [])
 ];}

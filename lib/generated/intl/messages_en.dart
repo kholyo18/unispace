@@ -37,15 +37,20 @@ class MessageLookup extends MessageLookupByLibrary {
       "Accounting and Taxation",
     ),
     "add": MessageLookupByLibrary.simpleMessage("Add"),
+    "advancedPublicLaw": MessageLookupByLibrary.simpleMessage(
+      "Advanced Public Law",
+    ),
     "arabic": MessageLookupByLibrary.simpleMessage("Arabic"),
     "archive": MessageLookupByLibrary.simpleMessage("Archive"),
     "basicEducation": MessageLookupByLibrary.simpleMessage("Basic Education"),
     "basicEducationDept": MessageLookupByLibrary.simpleMessage(
       "Basic Education Department",
     ),
+    "basicUnit": MessageLookupByLibrary.simpleMessage("Basic Unit"),
     "businessAdministration": MessageLookupByLibrary.simpleMessage(
       "Business Administration",
     ),
+    "businessLaw": MessageLookupByLibrary.simpleMessage("Business Law"),
     "calculate": MessageLookupByLibrary.simpleMessage("Calculate"),
     "cancel": MessageLookupByLibrary.simpleMessage("Cancel"),
     "changeLanguage": MessageLookupByLibrary.simpleMessage("Change Language"),
@@ -64,6 +69,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "commercialSciencesDept": MessageLookupByLibrary.simpleMessage(
       "Department of Commercial Sciences",
     ),
+    "commonCore": MessageLookupByLibrary.simpleMessage("Common Core"),
     "community": MessageLookupByLibrary.simpleMessage("Community"),
     "content": MessageLookupByLibrary.simpleMessage("Content"),
     "corporateFinance": MessageLookupByLibrary.simpleMessage(
@@ -75,6 +81,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "createPost": MessageLookupByLibrary.simpleMessage("Post"),
     "createPoste": MessageLookupByLibrary.simpleMessage("Create a post"),
     "credits": MessageLookupByLibrary.simpleMessage("Credits:"),
+    "criminalLaw": MessageLookupByLibrary.simpleMessage(
+      "Criminal Law and Criminal Sciences",
+    ),
     "dark": MessageLookupByLibrary.simpleMessage("Dark"),
     "darkMode": MessageLookupByLibrary.simpleMessage("Dark Mode"),
     "economics": MessageLookupByLibrary.simpleMessage("Economics"),
@@ -83,10 +92,18 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "editWeights": MessageLookupByLibrary.simpleMessage("Edit Weights"),
     "email": MessageLookupByLibrary.simpleMessage("Email"),
+    "energyMiningLaw": MessageLookupByLibrary.simpleMessage(
+      "Energy and Mining Law",
+    ),
+    "exploratoryUnit": MessageLookupByLibrary.simpleMessage("Exploratory Unit"),
     "faculties": MessageLookupByLibrary.simpleMessage("Faculties"),
     "facultyEconomics": MessageLookupByLibrary.simpleMessage(
       "Faculty of Economics, Commerce, and Management Sciences",
     ),
+    "facultyLawPolitical": MessageLookupByLibrary.simpleMessage(
+      "Faculty of Law and Political Sciences",
+    ),
+    "familyLaw": MessageLookupByLibrary.simpleMessage("Family Law"),
     "finance": MessageLookupByLibrary.simpleMessage("Finance"),
     "financeInternationalTrade": MessageLookupByLibrary.simpleMessage(
       "Finance and International Trade",
@@ -105,6 +122,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "homeSubtitle": MessageLookupByLibrary.simpleMessage(
       "Browse faculties, calculate your GPA, share your ideas, and write notes easily.",
     ),
+    "horizontalUnit": MessageLookupByLibrary.simpleMessage("Horizontal Unit"),
     "hotelTourismMarketing": MessageLookupByLibrary.simpleMessage(
       "Hotel and Tourism Marketing",
     ),
@@ -113,6 +131,10 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "internationalEconomics": MessageLookupByLibrary.simpleMessage(
       "International Economics",
+    ),
+    "law": MessageLookupByLibrary.simpleMessage("Law"),
+    "legalProfessionsLaw": MessageLookupByLibrary.simpleMessage(
+      "Legal and Judicial Professions Law",
     ),
     "light": MessageLookupByLibrary.simpleMessage("Light"),
     "lightMode": MessageLookupByLibrary.simpleMessage("Light Mode"),
@@ -125,8 +147,14 @@ class MessageLookup extends MessageLookupByLibrary {
     "managementSciencesDept": MessageLookupByLibrary.simpleMessage(
       "Department of Management Sciences",
     ),
+    "maritimePortLaw": MessageLookupByLibrary.simpleMessage(
+      "Maritime and Port Law",
+    ),
     "marketing": MessageLookupByLibrary.simpleMessage("Marketing"),
     "mediaUrl": MessageLookupByLibrary.simpleMessage("Image/Video URL"),
+    "methodologicalUnit": MessageLookupByLibrary.simpleMessage(
+      "Methodological Unit",
+    ),
     "monetaryFinancialEconomics": MessageLookupByLibrary.simpleMessage(
       "Monetary and Financial Economics",
     ),
@@ -147,11 +175,19 @@ class MessageLookup extends MessageLookupByLibrary {
     "password": MessageLookupByLibrary.simpleMessage("Password"),
     "pinNote": MessageLookupByLibrary.simpleMessage("Pin Note"),
     "pinned": MessageLookupByLibrary.simpleMessage("Pinned"),
+    "politicalAdministrativeOrgs": MessageLookupByLibrary.simpleMessage(
+      "Political and Administrative Organizations",
+    ),
+    "politicalSciences": MessageLookupByLibrary.simpleMessage(
+      "Political Sciences",
+    ),
     "post": MessageLookupByLibrary.simpleMessage(
       "Your post has been published ✅",
     ),
     "posted": MessageLookupByLibrary.simpleMessage("Post"),
     "privacyPolicy": MessageLookupByLibrary.simpleMessage("Privacy Policy"),
+    "privateLaw": MessageLookupByLibrary.simpleMessage("Private Law"),
+    "publicLaw": MessageLookupByLibrary.simpleMessage("Public Law"),
     "publish": MessageLookupByLibrary.simpleMessage("Publish"),
     "quickCalc": MessageLookupByLibrary.simpleMessage("Quick Calculation"),
     "quickCalc2": MessageLookupByLibrary.simpleMessage("Quick Calc"),
@@ -180,6 +216,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "studyResults": MessageLookupByLibrary.simpleMessage("Study Results"),
     "system": MessageLookupByLibrary.simpleMessage("System"),
     "systemMode": MessageLookupByLibrary.simpleMessage("System Mode"),
+    "taxLaw": MessageLookupByLibrary.simpleMessage("Tax Law"),
     "title": MessageLookupByLibrary.simpleMessage("Title"),
     "viewAll": MessageLookupByLibrary.simpleMessage("View All"),
     "welcomeEmoji": MessageLookupByLibrary.simpleMessage("Welcome 👋"),

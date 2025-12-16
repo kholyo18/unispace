@@ -808,6 +808,161 @@ class S {
       args: [],
     );
   }
+
+  /// `Faculty of Law and Political Sciences`
+  String get facultyLawPolitical {
+    return Intl.message(
+      'Faculty of Law and Political Sciences',
+      name: 'facultyLawPolitical',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Political Sciences`
+  String get politicalSciences {
+    return Intl.message(
+      'Political Sciences',
+      name: 'politicalSciences',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Common Core`
+  String get commonCore {
+    return Intl.message('Common Core', name: 'commonCore', desc: '', args: []);
+  }
+
+  /// `Basic Unit`
+  String get basicUnit {
+    return Intl.message('Basic Unit', name: 'basicUnit', desc: '', args: []);
+  }
+
+  /// `Methodological Unit`
+  String get methodologicalUnit {
+    return Intl.message(
+      'Methodological Unit',
+      name: 'methodologicalUnit',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Exploratory Unit`
+  String get exploratoryUnit {
+    return Intl.message(
+      'Exploratory Unit',
+      name: 'exploratoryUnit',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Horizontal Unit`
+  String get horizontalUnit {
+    return Intl.message(
+      'Horizontal Unit',
+      name: 'horizontalUnit',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Political and Administrative Organizations`
+  String get politicalAdministrativeOrgs {
+    return Intl.message(
+      'Political and Administrative Organizations',
+      name: 'politicalAdministrativeOrgs',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Law`
+  String get law {
+    return Intl.message('Law', name: 'law', desc: '', args: []);
+  }
+
+  /// `Public Law`
+  String get publicLaw {
+    return Intl.message('Public Law', name: 'publicLaw', desc: '', args: []);
+  }
+
+  /// `Private Law`
+  String get privateLaw {
+    return Intl.message('Private Law', name: 'privateLaw', desc: '', args: []);
+  }
+
+  /// `Advanced Public Law`
+  String get advancedPublicLaw {
+    return Intl.message(
+      'Advanced Public Law',
+      name: 'advancedPublicLaw',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Family Law`
+  String get familyLaw {
+    return Intl.message('Family Law', name: 'familyLaw', desc: '', args: []);
+  }
+
+  /// `Criminal Law and Criminal Sciences`
+  String get criminalLaw {
+    return Intl.message(
+      'Criminal Law and Criminal Sciences',
+      name: 'criminalLaw',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Business Law`
+  String get businessLaw {
+    return Intl.message(
+      'Business Law',
+      name: 'businessLaw',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Legal and Judicial Professions Law`
+  String get legalProfessionsLaw {
+    return Intl.message(
+      'Legal and Judicial Professions Law',
+      name: 'legalProfessionsLaw',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Maritime and Port Law`
+  String get maritimePortLaw {
+    return Intl.message(
+      'Maritime and Port Law',
+      name: 'maritimePortLaw',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Energy and Mining Law`
+  String get energyMiningLaw {
+    return Intl.message(
+      'Energy and Mining Law',
+      name: 'energyMiningLaw',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tax Law`
+  String get taxLaw {
+    return Intl.message('Tax Law', name: 'taxLaw', desc: '', args: []);
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<S> {

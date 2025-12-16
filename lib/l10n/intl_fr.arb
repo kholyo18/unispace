@@ -114,5 +114,27 @@
 ,"close": "Fermer"
 ,"studyResults": "Résultats d'étude",
   "notesTdTpExam": "Notes (TD/TP/Exam)"
+,"facultyLawPolitical": "Faculté de droit et des sciences politiques",
+  "politicalSciences": "Sciences politiques",
+  "commonCore": "Tronc commun",
+
+  "basicUnit": "Unité fondamentale",
+  "methodologicalUnit": "Unité méthodologique",
+  "exploratoryUnit": "Unité exploratoire",
+  "horizontalUnit": "Unité horizontale",
+
+  "politicalAdministrativeOrgs": "Organisations politiques et administratives",
+  "law": "Droit",
+
+  "publicLaw": "Droit public",
+  "privateLaw": "Droit privé",
+  "advancedPublicLaw": "Droit public approfondi",
+  "familyLaw": "Droit de la famille",
+  "criminalLaw": "Droit pénal et sciences criminelles",
+  "businessLaw": "Droit des affaires",
+  "legalProfessionsLaw": "Droit des professions juridiques et judiciaires",
+  "maritimePortLaw": "Droit maritime et portuaire",
+  "energyMiningLaw": "Droit de l’énergie et des mines",
+  "taxLaw": "Droit fiscal"
 
 }

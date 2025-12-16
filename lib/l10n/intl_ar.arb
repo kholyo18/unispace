@@ -112,6 +112,28 @@
 ,"close": "إغلاق"
 ,"studyResults": "نتائج الدراسة"
 ,"notesTdTpExam": "العلامات (TD/TP/EXAM)"
+,"facultyLawPolitical": "كلية الحقوق والعلوم السياسية",
+  "politicalSciences": "علوم سياسية",
+  "commonCore": "جذع مشترك",
+
+  "basicUnit": "الوحدة الأساسية",
+  "methodologicalUnit": "الوحدة المنهجية",
+  "exploratoryUnit": "الوحدة الاستكشافية",
+  "horizontalUnit": "الوحدة الأفقية",
+
+  "politicalAdministrativeOrgs": "تنظيمات سياسية وإدارية",
+  "law": "حقوق",
+
+  "publicLaw": "قانون عام",
+  "privateLaw": "قانون خاص",
+  "advancedPublicLaw": "قانون عام معمق",
+  "familyLaw": "قانون الأسرة",
+  "criminalLaw": "القانون الجنائي والعلوم الجنائية",
+  "businessLaw": "قانون الأعمال",
+  "legalProfessionsLaw": "قانون المهن القانونية والقضائية",
+  "maritimePortLaw": "القانون البحري والمينائي",
+  "energyMiningLaw": "قانون الطاقة والمناجم",
+  "taxLaw": "قانون جبائي"
 
 
 

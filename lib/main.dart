@@ -39,7 +39,7 @@ import 'firebase_options.dart';
 import 'generated/l10n.dart';
 import 'ui/theme.dart';
 import 'ui/widgets/widgets.dart';
-import './moduls2.dart';
+import './moduls3.dart';
 import './moduls.dart';
 import 'module/moduls.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -177,15 +177,15 @@ class AppEndDrawer extends StatelessWidget {
             // تنقّل سريع
 
 
-            // ListTile(
-            //   leading: const Icon(Icons.calculate_outlined),
-            //   title: const Text('حاسبة المعدل'),
-            //   onTap: () {
-            //     Navigator.push
-            //       (context,
-            //         MaterialPageRoute(builder: (_) => const QuickAverageScreen()));
-            //   },
-            // ),
+            ListTile(
+              leading: const Icon(Icons.calculate_outlined),
+              title: const Text('حاسبة المعدل'),
+              onTap: () {
+                Navigator.push
+                  (context,
+                    MaterialPageRoute(builder: (_) => const QuickAverageScreen()));
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.note_alt_outlined),
               title: Text(S.of(context).clipboard),
@@ -1020,65 +1020,65 @@ class HomeLandingScreen extends StatelessWidget {
                 ),
               ),
             ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    // الحاوية السوداء: الحساب السريع
-                    InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const QuickAverageScreen()),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        width: 350,
-                        height: 60,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        alignment: Alignment.centerLeft,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface, // لون الحاوية أسود
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              blurRadius: 10,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children:  [Row(
-                              children: [
-                            Icon(Icons.calculate_outlined,
-                                color: Theme.of(context).colorScheme.onSurface, size: 28),
-                            SizedBox(width: 12),
-                            Text(S.of(context).quickCalc,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )]),
-                            Icon(
-                               Icons.arrow_forward_ios,
-                               color: Theme.of(context).colorScheme.onSurface,
-                               size: 20,    )
-                          ],
-                        ),
-
-                      ),
-                    ),
-
-
-                  ],
-                ),
-              ),
-            ),
+            // SliverPadding(
+            //   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            //   sliver: SliverToBoxAdapter(
+            //     child: Column(
+            //       children: [
+            //         // الحاوية السوداء: الحساب السريع
+            //         InkWell(
+            //           onTap: () {
+            //             Navigator.push(
+            //               context,
+            //               MaterialPageRoute(builder: (_) => const QuickAverageScreen()),
+            //             );
+            //           },
+            //           borderRadius: BorderRadius.circular(12),
+            //           child: Container(
+            //             width: 350,
+            //             height: 60,
+            //             padding: const EdgeInsets.symmetric(horizontal: 16),
+            //             alignment: Alignment.centerLeft,
+            //             decoration: BoxDecoration(
+            //               color: Theme.of(context).colorScheme.surface, // لون الحاوية أسود
+            //               borderRadius: BorderRadius.circular(12),
+            //               boxShadow: [
+            //                 BoxShadow(
+            //                   color: Theme.of(context).colorScheme.onSurface,
+            //                   blurRadius: 10,
+            //                   offset: const Offset(0, 1),
+            //                 ),
+            //               ],
+            //             ),
+            //             child: Row(
+            //               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //               children:  [Row(
+            //                   children: [
+            //                 Icon(Icons.calculate_outlined,
+            //                     color: Theme.of(context).colorScheme.onSurface, size: 28),
+            //                 SizedBox(width: 12),
+            //                 Text(S.of(context).quickCalc,
+            //                   style: TextStyle(
+            //                     color: Theme.of(context).colorScheme.onSurface,
+            //                     fontSize: 18,
+            //                     fontWeight: FontWeight.bold,
+            //                   ),
+            //                 )]),
+            //                 Icon(
+            //                    Icons.arrow_forward_ios,
+            //                    color: Theme.of(context).colorScheme.onSurface,
+            //                    size: 20,    )
+            //               ],
+            //             ),
+            //
+            //           ),
+            //         ),
+            //
+            //
+            //       ],
+            //     ),
+            //   ),
+            // ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               sliver: SliverList(
@@ -1579,6 +1579,16 @@ class _CommunityScreenState extends State<CommunityScreen> {
           'contact us on IG: @klause_ds\n',
       votes: 100000000,
       tags: const ['Consept', 'students', 'GPA',],
+    ),
+    _Post(
+      author: 'CREATOR',
+      title: 'Directions to use ',
+      body: 'بسبب اختلافات تقييم المواد من جامعة لاخرى ومن سنة دراسية لاخرى قد يجد بعض مستخدمينا اختلافات عن طريقتم في التقييم لدلك فيمكنكم تعديل اعدادات تقييم المواد ودالك من خلال علامة التعجب كما هو موضح في الصورة \n'
+          'حيث : W.TD: معامل نقطة الاعمال الموجهة\n'
+          'W.EXAM: معامل نقطة الاختبار\n'
+          'W.TP:معامل نقطة الاعمال التطبيقية\n ',
+      votes: 100000000,
+      tags: const ['directions', 'app',],
     ),
 
   ];
@@ -2406,24 +2416,30 @@ class SemesterSpec {
 
 
 List<SemesterSpec> createSemesterSpecsForTrack(ProgramTrack track) {
-  return track.semesters
-      .map(
-        (sem) => SemesterSpec(
-          name: sem.label,
-          modules: sem.modules
-              .map(
-                (module) => ModuleSpec(
-                  name: module.name,
-                  coef: module.coef.toDouble(),
-                  credits: module.credits.toDouble(),
-                  evalWeights: _normalizeEvalWeights(module.components),
-                ),
-              )
-              .toList(growable: false),
-        ),
-      )
-      .toList(growable: false);
+  return track.semesters.map(
+        (sem) {
+      // جمع كل modules من كل الوحدات داخل السداسي
+      final allModules = sem.unit
+          .expand((u) => u.modules)
+          .toList(growable: false);
+
+      return SemesterSpec(
+        name: sem.label,
+        modules: allModules
+            .map(
+              (module) => ModuleSpec(
+            name: module.name,
+            coef: module.coef.toDouble(),
+            credits: module.credits.toDouble(),
+            evalWeights: _normalizeEvalWeights(module.components),
+          ),
+        )
+            .toList(growable: false),
+      );
+    },
+  ).toList(growable: false);
 }
+
 
 List<SemesterSpec> demoL1GpaSpecs(BuildContext context) {
   final track = getDemoFaculties(context).first.majors.first.tracks.first;
@@ -2521,6 +2537,7 @@ class SemesterModel {
     SemesterSpec spec, {
     required VoidCallback onChanged,
   }) {
+
     final modules = spec.modules.map((module) {
       double weightFor(String label) {
         return module.evalWeights
@@ -2585,7 +2602,8 @@ class SemesterModel {
     return SemesterModel(
       name: ps.label,
       onChanged: onChanged,
-      modules: ps.modules.map((m) {
+      modules: ps.unit.expand((u) => u.modules) // جمع modules من جميع الوحدات
+          .map((m) {
         // تحويل ProgramComponent إلى أوزان TD/TP/EXAM
         double td = 0;
         double tp = 0;

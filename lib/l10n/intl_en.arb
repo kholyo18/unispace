@@ -115,6 +115,28 @@
 ,"close": "Close"
 ,"studyResults": "Study Results",
   "notesTdTpExam": "Grades (TD/TP/Exam)"
+,"facultyLawPolitical": "Faculty of Law and Political Sciences",
+  "politicalSciences": "Political Sciences",
+  "commonCore": "Common Core",
+
+  "basicUnit": "Basic Unit",
+  "methodologicalUnit": "Methodological Unit",
+  "exploratoryUnit": "Exploratory Unit",
+  "horizontalUnit": "Horizontal Unit",
+
+  "politicalAdministrativeOrgs": "Political and Administrative Organizations",
+  "law": "Law",
+
+  "publicLaw": "Public Law",
+  "privateLaw": "Private Law",
+  "advancedPublicLaw": "Advanced Public Law",
+  "familyLaw": "Family Law",
+  "criminalLaw": "Criminal Law and Criminal Sciences",
+  "businessLaw": "Business Law",
+  "legalProfessionsLaw": "Legal and Judicial Professions Law",
+  "maritimePortLaw": "Maritime and Port Law",
+  "energyMiningLaw": "Energy and Mining Law",
+  "taxLaw": "Tax Law"
 
 
 
