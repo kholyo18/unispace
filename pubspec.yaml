@@ -46,6 +46,7 @@ dependencies:
 
 dev_dependencies:
 
+  intl_utils: ^2.8.7
   flutter_launcher_icons: ^0.13.1
   flutter_test:
     sdk: flutter
@@ -84,3 +85,6 @@ fonts:
           weight: 700
 flutter_intl:
   enabled: true
+  arb_dir: lib/l10n
+  output_dir: lib/generated
+  use_deferred_loading: false

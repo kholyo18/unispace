@@ -584,6 +584,91 @@ class S {
     );
   }
 
+  /// `Be the first to add a helpful reply.`
+  String get beFirstToComment {
+    return Intl.message(
+      'Be the first to add a helpful reply.',
+      name: 'beFirstToComment',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Unanswered`
+  String get filterUnanswered {
+    return Intl.message(
+      'Unanswered',
+      name: 'filterUnanswered',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Create first post`
+  String get createFirstPost {
+    return Intl.message(
+      'Create first post',
+      name: 'createFirstPost',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No results`
+  String get noResultsTitle {
+    return Intl.message('No results', name: 'noResultsTitle', desc: '', args: []);
+  }
+
+  /// `Clear search`
+  String get clearSearch {
+    return Intl.message('Clear search', name: 'clearSearch', desc: '', args: []);
+  }
+
+  /// `Suggested tags`
+  String get suggestedTags {
+    return Intl.message(
+      'Suggested tags',
+      name: 'suggestedTags',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add tag`
+  String get addTag {
+    return Intl.message('Add tag', name: 'addTag', desc: '', args: []);
+  }
+
+  /// `OP`
+  String get opBadge {
+    return Intl.message('OP', name: 'opBadge', desc: '', args: []);
+  }
+
+  /// `Sort comments`
+  String get sortComments {
+    return Intl.message(
+      'Sort comments',
+      name: 'sortComments',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Newest`
+  String get sortNewest {
+    return Intl.message('Newest', name: 'sortNewest', desc: '', args: []);
+  }
+
+  /// `Most helpful`
+  String get sortMostHelpful {
+    return Intl.message(
+      'Most helpful',
+      name: 'sortMostHelpful',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Post`
   String get createPost {
     return Intl.message('Post', name: 'createPost', desc: '', args: []);
