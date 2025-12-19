@@ -110,10 +110,10 @@ class _PostCardState extends State<PostCard> {
                   CircleAvatar(
                     backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
                     foregroundColor: theme.colorScheme.primary,
-                    child: _initials(post.authorName).isEmpty
+                    child: _initials(widget.post.authorName).isEmpty
                         ? const Icon(Icons.person)
                         : Text(
-                            _initials(post.authorName),
+                            _initials(widget.post.authorName),
                             style: theme.textTheme.labelLarge?.copyWith(
                               color: theme.colorScheme.primary,
                               fontWeight: FontWeight.w700,
