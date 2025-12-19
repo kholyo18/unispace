@@ -139,7 +139,7 @@ class CommunityRepository {
   Stream<bool> streamIsPostLiked(String postId) {
     final user = _user;
     if (user == null) {
-      return const Stream<bool>.value(false);
+      return Stream<bool>.value(false);
     }
     return _firestore
         .collection('posts')
@@ -213,7 +213,7 @@ class CommunityRepository {
   Stream<bool> streamIsPostSaved(String postId) {
     final user = _user;
     if (user == null) {
-      return const Stream<bool>.value(false);
+      return Stream<bool>.value(false);
     }
     return _firestore
         .collection('users')
@@ -227,7 +227,7 @@ class CommunityRepository {
   Stream<Set<String>> streamSavedPostIds() {
     final user = _user;
     if (user == null) {
-      return const Stream<Set<String>>.value(<String>{});
+      return Stream<Set<String>>.value(<String>{});
     }
     return _firestore
         .collection('users')
