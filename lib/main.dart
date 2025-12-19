@@ -1013,24 +1013,93 @@ class _BarItem extends StatelessWidget {
 // Home Landing — كروت كليات احترافية + دخول إلى Navigator الدراسة
 // ============================================================================
 
-class HomeLandingScreen extends StatelessWidget {
+class HomeLandingScreen extends StatefulWidget {
   const HomeLandingScreen({super.key});
+
+  @override
+  State<HomeLandingScreen> createState() => _HomeLandingScreenState();
+}
+
+class _HomeLandingScreenState extends State<HomeLandingScreen> {
+  late final TextEditingController _searchController;
+  List<ProgramFaculty> _allFaculties = [];
+  List<ProgramFaculty> _filteredFaculties = [];
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isInitialized) {
+      _allFaculties = getDemoFaculties(context);
+      _filteredFaculties = _allFaculties;
+      _isInitialized = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  String _normalizeText(String input) {
+    var text = input.trim().toLowerCase();
+    text = text.replaceAll(RegExp(r'[ًٌٍَُِّْ]'), '');
+    text = text
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ؤ', 'و')
+        .replaceAll('ئ', 'ي');
+    text = text.replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ');
+    text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return text;
+  }
+
+  bool _containsNormalized(String haystack, String needle) {
+    final normalizedNeedle = _normalizeText(needle);
+    if (normalizedNeedle.isEmpty) {
+      return true;
+    }
+    return _normalizeText(haystack).contains(normalizedNeedle);
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      if (query.trim().isEmpty) {
+        _filteredFaculties = _allFaculties;
+        return;
+      }
+      _filteredFaculties = _allFaculties.where((faculty) {
+        final fields = <String>[faculty.name];
+        return fields.any((field) => _containsNormalized(field, query));
+      }).toList(growable: false);
+    });
+  }
+
+  void _openFaculty(ProgramFaculty faculty) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => FacultyMajorsScreen(faculty: faculty)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.canPop(context);
-    final faculties = getDemoFaculties(context).take(6).toList();
+    final faculties = _filteredFaculties.take(6).toList();
 
     final quickFaculty = faculties.isNotEmpty ? faculties.first : null;
     final gridFaculties =
         quickFaculty == null ? faculties : faculties.skip(1).toList(growable: false);
-
-    void openFaculty(ProgramFaculty faculty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => FacultyMajorsScreen(faculty: faculty)),
-      );
-    }
 
     return AppScaffold(
        // endDrawer:  AppEndDrawer(),
@@ -1110,9 +1179,8 @@ class HomeLandingScreen extends StatelessWidget {
                   ],
                 ),
                 child: TextField(
-                  onChanged: (value) {
-                    // منطق البحث لتصفية الكليات لاحقًا
-                  },
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
                   decoration: InputDecoration(
                     hintText:S.of(context).searchFaculty ,
                     hintStyle: TextStyle(
@@ -1128,7 +1196,12 @@ class HomeLandingScreen extends StatelessWidget {
               ),
             ),
           ),
-          if (quickFaculty != null) ...[
+          if (_filteredFaculties.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: Text("لا توجد نتائج")),
+            )
+          else if (quickFaculty != null) ...[
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               sliver: SliverToBoxAdapter(
@@ -1212,16 +1285,16 @@ class HomeLandingScreen extends StatelessWidget {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                    final faculty = getDemoFaculties(context)[index];
+                    final faculty = _filteredFaculties[index];
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 9),
                       child: _FacultyQuickCard(
                         faculty: faculty,
-                        onTap: () => openFaculty(faculty),
+                        onTap: () => _openFaculty(faculty),
                       ),
                     );
                   },
-                  childCount: getDemoFaculties(context).length,
+                  childCount: _filteredFaculties.length,
                 ),
               ),
             ),
