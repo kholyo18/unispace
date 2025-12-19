@@ -1025,7 +1025,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
   List<ProgramFaculty> _allFaculties = [];
   List<ProgramFaculty> _filteredFaculties = [];
   bool _isInitialized = false;
-  Timer? _searchDebounce;
+  Timer? _debounce;
   String _searchQuery = '';
 
   @override
@@ -1046,7 +1046,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -1077,8 +1077,8 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
 
   void _onSearchChanged(String query) {
     setState(() => _searchQuery = query);
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       _applySearchFilter(query);
     });
@@ -1098,14 +1098,13 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
   }
 
   void _clearSearch() {
-    _searchDebounce?.cancel();
+    _debounce?.cancel();
     _searchController.clear();
     FocusScope.of(context).unfocus();
     setState(() {
       _searchQuery = '';
       _filteredFaculties = _allFaculties;
     });
-  }
   }
 
   void _openFaculty(ProgramFaculty faculty) {
