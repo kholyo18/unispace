@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/comment_model.dart';
 import '../models/post_model.dart';
+import '../utils/tag_utils.dart';
 
 /// Suggested baseline Firestore rules for Community:
 /// - Allow read: if request.auth != null
@@ -12,7 +13,7 @@ import '../models/post_model.dart';
 /// - For likes/savedPosts, allow write only to the user's own document id.
 /// (Configure in Firebase console; rules are not modified by this app.)
 
-enum CommunityFilter { all, myUniversity, questions, unanswered, trending, saved }
+enum CommunityTab { all, myUniversity, questions }
 
 class CommunityRepository {
   CommunityRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
@@ -33,27 +34,35 @@ class CommunityRepository {
   }
 
   Stream<List<PostModel>> streamPosts({
-    required CommunityFilter filter,
+    required CommunityTab tab,
     String query = '',
     String? tagFilter,
+    bool showUnanswered = false,
+    bool showTrending = false,
+    bool showSavedOnly = false,
   }) async* {
-    if (filter == CommunityFilter.saved) {
-      yield* streamSavedPosts(query: query, tagFilter: tagFilter);
+    if (showSavedOnly) {
+      yield* streamSavedPosts(
+        query: query,
+        tagFilter: tagFilter,
+        tab: tab,
+        showUnanswered: showUnanswered,
+        showTrending: showTrending,
+      );
       return;
     }
 
     Query<Map<String, dynamic>> ref = _firestore.collection('posts');
 
-    if (filter == CommunityFilter.questions ||
-        filter == CommunityFilter.unanswered) {
+    if (tab == CommunityTab.questions || showUnanswered) {
       ref = ref.where('isQuestion', isEqualTo: true);
     }
 
-    if (filter == CommunityFilter.unanswered) {
+    if (showUnanswered) {
       ref = ref.where('commentsCount', isEqualTo: 0);
     }
 
-    if (filter == CommunityFilter.myUniversity) {
+    if (tab == CommunityTab.myUniversity) {
       final university = await getUserUniversity();
       if (university == null || university.isEmpty) {
         yield [];
@@ -62,7 +71,7 @@ class CommunityRepository {
       ref = ref.where('university', isEqualTo: university);
     }
 
-    if (filter == CommunityFilter.trending) {
+    if (showTrending) {
       ref = ref
           .orderBy('likesCount', descending: true)
           .orderBy('commentsCount', descending: true)
@@ -73,7 +82,14 @@ class CommunityRepository {
 
     yield* ref.snapshots().map((snapshot) {
       final posts = snapshot.docs.map(PostModel.fromDoc).toList();
-      return _applySearch(posts, query, tagFilter);
+      return _applySearch(
+        posts,
+        query,
+        tagFilter,
+        tab: tab,
+        showUnanswered: showUnanswered,
+        showTrending: showTrending,
+      );
     });
   }
 
@@ -247,6 +263,9 @@ class CommunityRepository {
   Stream<List<PostModel>> streamSavedPosts({
     String query = '',
     String? tagFilter,
+    required CommunityTab tab,
+    bool showUnanswered = false,
+    bool showTrending = false,
   }) {
     return streamSavedPostIds().asyncMap((ids) async {
       if (ids.isEmpty) return [];
@@ -266,13 +285,18 @@ class CommunityRepository {
         posts.addAll(snapshot.docs.map(PostModel.fromDoc));
       }
 
-      posts.sort((a, b) {
-        final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bDate.compareTo(aDate);
-      });
-
-      return _applySearch(posts, query, tagFilter);
+      final university = tab == CommunityTab.myUniversity
+          ? await getUserUniversity()
+          : null;
+      return _applySearch(
+        posts,
+        query,
+        tagFilter,
+        tab: tab,
+        showUnanswered: showUnanswered,
+        showTrending: showTrending,
+        university: university,
+      );
     });
   }
 
@@ -280,22 +304,78 @@ class CommunityRepository {
     List<PostModel> posts,
     String query,
     String? tagFilter,
-  ) {
-    final trimmed = query.trim().toLowerCase();
+    {
+    required CommunityTab tab,
+    bool showUnanswered = false,
+    bool showTrending = false,
+    String? university,
+  }) {
     var filtered = posts;
-    if (tagFilter != null && tagFilter.trim().isNotEmpty) {
-      final normalizedTag = tagFilter.trim().toLowerCase();
+    if (tab == CommunityTab.questions) {
+      filtered = filtered.where((post) => post.isQuestion).toList();
+    }
+    if (showUnanswered) {
+      filtered = filtered
+          .where((post) => post.isQuestion && post.commentsCount == 0)
+          .toList();
+    }
+    if (tab == CommunityTab.myUniversity &&
+        university != null &&
+        university.isNotEmpty) {
+      filtered =
+          filtered.where((post) => post.university == university).toList();
+    }
+
+    final trimmed = query.trim().toLowerCase();
+    final normalizedTag = normalizeTag(tagFilter ?? '')?.toLowerCase();
+    if (normalizedTag != null) {
       filtered = filtered
           .where((post) =>
               post.tags.any((tag) => tag.toLowerCase() == normalizedTag))
           .toList();
     }
-    if (trimmed.isEmpty) return filtered;
 
-    return filtered.where((post) {
+    if (!showTrending) {
+      filtered.sort((a, b) {
+        final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+    }
+
+    if (trimmed.isEmpty) {
+      if (showTrending) {
+        filtered.sort((a, b) {
+          final likeCompare = b.likesCount.compareTo(a.likesCount);
+          if (likeCompare != 0) return likeCompare;
+          final commentCompare = b.commentsCount.compareTo(a.commentsCount);
+          if (commentCompare != 0) return commentCompare;
+          final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bDate.compareTo(aDate);
+        });
+      }
+      return filtered;
+    }
+
+    filtered = filtered.where((post) {
       return post.content.toLowerCase().contains(trimmed) ||
           post.authorName.toLowerCase().contains(trimmed) ||
           post.tags.any((tag) => tag.toLowerCase().contains(trimmed));
     }).toList();
+
+    if (showTrending) {
+      filtered.sort((a, b) {
+        final likeCompare = b.likesCount.compareTo(a.likesCount);
+        if (likeCompare != 0) return likeCompare;
+        final commentCompare = b.commentsCount.compareTo(a.commentsCount);
+        if (commentCompare != 0) return commentCompare;
+        final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+    }
+
+    return filtered;
   }
 }

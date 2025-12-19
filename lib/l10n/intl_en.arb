@@ -150,7 +150,7 @@
   "filterTrending": "Trending",
   "filterSaved": "Saved",
   "tags": "Tags",
-  "tagsHint": "e.g. campus, clubs",
+  "tagsHint": "e.g. #campus, #clubs",
   "postAsQuestion": "Post as a question",
   "publishing": "Publishing...",
   "contentRequired": "Please write something before publishing.",
@@ -176,13 +176,14 @@
   "opBadge": "OP",
   "sortComments": "Sort comments",
   "sortNewest": "Newest",
-  "sortMostHelpful": "Most helpful"
+  "sortMostHelpful": "Most helpful",
+  "postHint": "Share something with the community…",
+  "questionPrompt": "Question",
+  "questionHint": "What do you need help with?"
 
 
 
 }
-
-
 
 
 

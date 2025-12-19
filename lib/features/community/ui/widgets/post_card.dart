@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../../generated/l10n.dart';
 import '../../data/community_repository.dart';
 import '../../models/post_model.dart';
+import '../../utils/tag_utils.dart';
 
-class PostCard extends StatelessWidget {
+class PostCard extends StatefulWidget {
   const PostCard({
     super.key,
     required this.post,
@@ -21,6 +22,13 @@ class PostCard extends StatelessWidget {
   final bool showActions;
   final bool showOpBadge;
   final ValueChanged<String>? onTagSelected;
+
+  @override
+  State<PostCard> createState() => _PostCardState();
+}
+
+class _PostCardState extends State<PostCard> {
+  bool? _savedOverride;
 
   String _formatDate(BuildContext context, DateTime? date) {
     if (date == null) return '';
@@ -40,33 +48,45 @@ class PostCard extends StatelessWidget {
 
   String _authorMeta() {
     final parts = <String>[];
-    if (post.university != null && post.university!.trim().isNotEmpty) {
-      parts.add(post.university!.trim());
+    if (widget.post.university != null &&
+        widget.post.university!.trim().isNotEmpty) {
+      parts.add(widget.post.university!.trim());
     }
-    if (post.authorMajor != null && post.authorMajor!.trim().isNotEmpty) {
-      parts.add(post.authorMajor!.trim());
+    if (widget.post.authorMajor != null &&
+        widget.post.authorMajor!.trim().isNotEmpty) {
+      parts.add(widget.post.authorMajor!.trim());
     }
-    if (post.authorYear != null && post.authorYear!.trim().isNotEmpty) {
-      parts.add(post.authorYear!.trim());
+    if (widget.post.authorYear != null &&
+        widget.post.authorYear!.trim().isNotEmpty) {
+      parts.add(widget.post.authorYear!.trim());
     }
     return parts.join(' • ');
+  }
+
+  void _syncSavedOverride(bool? savedFromStream) {
+    if (_savedOverride == null) return;
+    if (savedFromStream != _savedOverride) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _savedOverride = null);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final meta = _authorMeta();
-    final tagChips = post.tags
+    final tagChips = widget.post.tags
         .map((tag) {
-          if (onTagSelected == null) {
+          if (widget.onTagSelected == null) {
             return Chip(
-              label: Text(tag),
+              label: Text(displayTag(tag)),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             );
           }
           return ActionChip(
-            label: Text(tag),
-            onPressed: () => onTagSelected!(tag),
+            label: Text(displayTag(tag)),
+            onPressed: () => widget.onTagSelected!(tag),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           );
         })
@@ -74,12 +94,12 @@ class PostCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
-      color: post.isQuestion
+      color: widget.post.isQuestion
           ? theme.colorScheme.primary.withOpacity(0.06)
           : theme.cardColor,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: onOpen,
+        onTap: widget.onOpen,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -109,12 +129,12 @@ class PostCard extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                post.authorName,
+                                widget.post.authorName,
                                 style: theme.textTheme.bodyMedium
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                             ),
-                            if (showOpBadge)
+                            if (widget.showOpBadge)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
@@ -144,16 +164,16 @@ class PostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (_formatDate(context, post.createdAt).isNotEmpty)
+                  if (_formatDate(context, widget.post.createdAt).isNotEmpty)
                     Text(
-                      _formatDate(context, post.createdAt),
+                      _formatDate(context, widget.post.createdAt),
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: theme.hintColor),
                     ),
                 ],
               ),
               const SizedBox(height: 12),
-              if (post.isQuestion)
+              if (widget.post.isQuestion)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -168,9 +188,9 @@ class PostCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (post.isQuestion) const SizedBox(height: 8),
+              if (widget.post.isQuestion) const SizedBox(height: 8),
               Text(
-                post.content,
+                widget.post.content,
                 style: theme.textTheme.bodyMedium,
               ),
               if (tagChips.isNotEmpty) ...[
@@ -181,12 +201,12 @@ class PostCard extends StatelessWidget {
                   children: tagChips,
                 ),
               ],
-              if (showActions) ...[
+              if (widget.showActions) ...[
                 const Divider(height: 24),
                 Row(
                   children: [
                     StreamBuilder<bool>(
-                      stream: repository.streamIsPostLiked(post.id),
+                      stream: widget.repository.streamIsPostLiked(widget.post.id),
                       builder: (context, snapshot) {
                         final liked = snapshot.data ?? false;
                         return IconButton(
@@ -202,26 +222,29 @@ class PostCard extends StatelessWidget {
                       },
                     ),
                     Text(
-                      post.likesCount.toString(),
+                      widget.post.likesCount.toString(),
                       style: theme.textTheme.bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(width: 16),
                     TextButton.icon(
-                      onPressed: onOpen,
+                      onPressed: widget.onOpen,
                       icon: const Icon(Icons.mode_comment_outlined),
                       label: Text(
-                        '${post.commentsCount} ${S.of(context).comments}',
+                        '${widget.post.commentsCount} ${S.of(context).comments}',
                       ),
                     ),
                     const Spacer(),
                     StreamBuilder<bool>(
-                      stream: repository.streamIsPostSaved(post.id),
+                      stream:
+                          widget.repository.streamIsPostSaved(widget.post.id),
                       builder: (context, snapshot) {
-                        final saved = snapshot.data ?? false;
+                        _syncSavedOverride(snapshot.data);
+                        final saved =
+                            _savedOverride ?? (snapshot.data ?? false);
                         return IconButton(
                           tooltip: S.of(context).savePost,
-                          onPressed: () => _handleSave(context),
+                          onPressed: () => _handleSave(context, saved),
                           icon: Icon(
                             saved ? Icons.bookmark : Icons.bookmark_border,
                           ),
@@ -240,7 +263,7 @@ class PostCard extends StatelessWidget {
 
   void _handleLike(BuildContext context) async {
     try {
-      await repository.toggleLike(post.id);
+      await widget.repository.toggleLike(widget.post.id);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -250,10 +273,14 @@ class PostCard extends StatelessWidget {
     }
   }
 
-  void _handleSave(BuildContext context) async {
+  void _handleSave(BuildContext context, bool currentSaved) async {
+    setState(() => _savedOverride = !currentSaved);
     try {
-      await repository.toggleSave(post.id);
+      await widget.repository.toggleSave(widget.post.id);
     } catch (_) {
+      if (mounted) {
+        setState(() => _savedOverride = currentSaved);
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(S.of(context).loginRequired)),
