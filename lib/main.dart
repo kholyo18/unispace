@@ -31,6 +31,7 @@ import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:url_launcher/url_launcher.dart';
 
 
 
@@ -286,6 +287,17 @@ class AppEndDrawer extends StatelessWidget {
 
             // حول
             ListTile(
+              leading: const Icon(Icons.contact_mail_outlined),
+              title: Text(S.of(context).contactUs),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ContactUsScreen()),
+                );
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.info_outline),
               title: Text(S.of(context).aboutApp),
               onTap: () => showAboutDialog(
@@ -339,6 +351,123 @@ class AppEndDrawer extends StatelessWidget {
       default:
         return 'العربية';
     }
+  }
+}
+
+class ContactUsScreen extends StatefulWidget {
+  const ContactUsScreen({super.key});
+
+  @override
+  State<ContactUsScreen> createState() => _ContactUsScreenState();
+}
+
+class _ContactUsScreenState extends State<ContactUsScreen> {
+  static const String _supportEmail = 'khaledfoll12@gmail.com';
+  static const String _supportSubjectPrefix = 'UniSpace Support';
+  static const String _appVersion = '1.0.0+1';
+
+  final TextEditingController _subjectController = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
+
+  @override
+  void dispose() {
+    _subjectController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  String _buildEmailBody(String message) {
+    return [
+      message,
+      '',
+      '---',
+      'App: UniSpace',
+      'Platform: ${Platform.operatingSystem}',
+      'Version: $_appVersion',
+    ].join('\n');
+  }
+
+  Future<void> _sendEmail() async {
+    final message = _messageController.text.trim();
+    if (message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).pleaseWriteMessage)),
+      );
+      return;
+    }
+
+    final subject = _subjectController.text.trim();
+    final subjectLine = subject.isEmpty
+        ? _supportSubjectPrefix
+        : '$_supportSubjectPrefix - $subject';
+
+    final uri = Uri(
+      scheme: 'mailto',
+      path: _supportEmail,
+      queryParameters: {
+        'subject': subjectLine,
+        'body': _buildEmailBody(message),
+      },
+    );
+
+    try {
+      final launched = await launchUrl(uri);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).failedToOpenMailApp)),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).failedToOpenMailApp)),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(S.of(context).contactUs),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _subjectController,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: S.of(context).subject,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _messageController,
+                minLines: 4,
+                maxLines: 8,
+                keyboardType: TextInputType.multiline,
+                decoration: InputDecoration(
+                  hintText: S.of(context).writeMessageHint,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _sendEmail,
+                  child: Text(S.of(context).send),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

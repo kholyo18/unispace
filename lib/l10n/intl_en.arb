@@ -30,6 +30,12 @@
   "login": "Login",
   "aboutApp": "About the App",
   "privacyPolicy": "Privacy Policy",
+  "contactUs": "Contact Us",
+  "subject": "Subject",
+  "writeMessageHint": "Write your message here...",
+  "send": "Send",
+  "pleaseWriteMessage": "Please write a message",
+  "failedToOpenMailApp": "Failed to open mail app",
   "welcomeEmoji": "Welcome 👋",
   "homeSubtitle": "Browse faculties, calculate your GPA, share your ideas, and write notes easily.",
   "searchFaculty": "Search for a faculty...",
@@ -141,7 +147,6 @@
 
 
 }
-
 
 
 

@@ -224,6 +224,51 @@ class S {
     );
   }
 
+  /// `Contact Us`
+  String get contactUs {
+    return Intl.message('Contact Us', name: 'contactUs', desc: '', args: []);
+  }
+
+  /// `Subject`
+  String get subject {
+    return Intl.message('Subject', name: 'subject', desc: '', args: []);
+  }
+
+  /// `Write your message here...`
+  String get writeMessageHint {
+    return Intl.message(
+      'Write your message here...',
+      name: 'writeMessageHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Send`
+  String get send {
+    return Intl.message('Send', name: 'send', desc: '', args: []);
+  }
+
+  /// `Please write a message`
+  String get pleaseWriteMessage {
+    return Intl.message(
+      'Please write a message',
+      name: 'pleaseWriteMessage',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Failed to open mail app`
+  String get failedToOpenMailApp {
+    return Intl.message(
+      'Failed to open mail app',
+      name: 'failedToOpenMailApp',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Welcome 👋`
   String get welcomeEmoji {
     return Intl.message('Welcome 👋', name: 'welcomeEmoji', desc: '', args: []);
