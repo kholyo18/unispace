@@ -585,6 +585,8 @@ class _SignInScreenState extends State<SignInScreen> {
         return 'طريقة تسجيل الدخول غير مفعّلة.';
       case 'account-exists-with-different-credential':
         return 'هذا البريد مرتبط بطريقة تسجيل دخول مختلفة.';
+      case 'credential-already-in-use':
+        return 'بيانات الدخول هذه مستخدمة بالفعل لحساب آخر.';
       case 'invalid-credential':
         return 'بيانات تسجيل الدخول غير صحيحة.';
       case 'network-request-failed':
@@ -598,13 +600,32 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  void _showAuthError(Object error, {String? fallback}) {
-    final message = error is FirebaseAuthException
-        ? _authErrorMessage(error)
-        : (fallback ?? 'حدث خطأ غير متوقع. حاول مرة أخرى.');
+  String _errorMessage(Object error, {String? fallback}) {
+    if (error is FirebaseAuthException) {
+      return _authErrorMessage(error);
+    }
+    if (error is PlatformException) {
+      switch (error.code) {
+        case 'sign_in_canceled':
+          return 'تم إلغاء تسجيل الدخول عبر Google.';
+        case 'network_error':
+          return 'تحقق من اتصال الإنترنت وحاول مجددًا.';
+        default:
+          return 'تعذر بدء تسجيل الدخول عبر Google. حاول مرة أخرى.';
+      }
+    }
+    return fallback ?? 'حدث خطأ غير متوقع. حاول مرة أخرى.';
+  }
+
+  void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showAuthError(Object error, {String? fallback}) {
+    final message = _errorMessage(error, fallback: fallback);
+    _showMessage(message);
   }
 
   Future<void> _login() async {
@@ -640,10 +661,7 @@ class _SignInScreenState extends State<SignInScreen> {
     try {
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        _showAuthError(
-          'cancelled',
-          fallback: 'تم إلغاء تسجيل الدخول عبر Google.',
-        );
+        _showMessage('تم إلغاء تسجيل الدخول عبر Google.');
         return;
       }
       final googleAuth = await googleUser.authentication;
@@ -651,13 +669,40 @@ class _SignInScreenState extends State<SignInScreen> {
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+      await _ensureUserDocument(userCredential.user);
     } on FirebaseAuthException catch (e) {
+      debugPrint('Google sign-in FirebaseAuthException: $e');
+      _showAuthError(e);
+    } on PlatformException catch (e) {
+      debugPrint('Google sign-in PlatformException: $e');
       _showAuthError(e);
     } catch (e) {
+      debugPrint('Google sign-in error: $e');
       _showAuthError(e);
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _ensureUserDocument(User? user) async {
+    if (user == null) return;
+    final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    try {
+      final snapshot = await docRef.get();
+      if (!snapshot.exists) {
+        await docRef.set({
+          'uid': user.uid,
+          'email': user.email,
+          'displayName': user.displayName,
+          'photoURL': user.photoURL,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to create user document: $e');
+      _showMessage('تم تسجيل الدخول، لكن تعذر حفظ بيانات الحساب. حاول لاحقًا.');
     }
   }
 
