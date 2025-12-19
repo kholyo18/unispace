@@ -42,6 +42,7 @@ import 'ui/widgets/widgets.dart';
 import './moduls3.dart';
 import './moduls.dart';
 import 'module/moduls.dart';
+import 'core/local/grades_local_store.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 //import 'package: UniSpace/generated/l10n.dart';
@@ -2610,9 +2611,9 @@ class ModuleModel {
         wTD = tdWeight / 100,
         wTP = tpWeight / 100,
         wEX = examWeight / 100,
-        td = 0,
-        tp = 0,
-        exam = 0
+        td = null,
+        tp = null,
+        exam = null
   ;
 
   final String title;
@@ -3110,6 +3111,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   late final TabController _tabController;
   late SemesterModel _semester1;
   late SemesterModel _semester2;
+  final GradesLocalStore _gradesStore = GradesLocalStore();
 
   int currentIndex = 0; // ← هذا يمثل index الحالي
 
@@ -3118,6 +3120,9 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _initSemesters();
+    Future.microtask(() async {
+      await loadSemesterNotes();
+    });
 
     // الاستماع لتغييرات الـ index عند التمرير أو الضغط على الـ Tab
     _tabController.addListener(() {
@@ -3145,57 +3150,47 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
       onChanged: () => setState(() {}),
     );
   }
-  /// ==================== حفظ بيانات الفصل الحالي باستخدام Hive ====================
+  /// ==================== حفظ بيانات الفصل الحالي باستخدام SharedPreferences ====================
   Future<void> saveCurrentSemesterNotes() async {
     final currentSemester = currentIndex == 0 ? _semester1 : _semester2;
-
-    final box =
-    await Hive.openBox<ModuleModel>('semester_${currentIndex}_notes');
-
-    await box.clear(); // حذف البيانات القديمة
-    await box.addAll(currentSemester.modules);
+    final semesterKey = currentSemester.name;
+    for (final module in currentSemester.modules) {
+      final hasValues =
+          module.td != null || module.tp != null || module.exam != null;
+      final moy = hasValues ? module.moy : null;
+      await _gradesStore.saveGrade(
+        semesterKey,
+        module.title,
+        module.td,
+        module.exam,
+        module.tp,
+        moy,
+      );
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Semester notes saved ✅")),
     );
   }
 
-  /// ==================== تحميل بيانات الفصل الحالي من Hive ====================
+  /// ==================== تحميل بيانات الفصل الحالي من SharedPreferences ====================
   Future<void> loadSemesterNotes() async {
-    final boxName = 'semester_${currentIndex}_notes';
-    final box = await Hive.openBox<ModuleModel>(boxName);
-
     final currentSemester = currentIndex == 0 ? _semester1 : _semester2;
+    final semesterKey = currentSemester.name;
 
-    // إذا لم تكن هناك بيانات محفوظة، لا نفعل شيئًا
-    if (box.isEmpty) return;
-
-    // نتأكد من أن عدد العناصر متطابق
-    if (box.length != currentSemester.modules.length) {
-      // اختياري: يمكنك مسح الـ box إذا كان غير متوافق
-      // await box.clear();
-      return;
-    }
-
-    // نُحمّل القيم المحفوظة **فوق** النموذج الحالي (بدون إنشاء جديد)
-    for (int i = 0; i < currentSemester.modules.length; i++) {
-      final stored = box.getAt(i);
-      if (stored != null) {
-        final module = currentSemester.modules[i];
-        // نُحمّل القيم القابلة للتغيير فقط
-        module.td = stored.td;
-        module.tp = stored.tp;
-        module.exam = stored.exam;
-        module.coef=stored.coef;
-
-        // يمكنك أيضًا تحميل coef و credits إذا كانت قابلة للتغيير
-        // module.coef = stored.coef;
-         module.credits = stored.credits;
+    var updated = false;
+    for (final module in currentSemester.modules) {
+      final stored = await _gradesStore.loadGrade(semesterKey, module.title);
+      if (stored == null) {
+        continue;
       }
+      module.td = stored['td'];
+      module.tp = stored['tp'];
+      module.exam = stored['exam'];
+      updated = true;
     }
 
-    // نُجبر التحديث
-    if (mounted) setState(() {});
+    if (mounted && updated) setState(() {});
   }
 
 
@@ -3453,9 +3448,13 @@ Widget buildSemesterTable(BuildContext context, SemesterModel sem) {
                 wTD: module.wTD,
                 wEX: module.wEX,
                 wTP: module.wTP,
+                initialTd: module.td,
+                initialTp: module.tp,
+                initialExam: module.exam,
 
-                onChanged: (td, exam, moy, coef, cred) {
+                onChanged: (td, tp, exam, moy, coef, cred) {
                   module.td = td;
+                  module.tp = tp;
                   module.exam = exam;
                   module.coef = coef;
                   module.credits = cred;
@@ -3488,7 +3487,17 @@ class NoteCard extends StatefulWidget {
   final double wTD;
   final double wEX;
   final double wTP;
-  final Function(double td, double exam, double moy, double coef, double cred) onChanged;
+  final double? initialTd;
+  final double? initialTp;
+  final double? initialExam;
+  final Function(
+    double? td,
+    double? tp,
+    double? exam,
+    double moy,
+    double coef,
+    double cred,
+  ) onChanged;
 
 
 
@@ -3502,6 +3511,9 @@ class NoteCard extends StatefulWidget {
     required this.wTD,
     required this.wEX,
     required this.wTP,
+    this.initialTd,
+    this.initialTp,
+    this.initialExam,
 
   });
 
@@ -3526,9 +3538,9 @@ class NoteResult {
 }
 
 class _NoteCardState extends State<NoteCard> {
-  double td = 0.0;
-  double tp = 0.0;
-  double exam = 0.0;
+  double? td;
+  double? tp;
+  double? exam;
   double moy = 0.0;
 
   late double coef;
@@ -3536,6 +3548,9 @@ class _NoteCardState extends State<NoteCard> {
   late double wTD;
   late double wEX;
   late double wTP;
+  late TextEditingController _tdController;
+  late TextEditingController _tpController;
+  late TextEditingController _examController;
 
   @override
   void initState() {
@@ -3545,34 +3560,78 @@ class _NoteCardState extends State<NoteCard> {
     wTD = widget.wTD;
     wEX = widget.wEX;
     wTP = widget.wTP;
+    td = widget.initialTd;
+    tp = widget.initialTp;
+    exam = widget.initialExam;
+    calculateMoy();
+    _tdController = TextEditingController(text: _formatGrade(td));
+    _tpController = TextEditingController(text: _formatGrade(tp));
+    _examController = TextEditingController(text: _formatGrade(exam));
+  }
+
+  @override
+  void didUpdateWidget(covariant NoteCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTd != td ||
+        widget.initialTp != tp ||
+        widget.initialExam != exam) {
+      setState(() {
+        td = widget.initialTd;
+        tp = widget.initialTp;
+        exam = widget.initialExam;
+        calculateMoy();
+        _tdController.text = _formatGrade(td);
+        _tpController.text = _formatGrade(tp);
+        _examController.text = _formatGrade(exam);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _tdController.dispose();
+    _tpController.dispose();
+    _examController.dispose();
+    super.dispose();
+  }
+
+  String _formatGrade(double? value) {
+    if (value == null) return '';
+    return value.toString();
+  }
+
+  double? _parseGrade(String value) {
+    final sanitized = value.replaceAll(',', '.').trim();
+    if (sanitized.isEmpty) return null;
+    return double.tryParse(sanitized);
   }
   void onTDChanged(String v) {
     setState(() {
-      td = double.tryParse(v) ?? 0.0;
+      td = _parseGrade(v);
       calculateMoy();
       notifyParent();
     });
   }
   void notifyParent() {
-    widget.onChanged(td, exam, moy, coef, cred);
+    widget.onChanged(td, tp, exam, moy, coef, cred);
   }
   void onExamChanged(String v) {
     setState(() {
-      exam = double.tryParse(v) ?? 0.0;
+      exam = _parseGrade(v);
       calculateMoy();
       notifyParent();
     });
   }
   void onTPChanged(String v) {
     setState(() {
-      tp = double.tryParse(v) ?? 0.0;
+      tp = _parseGrade(v);
       calculateMoy();
       notifyParent();
     });
   }
   void calculateMoy() {
 // هنا معادلة حساب المعدل
-    moy = (td * wTD) + (exam * wEX) + (tp * wTP);
+    moy = ((td ?? 0) * wTD) + ((exam ?? 0) * wEX) + ((tp ?? 0) * wTP);
   }
   void updateCred(double newValue) {
     setState(() {
@@ -3867,12 +3926,12 @@ class _NoteCardState extends State<NoteCard> {
                         borderRadius: BorderRadius.circular(40),
                       ),
                       child: TextField(
+                        controller: _examController,
                         textAlign: TextAlign.center,
                         maxLength: 5,
                         keyboardType: TextInputType.number,
                         onChanged: (v) {
-                          final sanitized = v.replaceAll(',', '.');
-                          onExamChanged(sanitized);
+                          onExamChanged(v);
                         },
                         decoration: const InputDecoration(
                           contentPadding: EdgeInsets.only(top: 50, bottom: 23, left: 0, right: 0),
@@ -3902,12 +3961,12 @@ class _NoteCardState extends State<NoteCard> {
 
                       ),
                       child: TextField(
+                        controller: _tdController,
                         textAlign: TextAlign.center,
                         maxLength: 5,
                         keyboardType: TextInputType.number,
                           onChanged: (v) {
-                            final sanitized = v.replaceAll(',', '.');
-                          onTDChanged(sanitized);
+                          onTDChanged(v);
                             },
 
                         decoration: const InputDecoration(
@@ -3936,12 +3995,12 @@ class _NoteCardState extends State<NoteCard> {
 
                         ),
                         child: TextField(
+                          controller: _tpController,
                           textAlign: TextAlign.center,
                           maxLength: 5,
                           keyboardType: TextInputType.number,
                           onChanged: (v) {
-                            final sanitized = v.replaceAll(',', '.');
-                            onTPChanged(sanitized);
+                            onTPChanged(v);
                           },
 
                           decoration: const InputDecoration(
