@@ -9,6 +9,7 @@ import '../data/community_repository.dart';
 import '../models/post_model.dart';
 import 'post_create_sheet.dart';
 import 'post_details_screen.dart';
+import 'widgets/community_skeleton.dart';
 import 'widgets/post_card.dart';
 
 class CommunityScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
   final TextEditingController _searchController = TextEditingController();
   CommunityFilter _filter = CommunityFilter.all;
   String? _university;
+  String? _activeTag;
 
   @override
   void initState() {
@@ -71,9 +73,19 @@ class _CommunityScreenState extends State<CommunityScreen> {
     );
   }
 
+  void _setTagFilter(String? tag) {
+    setState(() => _activeTag = tag);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final hasActiveTag = _activeTag != null && _activeTag!.isNotEmpty;
 
     return AppScaffold(
       appBar: AppBar(
@@ -140,6 +152,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     label: Text(S.of(context).filterQuestions),
                   ),
                   ButtonSegment(
+                    value: CommunityFilter.unanswered,
+                    label: Text(S.of(context).filterUnanswered),
+                  ),
+                  ButtonSegment(
                     value: CommunityFilter.trending,
                     label: Text(S.of(context).filterTrending),
                   ),
@@ -155,6 +171,18 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
             ),
           ),
+          if (hasActiveTag)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: InputChip(
+                  label: Text('#${_activeTag!}'),
+                  onDeleted: () => _setTagFilter(null),
+                  deleteIcon: const Icon(Icons.close),
+                ),
+              ),
+            ),
           Expanded(
             child: _buildFeed(context, user),
           ),
@@ -164,6 +192,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   Widget _buildFeed(BuildContext context, User? user) {
+    final hasActiveTag = _activeTag != null && _activeTag!.isNotEmpty;
+    final hasSearch = _searchController.text.trim().isNotEmpty;
+
     if (user == null) {
       return EmptyState(
         icon: Icons.lock_outline,
@@ -185,22 +216,42 @@ class _CommunityScreenState extends State<CommunityScreen> {
       stream: _repository.streamPosts(
         filter: _filter,
         query: _searchController.text,
+        tagFilter: _activeTag,
       ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const CommunitySkeleton();
         }
         if (snapshot.hasError) {
           return Center(child: Text(S.of(context).somethingWentWrong));
         }
         final posts = snapshot.data ?? [];
         if (posts.isEmpty) {
+          if (hasSearch || hasActiveTag) {
+            return EmptyState(
+              icon: Icons.search_off,
+              title: S.of(context).noResultsTitle,
+              subtitle: S.of(context).noSearchResults,
+              action: TextButton.icon(
+                onPressed: () {
+                  _clearSearch();
+                  _setTagFilter(null);
+                },
+                icon: const Icon(Icons.refresh),
+                label: Text(S.of(context).clearSearch),
+              ),
+            );
+          }
           return EmptyState(
             icon: Icons.public_outlined,
             title: S.of(context).noPostsYet,
-            subtitle: _searchController.text.trim().isNotEmpty
-                ? S.of(context).noSearchResults
-                : S.of(context).startDiscussion,
+            subtitle: S.of(context).startDiscussion,
+            action: user == null
+                ? null
+                : FilledButton(
+                    onPressed: _openCreateSheet,
+                    child: Text(S.of(context).createFirstPost),
+                  ),
           );
         }
         return ListView.separated(
@@ -211,6 +262,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
             post: posts[index],
             repository: _repository,
             onOpen: () => _openPost(posts[index]),
+            onTagSelected: _setTagFilter,
           ),
         );
       },

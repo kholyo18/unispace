@@ -142,5 +142,16 @@
   "maritimePortLaw": "Droit maritime et portuaire",
   "energyMiningLaw": "Droit de l’énergie et des mines",
   "taxLaw": "Droit fiscal"
+  ,"beFirstToComment": "Soyez le premier à ajouter une réponse utile."
+  ,"filterUnanswered": "Sans réponse"
+  ,"createFirstPost": "Créer la première publication"
+  ,"noResultsTitle": "Aucun résultat"
+  ,"clearSearch": "Effacer la recherche"
+  ,"suggestedTags": "Tags suggérés"
+  ,"addTag": "Ajouter un tag"
+  ,"opBadge": "Auteur"
+  ,"sortComments": "Trier les commentaires"
+  ,"sortNewest": "Les plus récents"
+  ,"sortMostHelpful": "Les plus utiles"
 
 }

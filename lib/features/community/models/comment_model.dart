@@ -6,6 +6,7 @@ class CommentModel {
   final String authorName;
   final String content;
   final DateTime? createdAt;
+  final int likesCount;
 
   const CommentModel({
     required this.id,
@@ -13,6 +14,7 @@ class CommentModel {
     required this.authorName,
     required this.content,
     this.createdAt,
+    this.likesCount = 0,
   });
 
   factory CommentModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -23,6 +25,7 @@ class CommentModel {
       authorName: (data['authorName'] ?? '') as String,
       content: (data['content'] ?? '') as String,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      likesCount: (data['likesCount'] ?? 0) as int,
     );
   }
 
@@ -32,6 +35,7 @@ class CommentModel {
       'authorName': authorName,
       'content': content,
       'createdAt': createdAt,
+      'likesCount': likesCount,
     };
   }
 }

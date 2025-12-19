@@ -11,12 +11,16 @@ class PostCard extends StatelessWidget {
     required this.repository,
     this.onOpen,
     this.showActions = true,
+    this.showOpBadge = false,
+    this.onTagSelected,
   });
 
   final PostModel post;
   final CommunityRepository repository;
   final VoidCallback? onOpen;
   final bool showActions;
+  final bool showOpBadge;
+  final ValueChanged<String>? onTagSelected;
 
   String _formatDate(BuildContext context, DateTime? date) {
     if (date == null) return '';
@@ -28,18 +32,51 @@ class PostCard extends StatelessWidget {
     return '${localizations.formatShortDate(date)} • $time';
   }
 
+  String _initials(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.characters.first.toUpperCase();
+  }
+
+  String _authorMeta() {
+    final parts = <String>[];
+    if (post.university != null && post.university!.trim().isNotEmpty) {
+      parts.add(post.university!.trim());
+    }
+    if (post.authorMajor != null && post.authorMajor!.trim().isNotEmpty) {
+      parts.add(post.authorMajor!.trim());
+    }
+    if (post.authorYear != null && post.authorYear!.trim().isNotEmpty) {
+      parts.add(post.authorYear!.trim());
+    }
+    return parts.join(' • ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final meta = _authorMeta();
     final tagChips = post.tags
-        .map((tag) => Chip(
+        .map((tag) {
+          if (onTagSelected == null) {
+            return Chip(
               label: Text(tag),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ))
+            );
+          }
+          return ActionChip(
+            label: Text(tag),
+            onPressed: () => onTagSelected!(tag),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          );
+        })
         .toList();
 
     return Card(
       margin: EdgeInsets.zero,
+      color: post.isQuestion
+          ? theme.colorScheme.primary.withOpacity(0.06)
+          : theme.cardColor,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onOpen,
@@ -53,21 +90,54 @@ class PostCard extends StatelessWidget {
                   CircleAvatar(
                     backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
                     foregroundColor: theme.colorScheme.primary,
-                    child: const Icon(Icons.person),
+                    child: _initials(post.authorName).isEmpty
+                        ? const Icon(Icons.person)
+                        : Text(
+                            _initials(post.authorName),
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          post.authorName,
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                post.authorName,
+                                style: theme.textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            if (showOpBadge)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      theme.colorScheme.primary.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  S.of(context).opBadge,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        if (post.university != null && post.university!.isNotEmpty)
+                        if (meta.isNotEmpty)
                           Text(
-                            post.university!,
+                            meta,
                             style: theme.textTheme.bodySmall
                                 ?.copyWith(color: theme.hintColor),
                           ),
