@@ -22,6 +22,21 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
   final TextEditingController _tagsController = TextEditingController();
   bool _isQuestion = false;
   bool _loading = false;
+  final List<String> _selectedTags = [];
+
+  static const List<String> _suggestedTags = [
+    'campus',
+    'clubs',
+    'events',
+    'housing',
+    'exams',
+    'notes',
+    'study',
+    'tips',
+    'internships',
+    'scholarships',
+    'cafeteria',
+  ];
 
   @override
   void dispose() {
@@ -39,11 +54,8 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
       return;
     }
 
-    final tags = _tagsController.text
-        .split(',')
-        .map((tag) => tag.trim())
-        .where((tag) => tag.isNotEmpty)
-        .toList();
+    _addTagFromInput();
+    final tags = List<String>.from(_selectedTags);
 
     setState(() => _loading = true);
     try {
@@ -67,6 +79,44 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  void _addTagFromInput() {
+    final text = _tagsController.text.trim();
+    if (text.isEmpty) return;
+    for (final raw in text.split(',')) {
+      _addTag(raw);
+    }
+    _tagsController.clear();
+    setState(() {});
+  }
+
+  void _addTag(String tag) {
+    final trimmed = tag.trim();
+    if (trimmed.isEmpty) return;
+    if (trimmed.length > 24) return;
+    final normalized = trimmed.toLowerCase();
+    final exists = _selectedTags.any(
+      (item) => item.toLowerCase() == normalized,
+    );
+    if (exists) return;
+    setState(() => _selectedTags.add(trimmed));
+  }
+
+  void _removeTag(String tag) {
+    setState(() => _selectedTags.remove(tag));
+  }
+
+  List<String> _filteredSuggestions(String query) {
+    final normalized = query.trim().toLowerCase();
+    final available = _suggestedTags
+        .where(
+          (tag) => !_selectedTags
+              .any((selected) => selected.toLowerCase() == tag.toLowerCase()),
+        )
+        .toList();
+    if (normalized.isEmpty) return available;
+    return available.where((tag) => tag.contains(normalized)).toList();
   }
 
   @override
@@ -99,10 +149,60 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
               const SizedBox(height: 12),
               TextField(
                 controller: _tagsController,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _addTagFromInput(),
+                onChanged: (value) {
+                  if (value.contains(',')) {
+                    _addTagFromInput();
+                    return;
+                  }
+                  setState(() {});
+                },
                 decoration: InputDecoration(
                   labelText: S.of(context).tags,
                   hintText: S.of(context).tagsHint,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: S.of(context).addTag,
+                    onPressed: _addTagFromInput,
+                  ),
                 ),
+              ),
+              if (_selectedTags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _selectedTags
+                      .map(
+                        (tag) => InputChip(
+                          label: Text(tag),
+                          onDeleted: () => _removeTag(tag),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                S.of(context).suggestedTags,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Theme.of(context).hintColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _filteredSuggestions(_tagsController.text)
+                    .map(
+                      (tag) => ActionChip(
+                        label: Text(tag),
+                        onPressed: () => _addTag(tag),
+                      ),
+                    )
+                    .toList(),
               ),
               const SizedBox(height: 8),
               SwitchListTile.adaptive(

@@ -140,6 +140,17 @@
   "maritimePortLaw": "القانون البحري والمينائي",
   "energyMiningLaw": "قانون الطاقة والمناجم",
   "taxLaw": "قانون جبائي"
+  ,"beFirstToComment": "كن أول من يضيف ردًا مفيدًا."
+  ,"filterUnanswered": "بدون إجابات"
+  ,"createFirstPost": "أنشئ أول منشور"
+  ,"noResultsTitle": "لا توجد نتائج"
+  ,"clearSearch": "مسح البحث"
+  ,"suggestedTags": "وسوم مقترحة"
+  ,"addTag": "إضافة وسم"
+  ,"opBadge": "صاحب المنشور"
+  ,"sortComments": "ترتيب التعليقات"
+  ,"sortNewest": "الأحدث"
+  ,"sortMostHelpful": "الأكثر فائدة"
 
 
 

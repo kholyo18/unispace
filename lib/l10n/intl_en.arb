@@ -165,12 +165,22 @@
   "like": "Like",
   "questionTag": "Question",
   "postDetails": "Post Details",
-  "noCommentsYet": "No comments yet"
+  "noCommentsYet": "No comments yet",
+  "beFirstToComment": "Be the first to add a helpful reply.",
+  "filterUnanswered": "Unanswered",
+  "createFirstPost": "Create first post",
+  "noResultsTitle": "No results",
+  "clearSearch": "Clear search",
+  "suggestedTags": "Suggested tags",
+  "addTag": "Add tag",
+  "opBadge": "OP",
+  "sortComments": "Sort comments",
+  "sortNewest": "Newest",
+  "sortMostHelpful": "Most helpful"
 
 
 
 }
-
 
 
 

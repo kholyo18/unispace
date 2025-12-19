@@ -5,6 +5,8 @@ class PostModel {
   final String authorId;
   final String authorName;
   final String authorEmail;
+  final String? authorMajor;
+  final String? authorYear;
   final String? university;
   final String content;
   final DateTime? createdAt;
@@ -23,6 +25,8 @@ class PostModel {
     required this.commentsCount,
     required this.tags,
     required this.isQuestion,
+    this.authorMajor,
+    this.authorYear,
     this.university,
     this.createdAt,
   });
@@ -34,6 +38,8 @@ class PostModel {
       authorId: (data['authorId'] ?? '') as String,
       authorName: (data['authorName'] ?? '') as String,
       authorEmail: (data['authorEmail'] ?? '') as String,
+      authorMajor: data['authorMajor'] as String?,
+      authorYear: data['authorYear'] as String?,
       university: data['university'] as String?,
       content: (data['content'] ?? '') as String,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
@@ -49,6 +55,8 @@ class PostModel {
       'authorId': authorId,
       'authorName': authorName,
       'authorEmail': authorEmail,
+      'authorMajor': authorMajor,
+      'authorYear': authorYear,
       'university': university,
       'content': content,
       'createdAt': createdAt,

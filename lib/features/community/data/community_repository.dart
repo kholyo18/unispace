@@ -12,7 +12,7 @@ import '../models/post_model.dart';
 /// - For likes/savedPosts, allow write only to the user's own document id.
 /// (Configure in Firebase console; rules are not modified by this app.)
 
-enum CommunityFilter { all, myUniversity, questions, trending, saved }
+enum CommunityFilter { all, myUniversity, questions, unanswered, trending, saved }
 
 class CommunityRepository {
   CommunityRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
@@ -35,16 +35,22 @@ class CommunityRepository {
   Stream<List<PostModel>> streamPosts({
     required CommunityFilter filter,
     String query = '',
+    String? tagFilter,
   }) async* {
     if (filter == CommunityFilter.saved) {
-      yield* streamSavedPosts(query: query);
+      yield* streamSavedPosts(query: query, tagFilter: tagFilter);
       return;
     }
 
     Query<Map<String, dynamic>> ref = _firestore.collection('posts');
 
-    if (filter == CommunityFilter.questions) {
+    if (filter == CommunityFilter.questions ||
+        filter == CommunityFilter.unanswered) {
       ref = ref.where('isQuestion', isEqualTo: true);
+    }
+
+    if (filter == CommunityFilter.unanswered) {
+      ref = ref.where('commentsCount', isEqualTo: 0);
     }
 
     if (filter == CommunityFilter.myUniversity) {
@@ -67,7 +73,7 @@ class CommunityRepository {
 
     yield* ref.snapshots().map((snapshot) {
       final posts = snapshot.docs.map(PostModel.fromDoc).toList();
-      return _applySearch(posts, query);
+      return _applySearch(posts, query, tagFilter);
     });
   }
 
@@ -238,7 +244,10 @@ class CommunityRepository {
             snapshot.docs.map((doc) => doc.id).toSet());
   }
 
-  Stream<List<PostModel>> streamSavedPosts({String query = ''}) {
+  Stream<List<PostModel>> streamSavedPosts({
+    String query = '',
+    String? tagFilter,
+  }) {
     return streamSavedPostIds().asyncMap((ids) async {
       if (ids.isEmpty) return [];
       final idList = ids.toList();
@@ -263,15 +272,27 @@ class CommunityRepository {
         return bDate.compareTo(aDate);
       });
 
-      return _applySearch(posts, query);
+      return _applySearch(posts, query, tagFilter);
     });
   }
 
-  List<PostModel> _applySearch(List<PostModel> posts, String query) {
+  List<PostModel> _applySearch(
+    List<PostModel> posts,
+    String query,
+    String? tagFilter,
+  ) {
     final trimmed = query.trim().toLowerCase();
-    if (trimmed.isEmpty) return posts;
+    var filtered = posts;
+    if (tagFilter != null && tagFilter.trim().isNotEmpty) {
+      final normalizedTag = tagFilter.trim().toLowerCase();
+      filtered = filtered
+          .where((post) =>
+              post.tags.any((tag) => tag.toLowerCase() == normalizedTag))
+          .toList();
+    }
+    if (trimmed.isEmpty) return filtered;
 
-    return posts.where((post) {
+    return filtered.where((post) {
       return post.content.toLowerCase().contains(trimmed) ||
           post.authorName.toLowerCase().contains(trimmed) ||
           post.tags.any((tag) => tag.toLowerCase().contains(trimmed));
