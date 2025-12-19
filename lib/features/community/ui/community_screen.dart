@@ -1,4 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -7,6 +9,7 @@ import '../../../ui/widgets/empty_state.dart';
 import '../../../ui/widgets/app_scaffold.dart';
 import '../data/community_repository.dart';
 import '../models/post_model.dart';
+import '../utils/tag_utils.dart';
 import 'post_create_sheet.dart';
 import 'post_details_screen.dart';
 import 'widgets/community_skeleton.dart';
@@ -22,7 +25,12 @@ class CommunityScreen extends StatefulWidget {
 class _CommunityScreenState extends State<CommunityScreen> {
   final CommunityRepository _repository = CommunityRepository();
   final TextEditingController _searchController = TextEditingController();
-  CommunityFilter _filter = CommunityFilter.all;
+  CommunityTab _tab = CommunityTab.all;
+  Timer? _searchDebounce;
+  String _searchQuery = '';
+  bool _showUnanswered = false;
+  bool _showTrending = false;
+  bool _showSaved = false;
   String? _university;
   String? _activeTag;
 
@@ -41,6 +49,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -74,12 +83,22 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   void _setTagFilter(String? tag) {
-    setState(() => _activeTag = tag);
+    setState(() => _activeTag = normalizeTag(tag ?? ''));
   }
 
   void _clearSearch() {
+    _searchDebounce?.cancel();
     _searchController.clear();
+    setState(() => _searchQuery = '');
+  }
+
+  void _onSearchChanged(String value) {
     setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() => _searchQuery = value);
+    });
   }
 
   @override
@@ -126,10 +145,17 @@ class _CommunityScreenState extends State<CommunityScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: TextField(
               controller: _searchController,
-              onChanged: (_) => setState(() {}),
+              onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
                 hintText: S.of(context).searchPosts,
+                suffixIcon: _searchController.text.trim().isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: S.of(context).clearSearch,
+                        onPressed: _clearSearch,
+                      ),
               ),
             ),
           ),
@@ -137,52 +163,61 @@ class _CommunityScreenState extends State<CommunityScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SegmentedButton<CommunityFilter>(
+              child: SegmentedButton<CommunityTab>(
                 segments: [
                   ButtonSegment(
-                    value: CommunityFilter.all,
+                    value: CommunityTab.all,
                     label: Text(S.of(context).filterAll),
                   ),
                   ButtonSegment(
-                    value: CommunityFilter.myUniversity,
+                    value: CommunityTab.myUniversity,
                     label: Text(S.of(context).filterMyUniversity),
                   ),
                   ButtonSegment(
-                    value: CommunityFilter.questions,
+                    value: CommunityTab.questions,
                     label: Text(S.of(context).filterQuestions),
                   ),
-                  ButtonSegment(
-                    value: CommunityFilter.unanswered,
-                    label: Text(S.of(context).filterUnanswered),
-                  ),
-                  ButtonSegment(
-                    value: CommunityFilter.trending,
-                    label: Text(S.of(context).filterTrending),
-                  ),
-                  ButtonSegment(
-                    value: CommunityFilter.saved,
-                    label: Text(S.of(context).filterSaved),
-                  ),
                 ],
-                selected: {_filter},
+                selected: {_tab},
                 onSelectionChanged: (selection) {
-                  setState(() => _filter = selection.first);
+                  setState(() => _tab = selection.first);
                 },
               ),
             ),
           ),
-          if (hasActiveTag)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: InputChip(
-                  label: Text('#${_activeTag!}'),
-                  onDeleted: () => _setTagFilter(null),
-                  deleteIcon: const Icon(Icons.close),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilterChip(
+                  label: Text(S.of(context).filterSaved),
+                  selected: _showSaved,
+                  onSelected: (value) =>
+                      setState(() => _showSaved = value),
                 ),
-              ),
+                FilterChip(
+                  label: Text(S.of(context).filterTrending),
+                  selected: _showTrending,
+                  onSelected: (value) =>
+                      setState(() => _showTrending = value),
+                ),
+                FilterChip(
+                  label: Text(S.of(context).filterUnanswered),
+                  selected: _showUnanswered,
+                  onSelected: (value) =>
+                      setState(() => _showUnanswered = value),
+                ),
+                if (hasActiveTag)
+                  InputChip(
+                    label: Text(displayTag(_activeTag!)),
+                    onDeleted: () => _setTagFilter(null),
+                    deleteIcon: const Icon(Icons.close),
+                  ),
+              ],
             ),
+          ),
           Expanded(
             child: _buildFeed(context, user),
           ),
@@ -193,7 +228,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   Widget _buildFeed(BuildContext context, User? user) {
     final hasActiveTag = _activeTag != null && _activeTag!.isNotEmpty;
-    final hasSearch = _searchController.text.trim().isNotEmpty;
+    final hasSearch = _searchQuery.trim().isNotEmpty;
 
     if (user == null) {
       return EmptyState(
@@ -203,7 +238,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
       );
     }
 
-    if (_filter == CommunityFilter.myUniversity &&
+    if (_tab == CommunityTab.myUniversity &&
         (_university == null || _university!.isEmpty)) {
       return EmptyState(
         icon: Icons.school_outlined,
@@ -214,9 +249,12 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
     return StreamBuilder<List<PostModel>>(
       stream: _repository.streamPosts(
-        filter: _filter,
-        query: _searchController.text,
+        tab: _tab,
+        query: _searchQuery,
         tagFilter: _activeTag,
+        showSavedOnly: _showSaved,
+        showTrending: _showTrending,
+        showUnanswered: _showUnanswered,
       ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {

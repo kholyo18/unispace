@@ -153,5 +153,10 @@
   ,"sortComments": "Trier les commentaires"
   ,"sortNewest": "Les plus récents"
   ,"sortMostHelpful": "Les plus utiles"
+  ,"tags": "Tags"
+  ,"tagsHint": "ex. #campus, #clubs"
+  ,"postHint": "Partagez quelque chose avec la communauté…"
+  ,"questionPrompt": "Question"
+  ,"questionHint": "De quoi avez-vous besoin d’aide ?"
 
 }

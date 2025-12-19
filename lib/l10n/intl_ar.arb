@@ -151,6 +151,11 @@
   ,"sortComments": "ترتيب التعليقات"
   ,"sortNewest": "الأحدث"
   ,"sortMostHelpful": "الأكثر فائدة"
+  ,"tags": "الوسوم"
+  ,"tagsHint": "مثال: #الأنشطة، #السكن"
+  ,"postHint": "شارك شيئًا مع المجتمع…"
+  ,"questionPrompt": "سؤال"
+  ,"questionHint": "بماذا تحتاج مساعدة؟"
 
 
 

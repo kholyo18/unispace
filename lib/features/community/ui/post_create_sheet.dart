@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../generated/l10n.dart';
 import '../data/community_repository.dart';
+import '../utils/tag_utils.dart';
 
 class PostCreateSheet extends StatefulWidget {
   const PostCreateSheet({
@@ -92,15 +93,14 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
   }
 
   void _addTag(String tag) {
-    final trimmed = tag.trim();
-    if (trimmed.isEmpty) return;
-    if (trimmed.length > 24) return;
-    final normalized = trimmed.toLowerCase();
+    final sanitized = normalizeTag(tag);
+    if (sanitized == null) return;
+    final normalized = sanitized.toLowerCase();
     final exists = _selectedTags.any(
       (item) => item.toLowerCase() == normalized,
     );
     if (exists) return;
-    setState(() => _selectedTags.add(trimmed));
+    setState(() => _selectedTags.add(sanitized));
   }
 
   void _removeTag(String tag) {
@@ -108,7 +108,8 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
   }
 
   List<String> _filteredSuggestions(String query) {
-    final normalized = query.trim().toLowerCase();
+    final normalized =
+        query.replaceAll('#', '').replaceAll(RegExp(r'\s+'), '').toLowerCase();
     final available = _suggestedTags
         .where(
           (tag) => !_selectedTags
@@ -143,7 +144,12 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
                 minLines: 3,
                 maxLines: 8,
                 decoration: InputDecoration(
-                  labelText: S.of(context).content,
+                  labelText: _isQuestion
+                      ? S.of(context).questionPrompt
+                      : S.of(context).content,
+                  hintText: _isQuestion
+                      ? S.of(context).questionHint
+                      : S.of(context).postHint,
                 ),
               ),
               const SizedBox(height: 12),
@@ -176,7 +182,7 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
                   children: _selectedTags
                       .map(
                         (tag) => InputChip(
-                          label: Text(tag),
+                          label: Text(displayTag(tag)),
                           onDeleted: () => _removeTag(tag),
                         ),
                       )
@@ -198,7 +204,7 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
                 children: _filteredSuggestions(_tagsController.text)
                     .map(
                       (tag) => ActionChip(
-                        label: Text(tag),
+                        label: Text(displayTag(tag)),
                         onPressed: () => _addTag(tag),
                       ),
                     )
