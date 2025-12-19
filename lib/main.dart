@@ -1025,6 +1025,8 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
   List<ProgramFaculty> _allFaculties = [];
   List<ProgramFaculty> _filteredFaculties = [];
   bool _isInitialized = false;
+  Timer? _searchDebounce;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -1044,6 +1046,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -1073,6 +1076,15 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
   }
 
   void _onSearchChanged(String query) {
+    setState(() => _searchQuery = query);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      _applySearchFilter(query);
+    });
+  }
+
+  void _applySearchFilter(String query) {
     setState(() {
       if (query.trim().isEmpty) {
         _filteredFaculties = _allFaculties;
@@ -1083,6 +1095,17 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
         return fields.any((field) => _containsNormalized(field, query));
       }).toList(growable: false);
     });
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _searchQuery = '';
+      _filteredFaculties = _allFaculties;
+    });
+  }
   }
 
   void _openFaculty(ProgramFaculty faculty) {
@@ -1191,6 +1214,13 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                     border: InputBorder.none,
                     prefixIcon: Icon(Icons.search,
                         color: Theme.of(context).colorScheme.onSurface),
+                    suffixIcon: _searchQuery.trim().isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            color: Theme.of(context).colorScheme.onSurface,
+                            onPressed: _clearSearch,
+                          ),
                   ),
                 ),
               ),
@@ -1290,6 +1320,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 9),
                       child: _FacultyQuickCard(
                         faculty: faculty,
+                        highlightQuery: _searchQuery,
                         onTap: () => _openFaculty(faculty),
                       ),
                     );
@@ -1304,11 +1335,106 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
   }
 }
 
+class _MatchRange {
+  const _MatchRange(this.start, this.end);
+  final int start;
+  final int end;
+}
+
+String _normalizeCharForMatch(String input) {
+  var text = input.toLowerCase();
+  text = text.replaceAll(RegExp(r'[ًٌٍَُِّْ]'), '');
+  text = text
+      .replaceAll('أ', 'ا')
+      .replaceAll('إ', 'ا')
+      .replaceAll('آ', 'ا')
+      .replaceAll('ة', 'ه')
+      .replaceAll('ى', 'ي')
+      .replaceAll('ؤ', 'و')
+      .replaceAll('ئ', 'ي');
+  text = text.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ' ');
+  return text;
+}
+
+String _normalizeForMatch(String input) {
+  final buffer = StringBuffer();
+  for (final rune in input.runes) {
+    final char = String.fromCharCode(rune);
+    buffer.write(_normalizeCharForMatch(char));
+  }
+  return buffer.toString();
+}
+
+TextSpan _buildHighlightedSpan(
+  String text,
+  String query,
+  TextStyle style,
+  TextStyle highlightStyle,
+) {
+  final normalizedQuery = _normalizeForMatch(query).trim();
+  if (normalizedQuery.isEmpty) {
+    return TextSpan(text: text, style: style);
+  }
+
+  final normalizedBuffer = StringBuffer();
+  final indexMap = <int>[];
+  var originalIndex = 0;
+  for (final rune in text.runes) {
+    final char = String.fromCharCode(rune);
+    final normalizedChar = _normalizeCharForMatch(char);
+    if (normalizedChar.isNotEmpty) {
+      for (var i = 0; i < normalizedChar.length; i += 1) {
+        normalizedBuffer.write(normalizedChar[i]);
+        indexMap.add(originalIndex);
+      }
+    }
+    originalIndex += char.length;
+  }
+
+  final normalizedText = normalizedBuffer.toString();
+  final matchRanges = <_MatchRange>[];
+  var startIndex = 0;
+  while (startIndex <= normalizedText.length - normalizedQuery.length) {
+    final matchIndex = normalizedText.indexOf(normalizedQuery, startIndex);
+    if (matchIndex == -1) break;
+    final startOriginal = indexMap[matchIndex];
+    final endOriginal = indexMap[matchIndex + normalizedQuery.length - 1] + 1;
+    matchRanges.add(_MatchRange(startOriginal, endOriginal));
+    startIndex = matchIndex + normalizedQuery.length;
+  }
+
+  if (matchRanges.isEmpty) {
+    return TextSpan(text: text, style: style);
+  }
+
+  final spans = <TextSpan>[];
+  var lastIndex = 0;
+  for (final range in matchRanges) {
+    if (range.start > lastIndex) {
+      spans.add(TextSpan(text: text.substring(lastIndex, range.start), style: style));
+    }
+    spans.add(TextSpan(
+      text: text.substring(range.start, range.end),
+      style: highlightStyle,
+    ));
+    lastIndex = range.end;
+  }
+  if (lastIndex < text.length) {
+    spans.add(TextSpan(text: text.substring(lastIndex), style: style));
+  }
+  return TextSpan(children: spans, style: style);
+}
+
 class _FacultyQuickCard extends StatelessWidget {
-  const _FacultyQuickCard({required this.faculty, required this.onTap});
+  const _FacultyQuickCard({
+    required this.faculty,
+    required this.onTap,
+    required this.highlightQuery,
+  });
 
   final ProgramFaculty faculty;
   final VoidCallback onTap;
+  final String highlightQuery;
 
   @override
   Widget build(BuildContext context) {
@@ -1352,9 +1478,16 @@ class _FacultyQuickCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Expanded(
-                    child: Text(
-                      faculty.name,
-                      style: theme.textTheme.titleMedium,
+                    child: RichText(
+                      text: _buildHighlightedSpan(
+                        faculty.name,
+                        highlightQuery,
+                        theme.textTheme.titleMedium ?? const TextStyle(),
+                        (theme.textTheme.titleMedium ?? const TextStyle()).copyWith(
+                          fontWeight: FontWeight.bold,
+                          backgroundColor: theme.colorScheme.primary.withOpacity(0.15),
+                        ),
+                      ),
                     ),
                   ),
                 ],
