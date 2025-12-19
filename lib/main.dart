@@ -617,6 +617,19 @@ class _SignInScreenState extends State<SignInScreen> {
     return fallback ?? 'حدث خطأ غير متوقع. حاول مرة أخرى.';
   }
 
+  String _googleAuthErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'network-request-failed':
+        return 'مشكلة في الانترنت، حاول مرة أخرى';
+      case 'account-exists-with-different-credential':
+        return 'هذا البريد مرتبط بطريقة تسجيل أخرى';
+      case 'invalid-credential':
+        return 'بيانات الدخول غير صالحة';
+      default:
+        return 'تعذّر تسجيل الدخول عبر Google، حاول مرة أخرى';
+    }
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -661,7 +674,6 @@ class _SignInScreenState extends State<SignInScreen> {
     try {
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        _showMessage('تم إلغاء تسجيل الدخول عبر Google.');
         return;
       }
       final googleAuth = await googleUser.authentication;
@@ -674,13 +686,20 @@ class _SignInScreenState extends State<SignInScreen> {
       await _ensureUserDocument(userCredential.user);
     } on FirebaseAuthException catch (e) {
       debugPrint('Google sign-in FirebaseAuthException: $e');
-      _showAuthError(e);
+      _showMessage(_googleAuthErrorMessage(e));
     } on PlatformException catch (e) {
       debugPrint('Google sign-in PlatformException: $e');
-      _showAuthError(e);
+      if (e.code == 'sign_in_canceled') {
+        return;
+      }
+      if (e.code == 'network_error') {
+        _showMessage('مشكلة في الانترنت، حاول مرة أخرى');
+        return;
+      }
+      _showMessage('تعذّر تسجيل الدخول عبر Google، حاول مرة أخرى');
     } catch (e) {
       debugPrint('Google sign-in error: $e');
-      _showAuthError(e);
+      _showMessage('تعذّر تسجيل الدخول عبر Google، حاول مرة أخرى');
     } finally {
       if (mounted) setState(() => loading = false);
     }
