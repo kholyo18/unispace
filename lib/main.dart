@@ -43,6 +43,7 @@ import './moduls3.dart';
 import './moduls.dart';
 import 'module/moduls.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 //import 'package: UniSpace/generated/l10n.dart';
 import 'package:translator/translator.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -566,6 +567,46 @@ class _SignInScreenState extends State<SignInScreen> {
   final password = TextEditingController();
   bool loading = false;
 
+  String _authErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-email':
+        return 'البريد الإلكتروني غير صالح.';
+      case 'user-disabled':
+        return 'تم تعطيل هذا الحساب.';
+      case 'user-not-found':
+        return 'لا يوجد حساب بهذا البريد الإلكتروني.';
+      case 'wrong-password':
+        return 'كلمة المرور غير صحيحة.';
+      case 'email-already-in-use':
+        return 'هذا البريد الإلكتروني مستخدم بالفعل.';
+      case 'weak-password':
+        return 'كلمة المرور ضعيفة جدًا.';
+      case 'operation-not-allowed':
+        return 'طريقة تسجيل الدخول غير مفعّلة.';
+      case 'account-exists-with-different-credential':
+        return 'هذا البريد مرتبط بطريقة تسجيل دخول مختلفة.';
+      case 'invalid-credential':
+        return 'بيانات تسجيل الدخول غير صحيحة.';
+      case 'network-request-failed':
+        return 'تحقق من اتصال الإنترنت وحاول مجددًا.';
+      case 'too-many-requests':
+        return 'تم تجاوز عدد المحاولات. حاول لاحقًا.';
+      case 'channel-error':
+        return 'تعذر بدء تسجيل الدخول عبر Google. حاول مرة أخرى.';
+      default:
+        return 'حدث خطأ غير متوقع. حاول مرة أخرى.';
+    }
+  }
+
+  void _showAuthError(Object error, {String? fallback}) {
+    final message = error is FirebaseAuthException
+        ? _authErrorMessage(error)
+        : (fallback ?? 'حدث خطأ غير متوقع. حاول مرة أخرى.');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _login() async {
     setState(() => loading = true);
     try {
@@ -574,9 +615,7 @@ class _SignInScreenState extends State<SignInScreen> {
         password: password.text.trim(),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('خطأ: $e')));
+      _showAuthError(e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -590,9 +629,33 @@ class _SignInScreenState extends State<SignInScreen> {
         password: password.text.trim(),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('فشل التسجيل: $e')));
+      _showAuthError(e, fallback: 'تعذر إنشاء الحساب. حاول مرة أخرى.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => loading = true);
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        _showAuthError(
+          'cancelled',
+          fallback: 'تم إلغاء تسجيل الدخول عبر Google.',
+        );
+        return;
+      }
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      _showAuthError(e);
+    } catch (e) {
+      _showAuthError(e);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -647,7 +710,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                   ),
                   OutlinedButton.icon(
-                    onPressed: loading ? null : _register,
+                    onPressed: loading ? null : _signInWithGoogle,
                     icon: const Icon(Icons.person_add_alt),
                     label: Text(S.of(context).register),
 

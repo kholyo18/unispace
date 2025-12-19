@@ -36,6 +36,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   google_fonts: ^6.3.2
+  google_sign_in: ^6.2.1
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   open_filex: 4.7.0
