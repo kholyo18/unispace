@@ -181,11 +181,18 @@ class MessageLookup extends MessageLookupByLibrary {
     "politicalSciences": MessageLookupByLibrary.simpleMessage(
       "Political Sciences",
     ),
+    "contactUs": MessageLookupByLibrary.simpleMessage("Contact Us"),
     "post": MessageLookupByLibrary.simpleMessage(
       "Your post has been published ✅",
     ),
+    "pleaseWriteMessage": MessageLookupByLibrary.simpleMessage(
+      "Please write a message",
+    ),
     "posted": MessageLookupByLibrary.simpleMessage("Post"),
     "privacyPolicy": MessageLookupByLibrary.simpleMessage("Privacy Policy"),
+    "failedToOpenMailApp": MessageLookupByLibrary.simpleMessage(
+      "Failed to open mail app",
+    ),
     "privateLaw": MessageLookupByLibrary.simpleMessage("Private Law"),
     "publicLaw": MessageLookupByLibrary.simpleMessage("Public Law"),
     "publish": MessageLookupByLibrary.simpleMessage("Publish"),
@@ -206,6 +213,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Search for a faculty...",
     ),
     "sections": MessageLookupByLibrary.simpleMessage("Sections"),
+    "send": MessageLookupByLibrary.simpleMessage("Send"),
     "servicesMarketing": MessageLookupByLibrary.simpleMessage(
       "Services Marketing",
     ),
@@ -214,6 +222,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Start the first discussion in the community and share your experience with colleagues.",
     ),
     "studyResults": MessageLookupByLibrary.simpleMessage("Study Results"),
+    "subject": MessageLookupByLibrary.simpleMessage("Subject"),
     "system": MessageLookupByLibrary.simpleMessage("System"),
     "systemMode": MessageLookupByLibrary.simpleMessage("System Mode"),
     "taxLaw": MessageLookupByLibrary.simpleMessage("Tax Law"),
@@ -224,6 +233,9 @@ class MessageLookup extends MessageLookupByLibrary {
       "Welcome to UniSpace",
     ),
     "writeComment": MessageLookupByLibrary.simpleMessage("Write your comment…"),
+    "writeMessageHint": MessageLookupByLibrary.simpleMessage(
+      "Write your message here...",
+    ),
     "writeYourComment": MessageLookupByLibrary.simpleMessage(
       "Write your comment",
     ),

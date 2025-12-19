@@ -169,9 +169,16 @@ class MessageLookup extends MessageLookupByLibrary {
       "تنظيمات سياسية وإدارية",
     ),
     "politicalSciences": MessageLookupByLibrary.simpleMessage("علوم سياسية"),
+    "contactUs": MessageLookupByLibrary.simpleMessage("تواصل معنا"),
     "post": MessageLookupByLibrary.simpleMessage("تم نشر منشورك ✅"),
     "posted": MessageLookupByLibrary.simpleMessage("منشور"),
+    "pleaseWriteMessage": MessageLookupByLibrary.simpleMessage(
+      "الرجاء كتابة رسالة",
+    ),
     "privacyPolicy": MessageLookupByLibrary.simpleMessage("سياسة الخصوصية"),
+    "failedToOpenMailApp": MessageLookupByLibrary.simpleMessage(
+      "فشل فتح تطبيق البريد",
+    ),
     "privateLaw": MessageLookupByLibrary.simpleMessage("قانون خاص"),
     "publicLaw": MessageLookupByLibrary.simpleMessage("قانون عام"),
     "publish": MessageLookupByLibrary.simpleMessage("نشر"),
@@ -192,12 +199,14 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "searchFaculty": MessageLookupByLibrary.simpleMessage("ابحث عن كلية..."),
     "sections": MessageLookupByLibrary.simpleMessage("الأقسام"),
+    "send": MessageLookupByLibrary.simpleMessage("إرسال"),
     "servicesMarketing": MessageLookupByLibrary.simpleMessage("تسويق الخدمات"),
     "share": MessageLookupByLibrary.simpleMessage("مشاركة"),
     "startDiscussion": MessageLookupByLibrary.simpleMessage(
       "ابدأ النقاش الأول في المجتمع وشارك تجربتك مع زملائك.",
     ),
     "studyResults": MessageLookupByLibrary.simpleMessage("نتائج الدراسة"),
+    "subject": MessageLookupByLibrary.simpleMessage("الموضوع"),
     "system": MessageLookupByLibrary.simpleMessage("حسب النظام"),
     "systemMode": MessageLookupByLibrary.simpleMessage("حسب النظام"),
     "taxLaw": MessageLookupByLibrary.simpleMessage("قانون جبائي"),
@@ -208,6 +217,9 @@ class MessageLookup extends MessageLookupByLibrary {
       "مرحبًا بك في UniSpace",
     ),
     "writeComment": MessageLookupByLibrary.simpleMessage("اكتب تعليقك…"),
+    "writeMessageHint": MessageLookupByLibrary.simpleMessage(
+      "اكتب رسالتك هنا...",
+    ),
     "writeYourComment": MessageLookupByLibrary.simpleMessage("اكتب تعليقك"),
   };
 }
