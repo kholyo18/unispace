@@ -142,12 +142,34 @@
   "legalProfessionsLaw": "Legal and Judicial Professions Law",
   "maritimePortLaw": "Maritime and Port Law",
   "energyMiningLaw": "Energy and Mining Law",
-  "taxLaw": "Tax Law"
+  "taxLaw": "Tax Law",
+  "searchPosts": "Search posts...",
+  "filterAll": "All",
+  "filterMyUniversity": "My University",
+  "filterQuestions": "Questions",
+  "filterTrending": "Trending",
+  "filterSaved": "Saved",
+  "tags": "Tags",
+  "tagsHint": "e.g. campus, clubs",
+  "postAsQuestion": "Post as a question",
+  "publishing": "Publishing...",
+  "contentRequired": "Please write something before publishing.",
+  "postPublished": "Your post has been published ✅",
+  "loginRequired": "Please log in to continue.",
+  "loginToContinue": "Sign in to create posts, like, and comment.",
+  "universityNotSet": "University not set",
+  "universityNotSetHint": "Add your university in your profile to see this feed.",
+  "somethingWentWrong": "Something went wrong. Please try again.",
+  "noSearchResults": "No posts match your search.",
+  "savePost": "Save post",
+  "like": "Like",
+  "questionTag": "Question",
+  "postDetails": "Post Details",
+  "noCommentsYet": "No comments yet"
 
 
 
 }
-
 
 
 

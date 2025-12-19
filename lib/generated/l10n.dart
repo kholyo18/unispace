@@ -379,6 +379,211 @@ class S {
     );
   }
 
+  /// `Search posts...`
+  String get searchPosts {
+    return Intl.message(
+      'Search posts...',
+      name: 'searchPosts',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `All`
+  String get filterAll {
+    return Intl.message('All', name: 'filterAll', desc: '', args: []);
+  }
+
+  /// `My University`
+  String get filterMyUniversity {
+    return Intl.message(
+      'My University',
+      name: 'filterMyUniversity',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Questions`
+  String get filterQuestions {
+    return Intl.message(
+      'Questions',
+      name: 'filterQuestions',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Trending`
+  String get filterTrending {
+    return Intl.message(
+      'Trending',
+      name: 'filterTrending',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Saved`
+  String get filterSaved {
+    return Intl.message('Saved', name: 'filterSaved', desc: '', args: []);
+  }
+
+  /// `Tags`
+  String get tags {
+    return Intl.message('Tags', name: 'tags', desc: '', args: []);
+  }
+
+  /// `e.g. campus, clubs`
+  String get tagsHint {
+    return Intl.message(
+      'e.g. campus, clubs',
+      name: 'tagsHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Post as a question`
+  String get postAsQuestion {
+    return Intl.message(
+      'Post as a question',
+      name: 'postAsQuestion',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Publishing...`
+  String get publishing {
+    return Intl.message(
+      'Publishing...',
+      name: 'publishing',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please write something before publishing.`
+  String get contentRequired {
+    return Intl.message(
+      'Please write something before publishing.',
+      name: 'contentRequired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Your post has been published ✅`
+  String get postPublished {
+    return Intl.message(
+      'Your post has been published ✅',
+      name: 'postPublished',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please log in to continue.`
+  String get loginRequired {
+    return Intl.message(
+      'Please log in to continue.',
+      name: 'loginRequired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sign in to create posts, like, and comment.`
+  String get loginToContinue {
+    return Intl.message(
+      'Sign in to create posts, like, and comment.',
+      name: 'loginToContinue',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `University not set`
+  String get universityNotSet {
+    return Intl.message(
+      'University not set',
+      name: 'universityNotSet',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add your university in your profile to see this feed.`
+  String get universityNotSetHint {
+    return Intl.message(
+      'Add your university in your profile to see this feed.',
+      name: 'universityNotSetHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Something went wrong. Please try again.`
+  String get somethingWentWrong {
+    return Intl.message(
+      'Something went wrong. Please try again.',
+      name: 'somethingWentWrong',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No posts match your search.`
+  String get noSearchResults {
+    return Intl.message(
+      'No posts match your search.',
+      name: 'noSearchResults',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Save post`
+  String get savePost {
+    return Intl.message(
+      'Save post',
+      name: 'savePost',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Like`
+  String get like {
+    return Intl.message('Like', name: 'like', desc: '', args: []);
+  }
+
+  /// `Question`
+  String get questionTag {
+    return Intl.message('Question', name: 'questionTag', desc: '', args: []);
+  }
+
+  /// `Post Details`
+  String get postDetails {
+    return Intl.message(
+      'Post Details',
+      name: 'postDetails',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No comments yet`
+  String get noCommentsYet {
+    return Intl.message(
+      'No comments yet',
+      name: 'noCommentsYet',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Post`
   String get createPost {
     return Intl.message('Post', name: 'createPost', desc: '', args: []);

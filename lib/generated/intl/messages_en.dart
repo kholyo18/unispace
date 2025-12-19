@@ -71,6 +71,9 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "commonCore": MessageLookupByLibrary.simpleMessage("Common Core"),
     "community": MessageLookupByLibrary.simpleMessage("Community"),
+    "contentRequired": MessageLookupByLibrary.simpleMessage(
+      "Please write something before publishing.",
+    ),
     "content": MessageLookupByLibrary.simpleMessage("Content"),
     "corporateFinance": MessageLookupByLibrary.simpleMessage(
       "Corporate Finance",
@@ -103,6 +106,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "facultyLawPolitical": MessageLookupByLibrary.simpleMessage(
       "Faculty of Law and Political Sciences",
     ),
+    "filterAll": MessageLookupByLibrary.simpleMessage("All"),
+    "filterMyUniversity": MessageLookupByLibrary.simpleMessage("My University"),
+    "filterQuestions": MessageLookupByLibrary.simpleMessage("Questions"),
+    "filterSaved": MessageLookupByLibrary.simpleMessage("Saved"),
+    "filterTrending": MessageLookupByLibrary.simpleMessage("Trending"),
     "familyLaw": MessageLookupByLibrary.simpleMessage("Family Law"),
     "finance": MessageLookupByLibrary.simpleMessage("Finance"),
     "financeInternationalTrade": MessageLookupByLibrary.simpleMessage(
@@ -118,6 +126,13 @@ class MessageLookup extends MessageLookupByLibrary {
       "Financial Management",
     ),
     "hashtag": MessageLookupByLibrary.simpleMessage("#"),
+    "like": MessageLookupByLibrary.simpleMessage("Like"),
+    "loginRequired": MessageLookupByLibrary.simpleMessage(
+      "Please log in to continue.",
+    ),
+    "loginToContinue": MessageLookupByLibrary.simpleMessage(
+      "Sign in to create posts, like, and comment.",
+    ),
     "home": MessageLookupByLibrary.simpleMessage("Home"),
     "homeSubtitle": MessageLookupByLibrary.simpleMessage(
       "Browse faculties, calculate your GPA, share your ideas, and write notes easily.",
@@ -162,6 +177,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "noMajorsYet": MessageLookupByLibrary.simpleMessage("No majors yet"),
     "noNotesYet": MessageLookupByLibrary.simpleMessage("No notes yet"),
     "noPostsYet": MessageLookupByLibrary.simpleMessage("No posts yet"),
+    "noCommentsYet": MessageLookupByLibrary.simpleMessage("No comments yet"),
+    "noSearchResults": MessageLookupByLibrary.simpleMessage(
+      "No posts match your search.",
+    ),
     "noSubjectsThisSemester": MessageLookupByLibrary.simpleMessage(
       "No subjects in this semester.",
     ),
@@ -185,10 +204,19 @@ class MessageLookup extends MessageLookupByLibrary {
     "post": MessageLookupByLibrary.simpleMessage(
       "Your post has been published ✅",
     ),
+    "postAsQuestion": MessageLookupByLibrary.simpleMessage(
+      "Post as a question",
+    ),
+    "postDetails": MessageLookupByLibrary.simpleMessage("Post Details"),
+    "postPublished": MessageLookupByLibrary.simpleMessage(
+      "Your post has been published ✅",
+    ),
     "pleaseWriteMessage": MessageLookupByLibrary.simpleMessage(
       "Please write a message",
     ),
     "posted": MessageLookupByLibrary.simpleMessage("Post"),
+    "publishing": MessageLookupByLibrary.simpleMessage("Publishing..."),
+    "questionTag": MessageLookupByLibrary.simpleMessage("Question"),
     "privacyPolicy": MessageLookupByLibrary.simpleMessage("Privacy Policy"),
     "failedToOpenMailApp": MessageLookupByLibrary.simpleMessage(
       "Failed to open mail app",
@@ -206,9 +234,11 @@ class MessageLookup extends MessageLookupByLibrary {
       "Reset link has been sent",
     ),
     "save": MessageLookupByLibrary.simpleMessage("Save"),
+    "savePost": MessageLookupByLibrary.simpleMessage("Save post"),
     "searchClipboard": MessageLookupByLibrary.simpleMessage(
       "Search inside clipboard…",
     ),
+    "searchPosts": MessageLookupByLibrary.simpleMessage("Search posts..."),
     "searchFaculty": MessageLookupByLibrary.simpleMessage(
       "Search for a faculty...",
     ),
@@ -221,11 +251,22 @@ class MessageLookup extends MessageLookupByLibrary {
     "startDiscussion": MessageLookupByLibrary.simpleMessage(
       "Start the first discussion in the community and share your experience with colleagues.",
     ),
+    "somethingWentWrong": MessageLookupByLibrary.simpleMessage(
+      "Something went wrong. Please try again.",
+    ),
     "studyResults": MessageLookupByLibrary.simpleMessage("Study Results"),
     "subject": MessageLookupByLibrary.simpleMessage("Subject"),
     "system": MessageLookupByLibrary.simpleMessage("System"),
     "systemMode": MessageLookupByLibrary.simpleMessage("System Mode"),
+    "tags": MessageLookupByLibrary.simpleMessage("Tags"),
+    "tagsHint": MessageLookupByLibrary.simpleMessage("e.g. campus, clubs"),
     "taxLaw": MessageLookupByLibrary.simpleMessage("Tax Law"),
+    "universityNotSet": MessageLookupByLibrary.simpleMessage(
+      "University not set",
+    ),
+    "universityNotSetHint": MessageLookupByLibrary.simpleMessage(
+      "Add your university in your profile to see this feed.",
+    ),
     "title": MessageLookupByLibrary.simpleMessage("Title"),
     "viewAll": MessageLookupByLibrary.simpleMessage("View All"),
     "welcomeEmoji": MessageLookupByLibrary.simpleMessage("Welcome 👋"),
