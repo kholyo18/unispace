@@ -1600,6 +1600,26 @@ class S {
     );
   }
 
+  /// `Clear tags`
+  String get clearTags {
+    return Intl.message(
+      'Clear tags',
+      name: 'clearTags',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reset filters`
+  String get resetFilters {
+    return Intl.message(
+      'Reset filters',
+      name: 'resetFilters',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Suggested tags`
   String get suggestedTags {
     return Intl.message(

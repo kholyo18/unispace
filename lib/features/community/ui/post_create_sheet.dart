@@ -93,14 +93,11 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
   }
 
   void _addTag(String tag) {
-    final sanitized = normalizeTag(tag);
-    if (sanitized == null) return;
-    final normalized = sanitized.toLowerCase();
-    final exists = _selectedTags.any(
-      (item) => item.toLowerCase() == normalized,
-    );
+    final normalized = normalizeTag(tag);
+    if (normalized == null) return;
+    final exists = _selectedTags.contains(normalized);
     if (exists) return;
-    setState(() => _selectedTags.add(sanitized));
+    setState(() => _selectedTags.add(normalized));
   }
 
   void _removeTag(String tag) {
@@ -108,8 +105,7 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
   }
 
   List<String> _filteredSuggestions(String query) {
-    final normalized =
-        query.replaceAll('#', '').replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    final normalized = normalizeTag(query) ?? '';
     final available = _suggestedTags
         .where(
           (tag) => !_selectedTags

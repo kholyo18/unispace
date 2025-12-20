@@ -115,6 +115,14 @@ class CommunityRepository {
     final authorName =
         user.displayName ?? user.email?.split('@').first ?? 'Student';
 
+    final normalizedTags = <String>{};
+    for (final tag in tags) {
+      final normalized = normalizeTag(tag);
+      if (normalized != null) {
+        normalizedTags.add(normalized);
+      }
+    }
+
     await docRef.set({
       'authorId': user.uid,
       'authorName': authorName,
@@ -124,7 +132,7 @@ class CommunityRepository {
       'createdAt': FieldValue.serverTimestamp(),
       'likesCount': 0,
       'commentsCount': 0,
-      'tags': tags,
+      'tags': normalizedTags.toList(),
       'isQuestion': isQuestion,
     });
   }
@@ -288,6 +296,10 @@ class CommunityRepository {
       final university = tab == CommunityTab.myUniversity
           ? await getUserUniversity()
           : null;
+      if (tab == CommunityTab.myUniversity &&
+          (university == null || university.isEmpty)) {
+        return [];
+      }
       return _applySearch(
         posts,
         query,
@@ -327,11 +339,13 @@ class CommunityRepository {
     }
 
     final trimmed = query.trim().toLowerCase();
-    final normalizedTag = normalizeTag(tagFilter ?? '')?.toLowerCase();
+    final normalizedTag = normalizeTag(tagFilter ?? '');
     if (normalizedTag != null) {
       filtered = filtered
-          .where((post) =>
-              post.tags.any((tag) => tag.toLowerCase() == normalizedTag))
+          .where((post) => post.tags.any((tag) {
+                final normalized = normalizeTag(tag);
+                return normalized != null && normalized == normalizedTag;
+              }))
           .toList();
     }
 
