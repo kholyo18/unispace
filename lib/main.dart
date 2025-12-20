@@ -1266,11 +1266,11 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
           textDirection: TextDirection.ltr,
           //mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
             ),
             const SizedBox(width: 4),
             Align( alignment: Alignment.centerLeft,
