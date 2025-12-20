@@ -97,6 +97,26 @@ class CommunityRepository {
     });
   }
 
+  Stream<List<PostModel>> streamCommunityPosts({
+    required CommunityTab tab,
+    String query = '',
+    String? tagFilter,
+    bool showUnanswered = false,
+    bool showTrending = false,
+    bool showSavedOnly = false,
+    SavedPostCategory? savedCategoryFilter,
+  }) {
+    return streamPosts(
+      tab: tab,
+      query: query,
+      tagFilter: tagFilter,
+      showUnanswered: showUnanswered,
+      showTrending: showTrending,
+      showSavedOnly: showSavedOnly,
+      savedCategoryFilter: savedCategoryFilter,
+    );
+  }
+
   Stream<PostModel?> streamPost(String postId) {
     return _firestore.collection('posts').doc(postId).snapshots().map((doc) {
       if (!doc.exists) return null;
