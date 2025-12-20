@@ -344,7 +344,7 @@ class AppDrawer extends StatelessWidget {
             const SizedBox(height: 12),
           ],
         ),
-      ),
+      )
     ),
     );
   }
@@ -437,7 +437,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(S.of(context).contactUs),
-      ),
+      )
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -473,7 +473,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             ],
           ),
         ),
-      ),
+      )
     );
   }
 }
@@ -563,7 +563,7 @@ class _LanguageSheet extends StatelessWidget {
             },
           ),
         ],
-      ),
+      )
     );
   }
 }
@@ -652,7 +652,7 @@ class _DrawerLeading extends StatelessWidget {
         icon: const Icon(Icons.menu_open),
         tooltip: MaterialLocalizations.of(ctx).openAppDrawerTooltip,
         onPressed: () => Scaffold.of(ctx).openDrawer(),
-      ),
+      )
     );
 
     if (!showBack) {
@@ -921,7 +921,6 @@ class _SignInScreenState extends State<SignInScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 }
