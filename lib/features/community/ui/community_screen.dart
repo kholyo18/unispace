@@ -364,10 +364,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
       );
     }
 
-    return StreamBuilder<List<PostModel>>(
+    return StreamBuilder<Map<String, SavedPostCategory>>(
       stream: _repository.streamSavedPostCategories(),
       builder: (context, savedSnapshot) {
-        final savedCategories = savedSnapshot.data ?? {};
+        final savedCategoriesMap = savedSnapshot.data;
         return StreamBuilder<List<PostModel>>(
           stream: _repository.streamPosts(
             tab: _tab,
@@ -418,13 +418,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
                 onOpen: () => _openPost(posts[index]),
                 onTagSelected: _setTagFilter,
                 savedCategory: _showSaved
-                    ? savedCategories[posts[index].id]
+                    ? (savedCategoriesMap ?? {})[posts[index].id]
                     : null,
                 onSavedCategoryTap: _showSaved
                     ? () => _chooseSavedCategory(
                           context,
                           posts[index].id,
-                          savedCategories[posts[index].id] ??
+                          (savedCategoriesMap ?? {})[posts[index].id] ??
                               SavedPostCategory.later,
                         )
                     : null,
