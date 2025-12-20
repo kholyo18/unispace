@@ -161,22 +161,25 @@ class AppDrawer extends StatelessWidget {
     final app = UniSpaceApp.of(context);
 
     return SafeArea(
-      child: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [kUniSpaceBlue, kUniSpaceGreen]),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              UserAccountsDrawerHeader(
+                decoration: const BoxDecoration(
+                  gradient:
+                      LinearGradient(colors: [kUniSpaceBlue, kUniSpaceGreen]),
+                ),
+                accountName: Text(user?.email?.split('@').first ?? 'Guest',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                accountEmail: Text(user?.email ?? 'غير مسجّل'),
+                currentAccountPicture: const CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, color: kUniSpaceBlue, size: 36),
+                ),
               ),
-              accountName: Text(user?.email?.split('@').first ?? 'Guest',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-              accountEmail: Text(user?.email ?? 'غير مسجّل'),
-              currentAccountPicture: const CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person, color: kUniSpaceBlue, size: 36),
-              ),
-            ),
 
             // تنقّل سريع
 
@@ -1097,7 +1100,8 @@ class _BottomBarState extends State<_BottomBar> {
                 onTap: () => widget.onTap(1),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
