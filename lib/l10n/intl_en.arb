@@ -191,14 +191,69 @@
   "topContributorBadge": "Top Contributor",
   "postHint": "Share something with the community…",
   "questionPrompt": "Question",
-  "questionHint": "What do you need help with?"
+  "questionHint": "What do you need help with?",
+  "notificationsTitle": "Notifications",
+  "markAllRead": "Mark all as read",
+  "noNotificationsTitle": "No notifications yet",
+  "noNotificationsSubtitle": "You're all caught up. Check back later.",
+  "notificationLike": "Someone liked your post",
+  "notificationComment": "New comment: {snippet}",
+  "notificationCommentNoSnippet": "New comment on your post",
+  "notificationReply": "New reply: {snippet}",
+  "notificationReplyNoSnippet": "New reply on your comment",
+  "timeJustNow": "Just now",
+  "timeMinutesAgo": "{count}m ago",
+  "timeHoursAgo": "{count}h ago",
+  "timeDaysAgo": "{count}d ago",
+  "postNotFound": "This post is no longer available.",
+  "postActions": "Post actions",
+  "reportPost": "Report post",
+  "hidePost": "Hide post",
+  "blockUser": "Block user",
+  "postHidden": "Post hidden",
+  "userBlocked": "User blocked",
+  "reportReasonLabel": "Select a reason",
+  "reportDetailsHint": "Add details (optional)",
+  "submitReport": "Submit report",
+  "reportSubmitted": "Report submitted. Thanks for helping keep the community safe.",
+  "reportReasonSpam": "Spam or scam",
+  "reportReasonHarassment": "Harassment or bullying",
+  "reportReasonHate": "Hate speech",
+  "reportReasonMisinformation": "Misinformation",
+  "reportReasonOther": "Other",
+  "badWordsError": "Please remove inappropriate language before posting.",
+  "updateUniversity": "Update university info",
+  "blockedContentTitle": "Content hidden",
+  "blockedContentSubtitle": "You blocked this user, so their content is hidden.",
+  "@notificationComment": {
+    "placeholders": {
+      "snippet": {}
+    }
+  },
+  "@notificationReply": {
+    "placeholders": {
+      "snippet": {}
+    }
+  },
+  "@timeMinutesAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@timeHoursAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@timeDaysAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  }
 
 
 
 }
-
-
-
 
 
 

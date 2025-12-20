@@ -170,5 +170,63 @@
   ,"postHint": "Partagez quelque chose avec la communauté…"
   ,"questionPrompt": "Question"
   ,"questionHint": "De quoi avez-vous besoin d’aide ?"
+  ,"notificationsTitle": "Notifications"
+  ,"markAllRead": "Tout marquer comme lu"
+  ,"noNotificationsTitle": "Aucune notification pour le moment"
+  ,"noNotificationsSubtitle": "Vous êtes à jour. Revenez plus tard."
+  ,"notificationLike": "Quelqu’un a aimé votre publication"
+  ,"notificationComment": "Nouveau commentaire : {snippet}"
+  ,"notificationCommentNoSnippet": "Nouveau commentaire sur votre publication"
+  ,"notificationReply": "Nouvelle réponse : {snippet}"
+  ,"notificationReplyNoSnippet": "Nouvelle réponse à votre commentaire"
+  ,"timeJustNow": "À l’instant"
+  ,"timeMinutesAgo": "il y a {count} min"
+  ,"timeHoursAgo": "il y a {count} h"
+  ,"timeDaysAgo": "il y a {count} j"
+  ,"postNotFound": "Cette publication n’est plus disponible."
+  ,"postActions": "Actions de la publication"
+  ,"reportPost": "Signaler la publication"
+  ,"hidePost": "Masquer la publication"
+  ,"blockUser": "Bloquer l’utilisateur"
+  ,"postHidden": "Publication masquée"
+  ,"userBlocked": "Utilisateur bloqué"
+  ,"reportReasonLabel": "Sélectionnez une raison"
+  ,"reportDetailsHint": "Ajouter des détails (facultatif)"
+  ,"submitReport": "Envoyer le signalement"
+  ,"reportSubmitted": "Signalement envoyé. Merci de contribuer à la sécurité de la communauté."
+  ,"reportReasonSpam": "Spam ou arnaque"
+  ,"reportReasonHarassment": "Harcèlement ou intimidation"
+  ,"reportReasonHate": "Discours haineux"
+  ,"reportReasonMisinformation": "Désinformation"
+  ,"reportReasonOther": "Autre"
+  ,"badWordsError": "Veuillez retirer les propos inappropriés avant de publier."
+  ,"updateUniversity": "Mettre à jour l’université"
+  ,"blockedContentTitle": "Contenu masqué"
+  ,"blockedContentSubtitle": "Vous avez bloqué cet utilisateur, son contenu est donc masqué."
+  ,"@notificationComment": {
+    "placeholders": {
+      "snippet": {}
+    }
+  }
+  ,"@notificationReply": {
+    "placeholders": {
+      "snippet": {}
+    }
+  }
+  ,"@timeMinutesAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  }
+  ,"@timeHoursAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  }
+  ,"@timeDaysAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  }
 
 }

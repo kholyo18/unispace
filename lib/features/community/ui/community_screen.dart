@@ -13,6 +13,7 @@ import '../utils/saved_post_category.dart';
 import '../utils/tag_utils.dart';
 import 'post_create_sheet.dart';
 import 'post_details_screen.dart';
+import 'notifications_screen.dart';
 import 'widgets/community_skeleton.dart';
 import 'widgets/post_card.dart';
 
@@ -34,6 +35,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
   bool _showSaved = false;
   SavedPostCategory? _savedCategoryFilter;
   String? _university;
+  String? _universityId;
   String? _activeTag;
   static const Duration _searchDebounceDuration =
       Duration(milliseconds: 300);
@@ -45,9 +47,17 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   Future<void> _loadUniversity() async {
-    final university = await _repository.getUserUniversity();
+    final results = await Future.wait([
+      _repository.getUserUniversity(),
+      _repository.getUserUniversityId(),
+    ]);
+    final university = results[0] as String?;
+    final universityId = results[1] as String?;
     if (mounted) {
-      setState(() => _university = university);
+      setState(() {
+        _university = university;
+        _universityId = universityId;
+      });
     }
   }
 
@@ -65,6 +75,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
       builder: (_) => PostCreateSheet(
         repository: _repository,
         university: _university,
+        universityId: _universityId,
       ),
     );
     if (created == true && mounted) {
@@ -152,6 +163,66 @@ class _CommunityScreenState extends State<CommunityScreen> {
             ),
           ],
         ),
+        actions: [
+          if (user != null)
+            StreamBuilder<int>(
+              stream: _repository.unreadCountStream(user.uid),
+              builder: (context, snapshot) {
+                final count = snapshot.data ?? 0;
+                return IconButton(
+                  tooltip: S.of(context).notificationsTitle,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => NotificationsScreen(
+                          repository: _repository,
+                          userId: user.uid,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.notifications_none),
+                      if (count > 0)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            child: Center(
+                              child: Text(
+                                count > 99 ? '99+' : count.toString(),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimary,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 10,
+                                    ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
       ),
       padding: EdgeInsets.zero,
       floatingActionButton: user == null
@@ -356,11 +427,17 @@ class _CommunityScreenState extends State<CommunityScreen> {
     }
 
     if (_tab == CommunityTab.myUniversity &&
-        (_university == null || _university!.isEmpty)) {
+        (_universityId == null || _universityId!.isEmpty)) {
       return EmptyState(
         icon: Icons.school_outlined,
         title: S.of(context).universityNotSet,
         subtitle: S.of(context).universityNotSetHint,
+        action: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => Scaffold.of(context).openEndDrawer(),
+            child: Text(S.of(context).updateUniversity),
+          ),
+        ),
       );
     }
 
@@ -368,67 +445,86 @@ class _CommunityScreenState extends State<CommunityScreen> {
       stream: _repository.streamSavedPostCategories(),
       builder: (context, savedSnapshot) {
         final savedCategoriesMap = savedSnapshot.data;
-        return StreamBuilder<List<PostModel>>(
-          stream: _repository.streamPosts(
-            tab: _tab,
-            query: _searchQuery,
-            tagFilter: _activeTag,
-            showSavedOnly: _showSaved,
-            showTrending: _showTrending,
-            showUnanswered: _showUnanswered,
-            savedCategoryFilter: _savedCategoryFilter,
-          ),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const CommunitySkeleton();
-            }
-            if (snapshot.hasError) {
-              return Center(child: Text(S.of(context).somethingWentWrong));
-            }
-            final posts = snapshot.data ?? [];
-            if (posts.isEmpty) {
-              if (hasSearch || hasActiveTag || hasActiveFilters) {
-                return EmptyState(
-                  icon: Icons.search_off,
-                  title: S.of(context).noResultsTitle,
-                  subtitle: S.of(context).noSearchResults,
-                  action: emptyActions,
-                );
-              }
-              return EmptyState(
-                icon: Icons.public_outlined,
-                title: S.of(context).noPostsYet,
-                subtitle: S.of(context).startDiscussion,
-                action: user == null
-                    ? null
-                    : FilledButton(
-                        onPressed: _openCreateSheet,
-                        child: Text(S.of(context).createFirstPost),
+        return StreamBuilder<Set<String>>(
+          stream: _repository.streamHiddenPostIds(user.uid),
+          builder: (context, hiddenSnapshot) {
+            final hiddenIds = hiddenSnapshot.data ?? <String>{};
+            return StreamBuilder<Set<String>>(
+              stream: _repository.streamBlockedUserIds(user.uid),
+              builder: (context, blockedSnapshot) {
+                final blockedIds = blockedSnapshot.data ?? <String>{};
+                return StreamBuilder<List<PostModel>>(
+                  stream: _repository.streamPosts(
+                    tab: _tab,
+                    query: _searchQuery,
+                    tagFilter: _activeTag,
+                    showSavedOnly: _showSaved,
+                    showTrending: _showTrending,
+                    showUnanswered: _showUnanswered,
+                    savedCategoryFilter: _savedCategoryFilter,
+                  ),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const CommunitySkeleton();
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(S.of(context).somethingWentWrong),
+                      );
+                    }
+                    final posts = (snapshot.data ?? [])
+                        .where((post) =>
+                            !hiddenIds.contains(post.id) &&
+                            !blockedIds.contains(post.authorId))
+                        .toList();
+                    if (posts.isEmpty) {
+                      if (hasSearch || hasActiveTag || hasActiveFilters) {
+                        return EmptyState(
+                          icon: Icons.search_off,
+                          title: S.of(context).noResultsTitle,
+                          subtitle: S.of(context).noSearchResults,
+                          action: emptyActions,
+                        );
+                      }
+                      return EmptyState(
+                        icon: Icons.public_outlined,
+                        title: S.of(context).noPostsYet,
+                        subtitle: S.of(context).startDiscussion,
+                        action: user == null
+                            ? null
+                            : FilledButton(
+                                onPressed: _openCreateSheet,
+                                child: Text(S.of(context).createFirstPost),
+                              ),
+                      );
+                    }
+                    return ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                      itemCount: posts.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 16),
+                      itemBuilder: (_, index) => PostCard(
+                        key: ValueKey(posts[index].id),
+                        post: posts[index],
+                        repository: _repository,
+                        onOpen: () => _openPost(posts[index]),
+                        onTagSelected: _setTagFilter,
+                        savedCategory: _showSaved
+                            ? (savedCategoriesMap ?? {})[posts[index].id]
+                            : null,
+                        onSavedCategoryTap: _showSaved
+                            ? () => _chooseSavedCategory(
+                                  context,
+                                  posts[index].id,
+                                  (savedCategoriesMap ?? {})[posts[index].id] ??
+                                      SavedPostCategory.later,
+                                )
+                            : null,
                       ),
-              );
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-              itemCount: posts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (_, index) => PostCard(
-                key: ValueKey(posts[index].id),
-                post: posts[index],
-                repository: _repository,
-                onOpen: () => _openPost(posts[index]),
-                onTagSelected: _setTagFilter,
-                savedCategory: _showSaved
-                    ? (savedCategoriesMap ?? {})[posts[index].id]
-                    : null,
-                onSavedCategoryTap: _showSaved
-                    ? () => _chooseSavedCategory(
-                          context,
-                          posts[index].id,
-                          (savedCategoriesMap ?? {})[posts[index].id] ??
-                              SavedPostCategory.later,
-                        )
-                    : null,
-              ),
+                    );
+                  },
+                );
+              },
             );
           },
         );

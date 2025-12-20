@@ -8,6 +8,7 @@ class PostModel {
   final String? authorMajor;
   final String? authorYear;
   final String? university;
+  final String? universityId;
   final String content;
   final DateTime? createdAt;
   final int likesCount;
@@ -32,6 +33,7 @@ class PostModel {
     this.authorMajor,
     this.authorYear,
     this.university,
+    this.universityId,
     this.createdAt,
   });
 
@@ -45,6 +47,7 @@ class PostModel {
       authorMajor: data['authorMajor'] as String?,
       authorYear: data['authorYear'] as String?,
       university: data['university'] as String?,
+      universityId: data['universityId'] as String?,
       content: (data['content'] ?? '') as String,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       likesCount: (data['likesCount'] ?? 0) as int,
@@ -64,6 +67,7 @@ class PostModel {
       'authorMajor': authorMajor,
       'authorYear': authorYear,
       'university': university,
+      'universityId': universityId,
       'content': content,
       'createdAt': createdAt,
       'likesCount': likesCount,

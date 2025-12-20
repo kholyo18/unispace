@@ -168,6 +168,64 @@
   ,"postHint": "شارك شيئًا مع المجتمع…"
   ,"questionPrompt": "سؤال"
   ,"questionHint": "بماذا تحتاج مساعدة؟"
+  ,"notificationsTitle": "الإشعارات"
+  ,"markAllRead": "تعيين الكل كمقروء"
+  ,"noNotificationsTitle": "لا توجد إشعارات بعد"
+  ,"noNotificationsSubtitle": "أنت مطّلع على كل جديد. عد لاحقًا."
+  ,"notificationLike": "أعجب شخص بمنشورك"
+  ,"notificationComment": "تعليق جديد: {snippet}"
+  ,"notificationCommentNoSnippet": "تعليق جديد على منشورك"
+  ,"notificationReply": "رد جديد: {snippet}"
+  ,"notificationReplyNoSnippet": "رد جديد على تعليقك"
+  ,"timeJustNow": "الآن"
+  ,"timeMinutesAgo": "منذ {count} دقيقة"
+  ,"timeHoursAgo": "منذ {count} ساعة"
+  ,"timeDaysAgo": "منذ {count} يوم"
+  ,"postNotFound": "هذا المنشور لم يعد متاحًا."
+  ,"postActions": "إجراءات المنشور"
+  ,"reportPost": "الإبلاغ عن المنشور"
+  ,"hidePost": "إخفاء المنشور"
+  ,"blockUser": "حظر المستخدم"
+  ,"postHidden": "تم إخفاء المنشور"
+  ,"userBlocked": "تم حظر المستخدم"
+  ,"reportReasonLabel": "اختر سببًا"
+  ,"reportDetailsHint": "أضف تفاصيل (اختياري)"
+  ,"submitReport": "إرسال البلاغ"
+  ,"reportSubmitted": "تم إرسال البلاغ. شكرًا لمساعدتك في الحفاظ على أمان المجتمع."
+  ,"reportReasonSpam": "رسائل مزعجة أو احتيال"
+  ,"reportReasonHarassment": "تحرش أو تنمر"
+  ,"reportReasonHate": "خطاب كراهية"
+  ,"reportReasonMisinformation": "معلومات مضللة"
+  ,"reportReasonOther": "أخرى"
+  ,"badWordsError": "يرجى إزالة الألفاظ غير اللائقة قبل النشر."
+  ,"updateUniversity": "تحديث معلومات الجامعة"
+  ,"blockedContentTitle": "تم إخفاء المحتوى"
+  ,"blockedContentSubtitle": "قمت بحظر هذا المستخدم، لذا تم إخفاء المحتوى."
+  ,"@notificationComment": {
+    "placeholders": {
+      "snippet": {}
+    }
+  }
+  ,"@notificationReply": {
+    "placeholders": {
+      "snippet": {}
+    }
+  }
+  ,"@timeMinutesAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  }
+  ,"@timeHoursAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  }
+  ,"@timeDaysAgo": {
+    "placeholders": {
+      "count": {}
+    }
+  }
 
 
 

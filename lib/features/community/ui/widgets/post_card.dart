@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../generated/l10n.dart';
@@ -180,6 +181,10 @@ class _PostCardState extends State<PostCard> {
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: theme.hintColor),
                     ),
+                  _PostActionsMenu(
+                    repository: widget.repository,
+                    post: widget.post,
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -347,4 +352,236 @@ class _AuthorBadge extends StatelessWidget {
       },
     );
   }
+}
+
+class _PostActionsMenu extends StatelessWidget {
+  const _PostActionsMenu({
+    required this.repository,
+    required this.post,
+  });
+
+  final CommunityRepository repository;
+  final PostModel post;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+    return PopupMenuButton<_PostAction>(
+      tooltip: S.of(context).postActions,
+      onSelected: (action) async {
+        switch (action) {
+          case _PostAction.report:
+            await _showReportSheet(context, user.uid);
+            break;
+          case _PostAction.hide:
+            await _handleHide(context, user.uid);
+            break;
+          case _PostAction.block:
+            await _handleBlock(context, user.uid);
+            break;
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: _PostAction.report,
+          child: Text(S.of(context).reportPost),
+        ),
+        PopupMenuItem(
+          value: _PostAction.hide,
+          child: Text(S.of(context).hidePost),
+        ),
+        PopupMenuItem(
+          value: _PostAction.block,
+          child: Text(S.of(context).blockUser),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleHide(BuildContext context, String userId) async {
+    await repository.hidePost(userId, post.id);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).postHidden)),
+      );
+    }
+  }
+
+  Future<void> _handleBlock(BuildContext context, String userId) async {
+    if (post.authorId == userId) {
+      return;
+    }
+    await repository.blockUser(userId, post.authorId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).userBlocked)),
+      );
+    }
+  }
+
+  Future<void> _showReportSheet(BuildContext context, String userId) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return _ReportSheet(
+          repository: repository,
+          post: post,
+          userId: userId,
+        );
+      },
+    );
+  }
+}
+
+enum _PostAction { report, hide, block }
+
+class _ReportSheet extends StatefulWidget {
+  const _ReportSheet({
+    required this.repository,
+    required this.post,
+    required this.userId,
+  });
+
+  final CommunityRepository repository;
+  final PostModel post;
+  final String userId;
+
+  @override
+  State<_ReportSheet> createState() => _ReportSheetState();
+}
+
+class _ReportSheetState extends State<_ReportSheet> {
+  final TextEditingController _detailsController = TextEditingController();
+  String? _selectedReason;
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _detailsController.dispose();
+    super.dispose();
+  }
+
+  List<_ReportReason> _reasons(BuildContext context) {
+    return [
+      _ReportReason('spam', S.of(context).reportReasonSpam),
+      _ReportReason('harassment', S.of(context).reportReasonHarassment),
+      _ReportReason('hate', S.of(context).reportReasonHate),
+      _ReportReason('misinformation', S.of(context).reportReasonMisinformation),
+      _ReportReason('other', S.of(context).reportReasonOther),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reasons = _reasons(context);
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                S.of(context).reportPost,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                S.of(context).reportReasonLabel,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: reasons
+                    .map(
+                      (reason) => ChoiceChip(
+                        label: Text(reason.label),
+                        selected: _selectedReason == reason.value,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedReason = selected ? reason.value : null;
+                          });
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _detailsController,
+                minLines: 2,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: S.of(context).reportDetailsHint,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _sending ? null : _submitReport,
+                  child: _sending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(S.of(context).submitReport),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitReport() async {
+    if (_selectedReason == null) {
+      return;
+    }
+    setState(() => _sending = true);
+    try {
+      await widget.repository.reportPost(
+        reporterId: widget.userId,
+        postId: widget.post.id,
+        postOwnerId: widget.post.authorId,
+        reason: _selectedReason!,
+        details: _detailsController.text.trim().isEmpty
+            ? null
+            : _detailsController.text.trim(),
+      );
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).reportSubmitted)),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sending = false);
+      }
+    }
+  }
+}
+
+class _ReportReason {
+  const _ReportReason(this.value, this.label);
+
+  final String value;
+  final String label;
 }

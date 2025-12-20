@@ -26,6 +26,16 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m2(category) => "تم الحفظ في ${category}";
 
+  static String m3(snippet) => "تعليق جديد: ${snippet}";
+
+  static String m4(snippet) => "رد جديد: ${snippet}";
+
+  static String m5(count) => "منذ ${count} دقيقة";
+
+  static String m6(count) => "منذ ${count} ساعة";
+
+  static String m7(count) => "منذ ${count} يوم";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" راسب"),
@@ -232,8 +242,58 @@ class MessageLookup extends MessageLookupByLibrary {
         "tags": MessageLookupByLibrary.simpleMessage("الوسوم"),
         "tagsHint":
             MessageLookupByLibrary.simpleMessage("مثال: #الأنشطة، #السكن"),
+        "badWordsError": MessageLookupByLibrary.simpleMessage(
+            "يرجى إزالة الألفاظ غير اللائقة قبل النشر."),
+        "updateUniversity":
+            MessageLookupByLibrary.simpleMessage("تحديث معلومات الجامعة"),
+        "blockUser": MessageLookupByLibrary.simpleMessage("حظر المستخدم"),
+        "blockedContentSubtitle": MessageLookupByLibrary.simpleMessage(
+            "قمت بحظر هذا المستخدم، لذا تم إخفاء المحتوى."),
+        "blockedContentTitle":
+            MessageLookupByLibrary.simpleMessage("تم إخفاء المحتوى"),
+        "hidePost": MessageLookupByLibrary.simpleMessage("إخفاء المنشور"),
+        "markAllRead":
+            MessageLookupByLibrary.simpleMessage("تعيين الكل كمقروء"),
+        "noNotificationsSubtitle": MessageLookupByLibrary.simpleMessage(
+            "أنت مطّلع على كل جديد. عد لاحقًا."),
+        "noNotificationsTitle":
+            MessageLookupByLibrary.simpleMessage("لا توجد إشعارات بعد"),
+        "notificationComment": m3,
+        "notificationCommentNoSnippet": MessageLookupByLibrary.simpleMessage(
+            "تعليق جديد على منشورك"),
+        "notificationLike":
+            MessageLookupByLibrary.simpleMessage("أعجب شخص بمنشورك"),
+        "notificationReply": m4,
+        "notificationReplyNoSnippet": MessageLookupByLibrary.simpleMessage(
+            "رد جديد على تعليقك"),
+        "notificationsTitle": MessageLookupByLibrary.simpleMessage("الإشعارات"),
+        "postActions": MessageLookupByLibrary.simpleMessage("إجراءات المنشور"),
+        "postHidden": MessageLookupByLibrary.simpleMessage("تم إخفاء المنشور"),
+        "postNotFound": MessageLookupByLibrary.simpleMessage(
+            "هذا المنشور لم يعد متاحًا."),
+        "reportDetailsHint":
+            MessageLookupByLibrary.simpleMessage("أضف تفاصيل (اختياري)"),
+        "reportPost":
+            MessageLookupByLibrary.simpleMessage("الإبلاغ عن المنشور"),
+        "reportReasonHarassment":
+            MessageLookupByLibrary.simpleMessage("تحرش أو تنمر"),
+        "reportReasonHate": MessageLookupByLibrary.simpleMessage("خطاب كراهية"),
+        "reportReasonLabel": MessageLookupByLibrary.simpleMessage("اختر سببًا"),
+        "reportReasonMisinformation":
+            MessageLookupByLibrary.simpleMessage("معلومات مضللة"),
+        "reportReasonOther": MessageLookupByLibrary.simpleMessage("أخرى"),
+        "reportReasonSpam":
+            MessageLookupByLibrary.simpleMessage("رسائل مزعجة أو احتيال"),
+        "reportSubmitted": MessageLookupByLibrary.simpleMessage(
+            "تم إرسال البلاغ. شكرًا لمساعدتك في الحفاظ على أمان المجتمع."),
+        "submitReport": MessageLookupByLibrary.simpleMessage("إرسال البلاغ"),
         "taxLaw": MessageLookupByLibrary.simpleMessage("قانون جبائي"),
         "title": MessageLookupByLibrary.simpleMessage("العنوان"),
+        "timeDaysAgo": m7,
+        "timeHoursAgo": m6,
+        "timeJustNow": MessageLookupByLibrary.simpleMessage("الآن"),
+        "timeMinutesAgo": m5,
+        "userBlocked": MessageLookupByLibrary.simpleMessage("تم حظر المستخدم"),
         "viewAll": MessageLookupByLibrary.simpleMessage("عرض الكل"),
         "welcomeEmoji": MessageLookupByLibrary.simpleMessage("مرحباً بك 👋"),
         "welcomeUniSpace":
