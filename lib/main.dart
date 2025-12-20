@@ -1906,6 +1906,7 @@ class _NotesScreenState extends State<NotesScreen> {
               onArchive: () => setState(() { _archived.remove(n); _notes.add(n); }),
             )),
           ],
+        ],
         ),
       ),
     );
