@@ -18,7 +18,9 @@ import 'widgets/community_skeleton.dart';
 import 'widgets/post_card.dart';
 
 class CommunityScreen extends StatefulWidget {
-  const CommunityScreen({super.key});
+  const CommunityScreen({super.key, required this.drawer});
+
+  final Widget drawer;
 
   @override
   State<CommunityScreen> createState() => _CommunityScreenState();
@@ -140,6 +142,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
     final hasActiveTag = _activeTag != null && _activeTag!.isNotEmpty;
 
     return AppScaffold(
+      drawer: widget.drawer,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         titleSpacing: 0,
@@ -148,7 +151,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
             Builder(
               builder: (context) => IconButton(
                 icon: const Icon(Icons.menu),
-                onPressed: () => Scaffold.of(context).openEndDrawer(),
+                onPressed: () => Scaffold.of(context).openDrawer(),
               ),
             ),
             const SizedBox(width: 4),
@@ -434,7 +437,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
         subtitle: S.of(context).universityNotSetHint,
         action: Builder(
           builder: (context) => FilledButton(
-            onPressed: () => Scaffold.of(context).openEndDrawer(),
+                onPressed: () => Scaffold.of(context).openDrawer(),
             child: Text(S.of(context).updateUniversity),
           ),
         ),

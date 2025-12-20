@@ -4,7 +4,6 @@ class AppScaffold extends StatelessWidget {
   const AppScaffold({
     super.key,
     this.appBar,
-    this.endDrawer,
     this.drawer,
     this.bottomNavigationBar,
     this.floatingActionButton,
@@ -16,7 +15,6 @@ class AppScaffold extends StatelessWidget {
   });
 
   final PreferredSizeWidget? appBar;
-  final Widget? endDrawer;
   final Widget? drawer;
   final Widget? bottomNavigationBar;
   final Widget? floatingActionButton;
@@ -30,15 +28,40 @@ class AppScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final safePadding = padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 16);
+    final textDirection = Directionality.of(context);
 
-    return Scaffold(
-      appBar: appBar,
-      endDrawer: endDrawer,
-      drawer: drawer,
+    final wrappedAppBar = appBar == null
+        ? null
+        : PreferredSize(
+            preferredSize: appBar!.preferredSize,
+            child: Directionality(
+              textDirection: textDirection,
+              child: appBar!,
+            ),
+          );
+
+    final scaffold = Scaffold(
+      appBar: wrappedAppBar,
+      drawer: drawer == null
+          ? null
+          : Directionality(
+              textDirection: textDirection,
+              child: drawer!,
+            ),
       backgroundColor: background ?? theme.colorScheme.background,
       extendBody: extendBody,
-      bottomNavigationBar: bottomNavigationBar,
-      floatingActionButton: floatingActionButton,
+      bottomNavigationBar: bottomNavigationBar == null
+          ? null
+          : Directionality(
+              textDirection: textDirection,
+              child: bottomNavigationBar!,
+            ),
+      floatingActionButton: floatingActionButton == null
+          ? null
+          : Directionality(
+              textDirection: textDirection,
+              child: floatingActionButton!,
+            ),
       floatingActionButtonLocation: floatingActionButtonLocation,
       body: SafeArea(
         top: appBar == null,
@@ -46,9 +69,21 @@ class AppScaffold extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
           padding: safePadding,
-          child: body,
+          child: Directionality(
+            textDirection: textDirection,
+            child: body,
+          ),
         ),
       ),
+    );
+
+    if (drawer == null) {
+      return scaffold;
+    }
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: scaffold,
     );
   }
 }
