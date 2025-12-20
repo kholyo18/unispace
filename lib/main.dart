@@ -473,6 +473,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             ],
           ),
         ),
+      ),
     );
   }
 }
@@ -562,6 +563,7 @@ class _LanguageSheet extends StatelessWidget {
             },
           ),
         ],
+      ),
     );
   }
 }
