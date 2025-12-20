@@ -9,6 +9,7 @@ import '../../../ui/widgets/empty_state.dart';
 import '../../../ui/widgets/app_scaffold.dart';
 import '../data/community_repository.dart';
 import '../models/post_model.dart';
+import '../utils/saved_post_category.dart';
 import '../utils/tag_utils.dart';
 import 'post_create_sheet.dart';
 import 'post_details_screen.dart';
@@ -31,6 +32,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
   bool _showUnanswered = false;
   bool _showTrending = false;
   bool _showSaved = false;
+  SavedPostCategory? _savedCategoryFilter;
   String? _university;
   String? _activeTag;
   static const Duration _searchDebounceDuration =
@@ -117,6 +119,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
       _showSaved = false;
       _showTrending = false;
       _showUnanswered = false;
+      _savedCategoryFilter = null;
     });
   }
 
@@ -221,7 +224,12 @@ class _CommunityScreenState extends State<CommunityScreen> {
                   selected: _showSaved,
                   onSelected: (value) {
                     _commitSearchQuery();
-                    setState(() => _showSaved = value);
+                    setState(() {
+                      _showSaved = value;
+                      if (!value) {
+                        _savedCategoryFilter = null;
+                      }
+                    });
                   },
                 ),
                 FilterChip(
@@ -240,6 +248,52 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     setState(() => _showUnanswered = value);
                   },
                 ),
+                if (_showSaved)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilterChip(
+                        label: Text(S.of(context).savedCategoryLater),
+                        selected:
+                            _savedCategoryFilter == SavedPostCategory.later,
+                        onSelected: (value) {
+                          _commitSearchQuery();
+                          setState(() {
+                            _savedCategoryFilter = value
+                                ? SavedPostCategory.later
+                                : null;
+                          });
+                        },
+                      ),
+                      FilterChip(
+                        label: Text(S.of(context).savedCategoryExams),
+                        selected:
+                            _savedCategoryFilter == SavedPostCategory.exams,
+                        onSelected: (value) {
+                          _commitSearchQuery();
+                          setState(() {
+                            _savedCategoryFilter = value
+                                ? SavedPostCategory.exams
+                                : null;
+                          });
+                        },
+                      ),
+                      FilterChip(
+                        label: Text(S.of(context).savedCategoryAdvice),
+                        selected:
+                            _savedCategoryFilter == SavedPostCategory.advice,
+                        onSelected: (value) {
+                          _commitSearchQuery();
+                          setState(() {
+                            _savedCategoryFilter = value
+                                ? SavedPostCategory.advice
+                                : null;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
                 if (hasActiveTag)
                   InputChip(
                     label: Text(displayTag(_activeTag!)),
@@ -311,56 +365,132 @@ class _CommunityScreenState extends State<CommunityScreen> {
     }
 
     return StreamBuilder<List<PostModel>>(
-      stream: _repository.streamPosts(
-        tab: _tab,
-        query: _searchQuery,
-        tagFilter: _activeTag,
-        showSavedOnly: _showSaved,
-        showTrending: _showTrending,
-        showUnanswered: _showUnanswered,
-      ),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const CommunitySkeleton();
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text(S.of(context).somethingWentWrong));
-        }
-        final posts = snapshot.data ?? [];
-        if (posts.isEmpty) {
-          if (hasSearch || hasActiveTag || hasActiveFilters) {
-            return EmptyState(
-              icon: Icons.search_off,
-              title: S.of(context).noResultsTitle,
-              subtitle: S.of(context).noSearchResults,
-              action: emptyActions,
+      stream: _repository.streamSavedPostCategories(),
+      builder: (context, savedSnapshot) {
+        final savedCategories = savedSnapshot.data ?? {};
+        return StreamBuilder<List<PostModel>>(
+          stream: _repository.streamPosts(
+            tab: _tab,
+            query: _searchQuery,
+            tagFilter: _activeTag,
+            showSavedOnly: _showSaved,
+            showTrending: _showTrending,
+            showUnanswered: _showUnanswered,
+            savedCategoryFilter: _savedCategoryFilter,
+          ),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const CommunitySkeleton();
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text(S.of(context).somethingWentWrong));
+            }
+            final posts = snapshot.data ?? [];
+            if (posts.isEmpty) {
+              if (hasSearch || hasActiveTag || hasActiveFilters) {
+                return EmptyState(
+                  icon: Icons.search_off,
+                  title: S.of(context).noResultsTitle,
+                  subtitle: S.of(context).noSearchResults,
+                  action: emptyActions,
+                );
+              }
+              return EmptyState(
+                icon: Icons.public_outlined,
+                title: S.of(context).noPostsYet,
+                subtitle: S.of(context).startDiscussion,
+                action: user == null
+                    ? null
+                    : FilledButton(
+                        onPressed: _openCreateSheet,
+                        child: Text(S.of(context).createFirstPost),
+                      ),
+              );
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+              itemCount: posts.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 16),
+              itemBuilder: (_, index) => PostCard(
+                key: ValueKey(posts[index].id),
+                post: posts[index],
+                repository: _repository,
+                onOpen: () => _openPost(posts[index]),
+                onTagSelected: _setTagFilter,
+                savedCategory: _showSaved
+                    ? savedCategories[posts[index].id]
+                    : null,
+                onSavedCategoryTap: _showSaved
+                    ? () => _chooseSavedCategory(
+                          context,
+                          posts[index].id,
+                          savedCategories[posts[index].id] ??
+                              SavedPostCategory.later,
+                        )
+                    : null,
+              ),
             );
-          }
-          return EmptyState(
-            icon: Icons.public_outlined,
-            title: S.of(context).noPostsYet,
-            subtitle: S.of(context).startDiscussion,
-            action: user == null
-                ? null
-                : FilledButton(
-                    onPressed: _openCreateSheet,
-                    child: Text(S.of(context).createFirstPost),
-                  ),
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-          itemCount: posts.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 16),
-          itemBuilder: (_, index) => PostCard(
-            key: ValueKey(posts[index].id),
-            post: posts[index],
-            repository: _repository,
-            onOpen: () => _openPost(posts[index]),
-            onTagSelected: _setTagFilter,
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _chooseSavedCategory(
+    BuildContext context,
+    String postId,
+    SavedPostCategory currentCategory,
+  ) async {
+    final selected = await showModalBottomSheet<SavedPostCategory>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  S.of(context).chooseCategory,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              ...SavedPostCategory.values.map((category) {
+                return ListTile(
+                  title: Text(savedPostCategoryLabel(context, category)),
+                  trailing: category == currentCategory
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () => Navigator.pop(context, category),
+                );
+              }),
+            ],
           ),
         );
       },
     );
+    if (selected == null || selected == currentCategory) return;
+    try {
+      await _repository.updateSavedCategory(postId, selected);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              S.of(context)
+                  .savedToCategory(savedPostCategoryLabel(context, selected)),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).loginRequired)),
+        );
+      }
+    }
   }
 }

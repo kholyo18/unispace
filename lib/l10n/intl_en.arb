@@ -149,6 +149,11 @@
   "filterQuestions": "Questions",
   "filterTrending": "Trending",
   "filterSaved": "Saved",
+  "savedCategoryLater": "Later",
+  "savedCategoryExams": "Exams",
+  "savedCategoryAdvice": "Advice",
+  "chooseCategory": "Choose category",
+  "savedToCategory": "Saved to {category}",
   "tags": "Tags",
   "tagsHint": "e.g. #campus, #clubs",
   "postAsQuestion": "Post as a question",
@@ -179,6 +184,11 @@
   "sortComments": "Sort comments",
   "sortNewest": "Newest",
   "sortMostHelpful": "Most helpful",
+  "bestAnswerLabel": "Best Answer",
+  "markBestAnswer": "Mark as Best Answer",
+  "unmarkBestAnswer": "Unmark Best Answer",
+  "helperBadge": "Helper",
+  "topContributorBadge": "Top Contributor",
   "postHint": "Share something with the community…",
   "questionPrompt": "Question",
   "questionHint": "What do you need help with?"
@@ -186,7 +196,6 @@
 
 
 }
-
 
 
 

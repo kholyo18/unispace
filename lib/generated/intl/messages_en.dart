@@ -24,6 +24,8 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m1(e) => "Failed to send: ${e}";
 
+  static String m2(category) => "Saved to ${category}";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" Failed"),
@@ -47,6 +49,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "basicUnit": MessageLookupByLibrary.simpleMessage("Basic Unit"),
         "beFirstToComment": MessageLookupByLibrary.simpleMessage(
             "Be the first to add a helpful reply."),
+        "bestAnswerLabel": MessageLookupByLibrary.simpleMessage("Best Answer"),
         "businessAdministration":
             MessageLookupByLibrary.simpleMessage("Business Administration"),
         "businessLaw": MessageLookupByLibrary.simpleMessage("Business Law"),
@@ -57,6 +60,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "changeTheme": MessageLookupByLibrary.simpleMessage("Change Theme"),
         "chooseLanguage":
             MessageLookupByLibrary.simpleMessage("Choose Language"),
+        "chooseCategory":
+            MessageLookupByLibrary.simpleMessage("Choose category"),
         "chooseTheme": MessageLookupByLibrary.simpleMessage("Choose Theme"),
         "clearSearch": MessageLookupByLibrary.simpleMessage("Clear search"),
         "clearTags": MessageLookupByLibrary.simpleMessage("Clear tags"),
@@ -113,6 +118,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "filterSaved": MessageLookupByLibrary.simpleMessage("Saved"),
         "filterTrending": MessageLookupByLibrary.simpleMessage("Trending"),
         "filterUnanswered": MessageLookupByLibrary.simpleMessage("Unanswered"),
+        "helperBadge": MessageLookupByLibrary.simpleMessage("Helper"),
         "finance": MessageLookupByLibrary.simpleMessage("Finance"),
         "financeInternationalTrade": MessageLookupByLibrary.simpleMessage(
             "Finance and International Trade"),
@@ -193,6 +199,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "postDetails": MessageLookupByLibrary.simpleMessage("Post Details"),
         "postHint": MessageLookupByLibrary.simpleMessage(
             "Share something with the community…"),
+        "markBestAnswer":
+            MessageLookupByLibrary.simpleMessage("Mark as Best Answer"),
         "postPublished": MessageLookupByLibrary.simpleMessage(
             "Your post has been published ✅"),
         "posted": MessageLookupByLibrary.simpleMessage("Post"),
@@ -215,7 +223,12 @@ class MessageLookup extends MessageLookupByLibrary {
         "resetSent":
             MessageLookupByLibrary.simpleMessage("Reset link has been sent"),
         "save": MessageLookupByLibrary.simpleMessage("Save"),
+        "savedCategoryAdvice":
+            MessageLookupByLibrary.simpleMessage("Advice"),
+        "savedCategoryExams": MessageLookupByLibrary.simpleMessage("Exams"),
+        "savedCategoryLater": MessageLookupByLibrary.simpleMessage("Later"),
         "savePost": MessageLookupByLibrary.simpleMessage("Save post"),
+        "savedToCategory": m2,
         "searchClipboard":
             MessageLookupByLibrary.simpleMessage("Search inside clipboard…"),
         "searchFaculty":
@@ -231,6 +244,10 @@ class MessageLookup extends MessageLookupByLibrary {
         "sortComments": MessageLookupByLibrary.simpleMessage("Sort comments"),
         "sortMostHelpful": MessageLookupByLibrary.simpleMessage("Most helpful"),
         "sortNewest": MessageLookupByLibrary.simpleMessage("Newest"),
+        "topContributorBadge":
+            MessageLookupByLibrary.simpleMessage("Top Contributor"),
+        "unmarkBestAnswer":
+            MessageLookupByLibrary.simpleMessage("Unmark Best Answer"),
         "startDiscussion": MessageLookupByLibrary.simpleMessage(
             "Start the first discussion in the community and share your experience with colleagues."),
         "studyResults": MessageLookupByLibrary.simpleMessage("Study Results"),

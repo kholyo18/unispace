@@ -24,6 +24,8 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m1(e) => "تعذر الإرسال: ${e}";
 
+  static String m2(category) => "تم الحفظ في ${category}";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" راسب"),
@@ -47,6 +49,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "basicUnit": MessageLookupByLibrary.simpleMessage("الوحدة الأساسية"),
         "beFirstToComment":
             MessageLookupByLibrary.simpleMessage("كن أول من يضيف ردًا مفيدًا."),
+        "bestAnswerLabel":
+            MessageLookupByLibrary.simpleMessage("أفضل إجابة"),
         "businessAdministration":
             MessageLookupByLibrary.simpleMessage("إدارة أعمال"),
         "businessLaw": MessageLookupByLibrary.simpleMessage("قانون الأعمال"),
@@ -55,6 +59,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "changeLanguage": MessageLookupByLibrary.simpleMessage("تغيير اللغة"),
         "changeTheme": MessageLookupByLibrary.simpleMessage("تغيير المظهر"),
         "chooseLanguage": MessageLookupByLibrary.simpleMessage("اختر اللغة"),
+        "chooseCategory": MessageLookupByLibrary.simpleMessage("اختر الفئة"),
         "chooseTheme": MessageLookupByLibrary.simpleMessage("اختر المظهر"),
         "clearSearch": MessageLookupByLibrary.simpleMessage("مسح البحث"),
         "clearTags": MessageLookupByLibrary.simpleMessage("مسح الوسوم"),
@@ -103,6 +108,7 @@ class MessageLookup extends MessageLookupByLibrary {
             MessageLookupByLibrary.simpleMessage("فشل فتح تطبيق البريد"),
         "familyLaw": MessageLookupByLibrary.simpleMessage("قانون الأسرة"),
         "filterUnanswered": MessageLookupByLibrary.simpleMessage("بدون إجابات"),
+        "helperBadge": MessageLookupByLibrary.simpleMessage("مساعد"),
         "finance": MessageLookupByLibrary.simpleMessage("مالية"),
         "financeInternationalTrade":
             MessageLookupByLibrary.simpleMessage("مالية وتجارة دولية"),
@@ -173,6 +179,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "post": MessageLookupByLibrary.simpleMessage("تم نشر منشورك ✅"),
         "postHint":
             MessageLookupByLibrary.simpleMessage("شارك شيئًا مع المجتمع…"),
+        "markBestAnswer":
+            MessageLookupByLibrary.simpleMessage("تحديد كأفضل إجابة"),
         "posted": MessageLookupByLibrary.simpleMessage("منشور"),
         "privacyPolicy": MessageLookupByLibrary.simpleMessage("سياسة الخصوصية"),
         "privateLaw": MessageLookupByLibrary.simpleMessage("قانون خاص"),
@@ -193,6 +201,11 @@ class MessageLookup extends MessageLookupByLibrary {
         "resetSent":
             MessageLookupByLibrary.simpleMessage("تم إرسال رابط إعادة التعيين"),
         "save": MessageLookupByLibrary.simpleMessage("حفظ"),
+        "savedCategoryAdvice": MessageLookupByLibrary.simpleMessage("نصائح"),
+        "savedCategoryExams":
+            MessageLookupByLibrary.simpleMessage("الامتحانات"),
+        "savedCategoryLater": MessageLookupByLibrary.simpleMessage("لاحقًا"),
+        "savedToCategory": m2,
         "searchClipboard":
             MessageLookupByLibrary.simpleMessage("ابحث داخل الحافظة…"),
         "searchFaculty":
@@ -205,6 +218,10 @@ class MessageLookup extends MessageLookupByLibrary {
         "sortComments": MessageLookupByLibrary.simpleMessage("ترتيب التعليقات"),
         "sortMostHelpful": MessageLookupByLibrary.simpleMessage("الأكثر فائدة"),
         "sortNewest": MessageLookupByLibrary.simpleMessage("الأحدث"),
+        "topContributorBadge":
+            MessageLookupByLibrary.simpleMessage("مساهم بارز"),
+        "unmarkBestAnswer":
+            MessageLookupByLibrary.simpleMessage("إلغاء أفضل إجابة"),
         "startDiscussion": MessageLookupByLibrary.simpleMessage(
             "ابدأ النقاش الأول في المجتمع وشارك تجربتك مع زملائك."),
         "studyResults": MessageLookupByLibrary.simpleMessage("نتائج الدراسة"),
