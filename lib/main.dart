@@ -150,10 +150,10 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
 }
 
 // ============================================================================
-// Global End Drawer — يعمل فعليًا (مظهر/لغة/إعادة كلمة السر/روابط)
+// Global Drawer — يعمل فعليًا (مظهر/لغة/إعادة كلمة السر/روابط)
 // ============================================================================
-class AppEndDrawer extends StatelessWidget {
-  const AppEndDrawer({super.key});
+class AppDrawer extends StatelessWidget {
+  const AppDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +197,9 @@ class AppEndDrawer extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const NotesScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const NotesScreen(drawer: AppDrawer()),
+                  ),
                 );
               },
             ),
@@ -645,7 +647,7 @@ class _DrawerLeading extends StatelessWidget {
       builder: (ctx) => IconButton(
         icon: const Icon(Icons.menu_open),
         tooltip: MaterialLocalizations.of(ctx).openAppDrawerTooltip,
-        onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+        onPressed: () => Scaffold.of(ctx).openDrawer(),
       ),
     );
 
@@ -957,18 +959,18 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final drawer = const AppDrawer();
     return Scaffold(
-      endDrawer: const AppEndDrawer(),
       body: PageView(
         controller: _page,
         onPageChanged: (i) => setState(() => _current = i),
-        children: const [
+        children: [
           // الصفحة الرئيسية: كروت كليات + زر يدخل للدراسة الكاملة
-          HomeLandingScreen(),
+          HomeLandingScreen(drawer: drawer),
           // المجتمع بأسلوب Reddit
-          CommunityScreen(),
+          CommunityScreen(drawer: drawer),
           // الملاحظات الاحترافية
-          NotesScreen(),
+          NotesScreen(drawer: drawer),
 
         ],
       ),
@@ -1144,7 +1146,9 @@ class _BarItem extends StatelessWidget {
 // ============================================================================
 
 class HomeLandingScreen extends StatefulWidget {
-  const HomeLandingScreen({super.key});
+  const HomeLandingScreen({super.key, required this.drawer});
+
+  final Widget drawer;
 
   @override
   State<HomeLandingScreen> createState() => _HomeLandingScreenState();
@@ -1254,7 +1258,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
         quickFaculty == null ? faculties : faculties.skip(1).toList(growable: false);
 
     return AppScaffold(
-       // endDrawer:  AppEndDrawer(),
+      drawer: widget.drawer,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         titleSpacing: 0, // حتى يلتصق المحتوى باليسار
@@ -1265,7 +1269,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
             IconButton(
               icon: const Icon(Icons.menu),
               onPressed: () {
-                Scaffold.of(context).openEndDrawer(); // لأنك تستخدم endDrawer
+                Scaffold.of(context).openDrawer();
               },
             ),
             const SizedBox(width: 4),
@@ -1728,7 +1732,9 @@ class _FacultyQuickCard extends StatelessWidget {
 // Notes — واجهة ملاحظات احترافية (إنشاء/بحث/تثبيت/أرشفة)
 // ============================================================================
 class NotesScreen extends StatefulWidget {
-  const NotesScreen({super.key});
+  const NotesScreen({super.key, required this.drawer});
+
+  final Widget drawer;
   @override
   State<NotesScreen> createState() => _NotesScreenState();
 }
@@ -1792,39 +1798,38 @@ class _NotesScreenState extends State<NotesScreen> {
     final q = _search.text.trim().toLowerCase();
     final pinned = _notes.where((e) => e.pinned && (q.isEmpty || e.match(q))).toList();
     final others = _notes.where((e) => !e.pinned && (q.isEmpty || e.match(q))).toList();
-    final canPop = Navigator.canPop(context);
+    final textDirection = Directionality.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: true,
-        title:  Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          textDirection: TextDirection.ltr,
-          //mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
+    final appBar = AppBar(
+      automaticallyImplyLeading: true,
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        textDirection: TextDirection.ltr,
+        //mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
             textDirection: TextDirection.ltr,
-              children: [
-        IconButton(
-        icon: const Icon(Icons.menu),
-        onPressed: () {
-          Scaffold.of(context).openEndDrawer(); // لأنك تستخدم endDrawer
-        },
-      ),
-            Text(
-              'NotePade',
-              style: GoogleFonts.pacifico(
-                textStyle: Theme.of(context).textTheme.displayLarge,
-                fontSize: 30,
-                fontWeight: FontWeight.w500,
-                fontStyle: FontStyle.italic,
-
+            children: [
+              IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
               ),
-            ),
-               ]),
-            IconButton(onPressed: _create, icon: const Icon(Icons.add_circle_outline)),
-          ],
-        ),
+              Text(
+                'NotePade',
+                style: GoogleFonts.pacifico(
+                  textStyle: Theme.of(context).textTheme.displayLarge,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w500,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+          IconButton(onPressed: _create, icon: const Icon(Icons.add_circle_outline)),
+        ],
+      ),
       //   Text('NotePade',
       //   style: GoogleFonts.pacifico(textStyle: Theme.of(context).textTheme.displayLarge,
       //   fontSize: 30,
@@ -1837,11 +1842,25 @@ class _NotesScreenState extends State<NotesScreen> {
         // actions: [
         //   IconButton(onPressed: _create, icon: const Icon(Icons.add_circle_outline)),
         // ],
+    );
+
+    final scaffold = Scaffold(
+      appBar: PreferredSize(
+        preferredSize: appBar.preferredSize,
+        child: Directionality(
+          textDirection: textDirection,
+          child: appBar,
+        ),
       ),
-     // endDrawer: const AppEndDrawer(),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-        children: [
+      drawer: Directionality(
+        textDirection: textDirection,
+        child: widget.drawer,
+      ),
+      body: Directionality(
+        textDirection: textDirection,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+          children: [
           TextField(
             controller: _search,
             onChanged: (_) => setState(() {}),
@@ -1887,8 +1906,13 @@ class _NotesScreenState extends State<NotesScreen> {
               onArchive: () => setState(() { _archived.remove(n); _notes.add(n); }),
             )),
           ],
-        ],
+        ),
       ),
+    );
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: scaffold,
     );
   }
 }
@@ -2844,7 +2868,7 @@ class FacultyMajorsScreen extends StatelessWidget {
         automaticallyImplyLeading:true,
         title: Text(faculty.name)
       ),
-      endDrawer: const AppEndDrawer(),
+      drawer: const AppDrawer(),
       padding: EdgeInsets.zero,
       body: ListView.separated(
         itemCount: faculty.majors.length,
@@ -2892,85 +2916,105 @@ class MajorTracksScreen extends StatelessWidget {
       tracksByLevel.putIfAbsent(track.level, () => []).add(track);
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: true,
-        title: Text(major.name,)
+    final textDirection = Directionality.of(context);
+    final appBar = AppBar(
+      automaticallyImplyLeading: true,
+      title: Text(major.name,),
+    );
+
+    final scaffold = Scaffold(
+      appBar: PreferredSize(
+        preferredSize: appBar.preferredSize,
+        child: Directionality(
+          textDirection: textDirection,
+          child: appBar,
+        ),
       ),
-      endDrawer: const AppEndDrawer(),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          ...tracksByLevel.entries.map((entry) {
-            final level = entry.key;
-            final tracks = entry.value;
+      drawer: Directionality(
+        textDirection: textDirection,
+        child: const AppDrawer(),
+      ),
+      body: Directionality(
+        textDirection: textDirection,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            ...tracksByLevel.entries.map((entry) {
+              final level = entry.key;
+              final tracks = entry.value;
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Align( alignment: Alignment.centerLeft, child:
-                // عنوان المستوى
-                Text(
-                  level,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                )),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Align( alignment: Alignment.centerLeft, child:
+                  // عنوان المستوى
+                  Text(
+                    level,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                // قائمة التخصصات داخل المستوى مع فاصل بين كل عنصر
-                ...tracks.map((track) {
-                  return Column(
-                    children: [
-                      Card(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .outline
-                                .withOpacity(.4),
+                  // قائمة التخصصات داخل المستوى مع فاصل بين كل عنصر
+                  ...tracks.map((track) {
+                    return Column(
+                      children: [
+                        Card(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outline
+                                  .withOpacity(.4),
+                            ),
+                          ),
+                          child: ListTile(
+                            leading: const Icon(Icons.view_stream_outlined),
+                            title: Text(track.name),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              final specs = createSemesterSpecsForTrack(track);
+                              final sem1 = _pickSemester(specs, 'S1');
+                              final sem2 = _pickSemester(specs, 'S2');
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => StudiesTableScreen(
+                                    facultyName: track.name,
+                                    programName:
+                                    '${major.name} • ${track.name}',
+                                    semester1Modules: sem1,
+                                    semester2Modules: sem2,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                        child: ListTile(
-                          leading: const Icon(Icons.view_stream_outlined),
-                          title: Text(track.name),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            final specs = createSemesterSpecsForTrack(track);
-                            final sem1 = _pickSemester(specs, 'S1');
-                            final sem2 = _pickSemester(specs, 'S2');
 
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => StudiesTableScreen(
-                                  facultyName: track.name,
-                                  programName:
-                                  '${major.name} • ${track.name}',
-                                  semester1Modules: sem1,
-                                  semester2Modules: sem2,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                        // الفاصل بين التخصصات
+                        const SizedBox(height: 14),
+                      ],
+                    );
+                  }).toList(),
 
-                      // الفاصل بين التخصصات
-                      const SizedBox(height: 14),
-                    ],
-                  );
-                }).toList(),
-
-                // فاصل بين المستويات
-                const SizedBox(height: 25),
-              ],
-            );
-          }).toList(),
-        ],
+                  // فاصل بين المستويات
+                  const SizedBox(height: 25),
+                ],
+              );
+            }).toList(),
+          ],
+        ),
       ),
+    );
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: scaffold,
     );
   }
 }
