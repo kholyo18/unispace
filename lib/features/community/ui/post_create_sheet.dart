@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../generated/l10n.dart';
 import '../data/community_repository.dart';
+import '../utils/bad_words_filter.dart';
 import '../utils/tag_utils.dart';
 
 class PostCreateSheet extends StatefulWidget {
@@ -9,10 +10,12 @@ class PostCreateSheet extends StatefulWidget {
     super.key,
     required this.repository,
     required this.university,
+    required this.universityId,
   });
 
   final CommunityRepository repository;
   final String? university;
+  final String? universityId;
 
   @override
   State<PostCreateSheet> createState() => _PostCreateSheetState();
@@ -57,6 +60,12 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
 
     _addTagFromInput();
     final tags = List<String>.from(_selectedTags);
+    if (containsBadWords(content) || containsBadWordsInList(tags)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).badWordsError)),
+      );
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -65,6 +74,7 @@ class _PostCreateSheetState extends State<PostCreateSheet> {
         tags: tags,
         isQuestion: _isQuestion,
         university: widget.university,
+        universityId: widget.universityId,
       );
       if (mounted) {
         Navigator.pop(context, true);

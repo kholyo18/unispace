@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/comment_model.dart';
+import '../models/community_notification.dart';
 import '../models/post_model.dart';
 import '../utils/community_score_utils.dart';
 import '../utils/saved_post_category.dart';
@@ -33,6 +34,14 @@ class CommunityRepository {
     final snapshot =
         await _firestore.collection('users').doc(user.uid).get();
     return snapshot.data()?['university'] as String?;
+  }
+
+  Future<String?> getUserUniversityId() async {
+    final user = _user;
+    if (user == null) return null;
+    final snapshot =
+        await _firestore.collection('users').doc(user.uid).get();
+    return snapshot.data()?['universityId'] as String?;
   }
 
   Stream<List<PostModel>> streamPosts({
@@ -67,12 +76,12 @@ class CommunityRepository {
     }
 
     if (tab == CommunityTab.myUniversity) {
-      final university = await getUserUniversity();
-      if (university == null || university.isEmpty) {
+      final universityId = await getUserUniversityId();
+      if (universityId == null || universityId.isEmpty) {
         yield [];
         return;
       }
-      ref = ref.where('university', isEqualTo: university);
+      ref = ref.where('universityId', isEqualTo: universityId);
     }
 
     if (showTrending) {
@@ -124,11 +133,18 @@ class CommunityRepository {
     });
   }
 
+  Future<PostModel?> fetchPost(String postId) async {
+    final doc = await _firestore.collection('posts').doc(postId).get();
+    if (!doc.exists) return null;
+    return PostModel.fromDoc(doc);
+  }
+
   Future<void> createPost({
     required String content,
     required List<String> tags,
     required bool isQuestion,
     String? university,
+    String? universityId,
   }) async {
     final user = _user;
     if (user == null) {
@@ -147,11 +163,14 @@ class CommunityRepository {
       }
     }
 
+    final resolvedUniversityId =
+        universityId ?? await getUserUniversityId();
     await docRef.set({
       'authorId': user.uid,
       'authorName': authorName,
       'authorEmail': user.email ?? '',
       'university': university,
+      'universityId': resolvedUniversityId,
       'content': content,
       'createdAt': FieldValue.serverTimestamp(),
       'likesCount': 0,
@@ -172,7 +191,7 @@ class CommunityRepository {
     final postRef = _firestore.collection('posts').doc(postId);
     final likeRef = postRef.collection('likes').doc(user.uid);
 
-    return _firestore.runTransaction((transaction) async {
+    final result = await _firestore.runTransaction((transaction) async {
       final likeSnapshot = await transaction.get(likeRef);
       final postSnapshot = await transaction.get(postRef);
       final postData = postSnapshot.data();
@@ -189,7 +208,10 @@ class CommunityRepository {
             SetOptions(merge: true),
           );
         }
-        return false;
+        return {
+          'liked': false,
+          'postAuthorId': postAuthorId,
+        };
       }
       transaction.set(likeRef, {
         'userId': user.uid,
@@ -205,8 +227,21 @@ class CommunityRepository {
           SetOptions(merge: true),
         );
       }
-      return true;
+      return {
+        'liked': true,
+        'postAuthorId': postAuthorId,
+      };
     });
+    final liked = result['liked'] as bool? ?? false;
+    final postAuthorId = result['postAuthorId'] as String?;
+    if (liked && postAuthorId != null && postAuthorId != user.uid) {
+      await createNotificationLike(
+        toUserId: postAuthorId,
+        fromUserId: user.uid,
+        postId: postId,
+      );
+    }
+    return liked;
   }
 
   Stream<bool> streamIsPostLiked(String postId) {
@@ -245,7 +280,8 @@ class CommunityRepository {
     final authorName =
         user.displayName ?? user.email?.split('@').first ?? 'Student';
 
-    await _firestore.runTransaction((transaction) async {
+    final commentId = commentRef.id;
+    final postAuthorId = await _firestore.runTransaction((transaction) async {
       final postSnapshot = await transaction.get(postRef);
       final postData = postSnapshot.data();
       final postAuthorId = postData?['authorId'] as String?;
@@ -265,7 +301,17 @@ class CommunityRepository {
           SetOptions(merge: true),
         );
       }
+      return postAuthorId;
     });
+    if (postAuthorId != null && postAuthorId != user.uid) {
+      await createNotificationComment(
+        toUserId: postAuthorId,
+        fromUserId: user.uid,
+        postId: postId,
+        commentId: commentId,
+        snippet: _snippet(content),
+      );
+    }
   }
 
   Future<bool> toggleSave(
@@ -400,7 +446,7 @@ class CommunityRepository {
               .toList();
 
       final university = tab == CommunityTab.myUniversity
-          ? await getUserUniversity()
+          ? await getUserUniversityId()
           : null;
       if (tab == CommunityTab.myUniversity &&
           (university == null || university.isEmpty)) {
@@ -413,7 +459,7 @@ class CommunityRepository {
         tab: tab,
         showUnanswered: showUnanswered,
         showTrending: showTrending,
-        university: university,
+        universityId: university,
       );
     });
   }
@@ -426,7 +472,7 @@ class CommunityRepository {
     required CommunityTab tab,
     bool showUnanswered = false,
     bool showTrending = false,
-    String? university,
+    String? universityId,
   }) {
     var filtered = posts;
     if (tab == CommunityTab.questions) {
@@ -438,10 +484,10 @@ class CommunityRepository {
           .toList();
     }
     if (tab == CommunityTab.myUniversity &&
-        university != null &&
-        university.isNotEmpty) {
+        universityId != null &&
+        universityId.isNotEmpty) {
       filtered =
-          filtered.where((post) => post.university == university).toList();
+          filtered.where((post) => post.universityId == universityId).toList();
     }
 
     final trimmed = query.trim().toLowerCase();
@@ -557,5 +603,177 @@ class CommunityRepository {
         );
       }
     });
+  }
+
+  Future<void> createNotificationLike({
+    required String toUserId,
+    required String fromUserId,
+    required String postId,
+  }) async {
+    if (toUserId == fromUserId) return;
+    final ref = _firestore.collection('community_notifications').doc();
+    await ref.set({
+      'toUserId': toUserId,
+      'fromUserId': fromUserId,
+      'type': 'like',
+      'postId': postId,
+      'commentId': null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'isRead': false,
+    });
+  }
+
+  Future<void> createNotificationComment({
+    required String toUserId,
+    required String fromUserId,
+    required String postId,
+    required String commentId,
+    String? snippet,
+  }) async {
+    if (toUserId == fromUserId) return;
+    final ref = _firestore.collection('community_notifications').doc();
+    await ref.set({
+      'toUserId': toUserId,
+      'fromUserId': fromUserId,
+      'type': 'comment',
+      'postId': postId,
+      'commentId': commentId,
+      'createdAt': FieldValue.serverTimestamp(),
+      'isRead': false,
+      'snippet': snippet,
+    });
+  }
+
+  Future<void> markNotificationRead(String notificationId) {
+    return _firestore
+        .collection('community_notifications')
+        .doc(notificationId)
+        .update({'isRead': true});
+  }
+
+  Future<void> markAllRead(String toUserId) async {
+    final snapshot = await _firestore
+        .collection('community_notifications')
+        .where('toUserId', isEqualTo: toUserId)
+        .where('isRead', isEqualTo: false)
+        .get();
+    if (snapshot.docs.isEmpty) return;
+    final batch = _firestore.batch();
+    for (final doc in snapshot.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
+  Stream<List<CommunityNotification>> streamNotifications(String toUserId) {
+    if (toUserId.isEmpty) {
+      return Stream<List<CommunityNotification>>.value(const []);
+    }
+    return _firestore
+        .collection('community_notifications')
+        .where('toUserId', isEqualTo: toUserId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map(CommunityNotification.fromDoc).toList());
+  }
+
+  Stream<int> unreadCountStream(String toUserId) {
+    if (toUserId.isEmpty) {
+      return Stream<int>.value(0);
+    }
+    return _firestore
+        .collection('community_notifications')
+        .where('toUserId', isEqualTo: toUserId)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
+  Future<void> hidePost(String userId, String postId) async {
+    final ref = _firestore
+        .collection('community_user_hidden_posts')
+        .doc('${userId}_$postId');
+    await ref.set({
+      'userId': userId,
+      'postId': postId,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> unhidePost(String userId, String postId) {
+    return _firestore
+        .collection('community_user_hidden_posts')
+        .doc('${userId}_$postId')
+        .delete();
+  }
+
+  Stream<Set<String>> streamHiddenPostIds(String userId) {
+    if (userId.isEmpty) {
+      return Stream<Set<String>>.value(<String>{});
+    }
+    return _firestore
+        .collection('community_user_hidden_posts')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => doc.data()['postId'] as String? ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet());
+  }
+
+  Future<void> blockUser(String blockerId, String blockedId) async {
+    final ref = _firestore
+        .collection('community_user_blocks')
+        .doc('${blockerId}_$blockedId');
+    await ref.set({
+      'blockerId': blockerId,
+      'blockedId': blockedId,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> unblockUser(String blockerId, String blockedId) {
+    return _firestore
+        .collection('community_user_blocks')
+        .doc('${blockerId}_$blockedId')
+        .delete();
+  }
+
+  Stream<Set<String>> streamBlockedUserIds(String blockerId) {
+    if (blockerId.isEmpty) {
+      return Stream<Set<String>>.value(<String>{});
+    }
+    return _firestore
+        .collection('community_user_blocks')
+        .where('blockerId', isEqualTo: blockerId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => doc.data()['blockedId'] as String? ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet());
+  }
+
+  Future<void> reportPost({
+    required String reporterId,
+    required String postId,
+    required String postOwnerId,
+    required String reason,
+    String? details,
+  }) async {
+    await _firestore.collection('community_reports').add({
+      'reporterId': reporterId,
+      'postId': postId,
+      'postOwnerId': postOwnerId,
+      'reason': reason,
+      'details': details,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  String _snippet(String content) {
+    final trimmed = content.trim();
+    if (trimmed.length <= 80) return trimmed;
+    return '${trimmed.substring(0, 77)}...';
   }
 }

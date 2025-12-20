@@ -26,6 +26,16 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m2(category) => "Enregistré dans ${category}";
 
+  static String m3(snippet) => "Nouveau commentaire : ${snippet}";
+
+  static String m4(snippet) => "Nouvelle réponse : ${snippet}";
+
+  static String m5(count) => "il y a ${count} min";
+
+  static String m6(count) => "il y a ${count} h";
+
+  static String m7(count) => "il y a ${count} j";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" Échoué"),
@@ -246,8 +256,66 @@ class MessageLookup extends MessageLookupByLibrary {
         "systemMode": MessageLookupByLibrary.simpleMessage("Mode système"),
         "tags": MessageLookupByLibrary.simpleMessage("Tags"),
         "tagsHint": MessageLookupByLibrary.simpleMessage("ex. #campus, #clubs"),
+        "badWordsError": MessageLookupByLibrary.simpleMessage(
+            "Veuillez retirer les propos inappropriés avant de publier."),
+        "updateUniversity":
+            MessageLookupByLibrary.simpleMessage("Mettre à jour l’université"),
+        "blockUser":
+            MessageLookupByLibrary.simpleMessage("Bloquer l’utilisateur"),
+        "blockedContentSubtitle": MessageLookupByLibrary.simpleMessage(
+            "Vous avez bloqué cet utilisateur, son contenu est donc masqué."),
+        "blockedContentTitle":
+            MessageLookupByLibrary.simpleMessage("Contenu masqué"),
+        "hidePost": MessageLookupByLibrary.simpleMessage("Masquer la publication"),
+        "markAllRead":
+            MessageLookupByLibrary.simpleMessage("Tout marquer comme lu"),
+        "noNotificationsSubtitle": MessageLookupByLibrary.simpleMessage(
+            "Vous êtes à jour. Revenez plus tard."),
+        "noNotificationsTitle": MessageLookupByLibrary.simpleMessage(
+            "Aucune notification pour le moment"),
+        "notificationComment": m3,
+        "notificationCommentNoSnippet": MessageLookupByLibrary.simpleMessage(
+            "Nouveau commentaire sur votre publication"),
+        "notificationLike": MessageLookupByLibrary.simpleMessage(
+            "Quelqu’un a aimé votre publication"),
+        "notificationReply": m4,
+        "notificationReplyNoSnippet": MessageLookupByLibrary.simpleMessage(
+            "Nouvelle réponse à votre commentaire"),
+        "notificationsTitle":
+            MessageLookupByLibrary.simpleMessage("Notifications"),
+        "postActions": MessageLookupByLibrary.simpleMessage(
+            "Actions de la publication"),
+        "postHidden":
+            MessageLookupByLibrary.simpleMessage("Publication masquée"),
+        "postNotFound": MessageLookupByLibrary.simpleMessage(
+            "Cette publication n’est plus disponible."),
+        "reportDetailsHint": MessageLookupByLibrary.simpleMessage(
+            "Ajouter des détails (facultatif)"),
+        "reportPost": MessageLookupByLibrary.simpleMessage(
+            "Signaler la publication"),
+        "reportReasonHarassment": MessageLookupByLibrary.simpleMessage(
+            "Harcèlement ou intimidation"),
+        "reportReasonHate":
+            MessageLookupByLibrary.simpleMessage("Discours haineux"),
+        "reportReasonLabel": MessageLookupByLibrary.simpleMessage(
+            "Sélectionnez une raison"),
+        "reportReasonMisinformation":
+            MessageLookupByLibrary.simpleMessage("Désinformation"),
+        "reportReasonOther": MessageLookupByLibrary.simpleMessage("Autre"),
+        "reportReasonSpam":
+            MessageLookupByLibrary.simpleMessage("Spam ou arnaque"),
+        "reportSubmitted": MessageLookupByLibrary.simpleMessage(
+            "Signalement envoyé. Merci de contribuer à la sécurité de la communauté."),
+        "submitReport":
+            MessageLookupByLibrary.simpleMessage("Envoyer le signalement"),
         "taxLaw": MessageLookupByLibrary.simpleMessage("Droit fiscal"),
         "title": MessageLookupByLibrary.simpleMessage("Titre"),
+        "timeDaysAgo": m7,
+        "timeHoursAgo": m6,
+        "timeJustNow": MessageLookupByLibrary.simpleMessage("À l’instant"),
+        "timeMinutesAgo": m5,
+        "userBlocked":
+            MessageLookupByLibrary.simpleMessage("Utilisateur bloqué"),
         "viewAll": MessageLookupByLibrary.simpleMessage("Voir tout"),
         "welcomeEmoji": MessageLookupByLibrary.simpleMessage("Bienvenue 👋"),
         "welcomeUniSpace":

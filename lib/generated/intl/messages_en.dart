@@ -26,6 +26,16 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m2(category) => "Saved to ${category}";
 
+  static String m3(snippet) => "New comment: ${snippet}";
+
+  static String m4(snippet) => "New reply: ${snippet}";
+
+  static String m5(count) => "${count}m ago";
+
+  static String m6(count) => "${count}h ago";
+
+  static String m7(count) => "${count}d ago";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" Failed"),
@@ -258,12 +268,63 @@ class MessageLookup extends MessageLookupByLibrary {
         "tags": MessageLookupByLibrary.simpleMessage("Tags"),
         "tagsHint":
             MessageLookupByLibrary.simpleMessage("e.g. #campus, #clubs"),
+        "badWordsError": MessageLookupByLibrary.simpleMessage(
+            "Please remove inappropriate language before posting."),
+        "updateUniversity":
+            MessageLookupByLibrary.simpleMessage("Update university info"),
+        "blockUser": MessageLookupByLibrary.simpleMessage("Block user"),
+        "blockedContentSubtitle": MessageLookupByLibrary.simpleMessage(
+            "You blocked this user, so their content is hidden."),
+        "blockedContentTitle":
+            MessageLookupByLibrary.simpleMessage("Content hidden"),
+        "hidePost": MessageLookupByLibrary.simpleMessage("Hide post"),
+        "markAllRead": MessageLookupByLibrary.simpleMessage("Mark all as read"),
+        "noNotificationsSubtitle": MessageLookupByLibrary.simpleMessage(
+            "You're all caught up. Check back later."),
+        "noNotificationsTitle":
+            MessageLookupByLibrary.simpleMessage("No notifications yet"),
+        "notificationComment": m3,
+        "notificationCommentNoSnippet": MessageLookupByLibrary.simpleMessage(
+            "New comment on your post"),
+        "notificationLike":
+            MessageLookupByLibrary.simpleMessage("Someone liked your post"),
+        "notificationReply": m4,
+        "notificationReplyNoSnippet": MessageLookupByLibrary.simpleMessage(
+            "New reply on your comment"),
+        "notificationsTitle":
+            MessageLookupByLibrary.simpleMessage("Notifications"),
+        "postActions": MessageLookupByLibrary.simpleMessage("Post actions"),
+        "postHidden": MessageLookupByLibrary.simpleMessage("Post hidden"),
+        "postNotFound": MessageLookupByLibrary.simpleMessage(
+            "This post is no longer available."),
+        "reportDetailsHint":
+            MessageLookupByLibrary.simpleMessage("Add details (optional)"),
+        "reportPost": MessageLookupByLibrary.simpleMessage("Report post"),
+        "reportReasonHarassment": MessageLookupByLibrary.simpleMessage(
+            "Harassment or bullying"),
+        "reportReasonHate":
+            MessageLookupByLibrary.simpleMessage("Hate speech"),
+        "reportReasonLabel":
+            MessageLookupByLibrary.simpleMessage("Select a reason"),
+        "reportReasonMisinformation":
+            MessageLookupByLibrary.simpleMessage("Misinformation"),
+        "reportReasonOther": MessageLookupByLibrary.simpleMessage("Other"),
+        "reportReasonSpam":
+            MessageLookupByLibrary.simpleMessage("Spam or scam"),
+        "reportSubmitted": MessageLookupByLibrary.simpleMessage(
+            "Report submitted. Thanks for helping keep the community safe."),
+        "submitReport": MessageLookupByLibrary.simpleMessage("Submit report"),
         "taxLaw": MessageLookupByLibrary.simpleMessage("Tax Law"),
         "title": MessageLookupByLibrary.simpleMessage("Title"),
+        "timeDaysAgo": m7,
+        "timeHoursAgo": m6,
+        "timeJustNow": MessageLookupByLibrary.simpleMessage("Just now"),
+        "timeMinutesAgo": m5,
         "universityNotSet":
             MessageLookupByLibrary.simpleMessage("University not set"),
         "universityNotSetHint": MessageLookupByLibrary.simpleMessage(
             "Add your university in your profile to see this feed."),
+        "userBlocked": MessageLookupByLibrary.simpleMessage("User blocked"),
         "viewAll": MessageLookupByLibrary.simpleMessage("View All"),
         "welcomeEmoji": MessageLookupByLibrary.simpleMessage("Welcome 👋"),
         "welcomeUniSpace":

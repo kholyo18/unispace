@@ -114,6 +114,9 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final blockStream = user == null
+        ? Stream<Set<String>>.value(<String>{})
+        : widget.repository.streamBlockedUserIds(user.uid);
     return Scaffold(
       appBar: AppBar(
         title: Text(S.of(context).postDetails),
@@ -122,134 +125,160 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         stream: widget.repository.streamPost(widget.post.id),
         builder: (context, snapshot) {
           final post = snapshot.data ?? widget.post;
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: PostCard(
-                  post: post,
-                  repository: widget.repository,
-                  showActions: true,
-                  showOpBadge: true,
-                ),
-              ),
-              Expanded(
-                child: StreamBuilder<List<CommentModel>>(
-                  stream: widget.repository.streamComments(widget.post.id),
-                  builder: (context, snapshot) {
-                    final comments = _sortedComments(
-                      snapshot.data ?? [],
-                      post.bestAnswerCommentId,
-                    );
-                    if (comments.isEmpty) {
-                      return EmptyState(
-                        icon: Icons.chat_bubble_outline,
-                        title: S.of(context).noCommentsYet,
-                        subtitle: S.of(context).beFirstToComment,
-                      );
-                    }
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                          child: Row(
-                            children: [
-                              Text(
-                                S.of(context).sortComments,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: SegmentedButton<CommentSort>(
-                                  segments: [
-                                    ButtonSegment(
-                                      value: CommentSort.newest,
-                                      label: Text(S.of(context).sortNewest),
-                                    ),
-                                    ButtonSegment(
-                                      value: CommentSort.mostHelpful,
-                                      label: Text(S.of(context).sortMostHelpful),
-                                    ),
-                                  ],
-                                  selected: {_commentSort},
-                                  onSelectionChanged: (selection) {
-                                    setState(
-                                      () => _commentSort = selection.first,
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            itemBuilder: (context, index) {
-                              final comment = comments[index];
-                              final isBestAnswer =
-                                  comment.id == post.bestAnswerCommentId;
-                              final canMarkBest = post.isQuestion &&
-                                  user?.uid == post.authorId;
-                              return CommentTile(
-                                repository: widget.repository,
-                                comment: comment,
-                                isOp: comment.authorId == post.authorId,
-                                isBestAnswer: isBestAnswer,
-                                onBestAnswerPressed: canMarkBest
-                                    ? () => _handleBestAnswer(
-                                          post: post,
-                                          comment: comment,
-                                          isBestAnswer: isBestAnswer,
-                                        )
-                                    : null,
-                              );
-                            },
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 8),
-                            itemCount: comments.length,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _commentController,
-                          textInputAction: TextInputAction.send,
-                          decoration: InputDecoration(
-                            hintText: S.of(context).writeComment,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: _sending ? null : _sendComment,
-                        icon: _sending
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.send),
-                      ),
-                    ],
+          return StreamBuilder<Set<String>>(
+            stream: blockStream,
+            builder: (context, blockedSnapshot) {
+              final blockedIds = blockedSnapshot.data ?? <String>{};
+              if (blockedIds.contains(post.authorId)) {
+                return EmptyState(
+                  icon: Icons.block,
+                  title: S.of(context).blockedContentTitle,
+                  subtitle: S.of(context).blockedContentSubtitle,
+                );
+              }
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: PostCard(
+                      post: post,
+                      repository: widget.repository,
+                      showActions: true,
+                      showOpBadge: true,
+                    ),
                   ),
-                ),
-              ),
-            ],
+                  Expanded(
+                    child: StreamBuilder<List<CommentModel>>(
+                      stream:
+                          widget.repository.streamComments(widget.post.id),
+                      builder: (context, snapshot) {
+                        final comments = _sortedComments(
+                          (snapshot.data ?? [])
+                              .where(
+                                (comment) =>
+                                    !blockedIds.contains(comment.authorId),
+                              )
+                              .toList(),
+                          post.bestAnswerCommentId,
+                        );
+                        if (comments.isEmpty) {
+                          return EmptyState(
+                            icon: Icons.chat_bubble_outline,
+                            title: S.of(context).noCommentsYet,
+                            subtitle: S.of(context).beFirstToComment,
+                          );
+                        }
+                        return Column(
+                          children: [
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    S.of(context).sortComments,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: SegmentedButton<CommentSort>(
+                                      segments: [
+                                        ButtonSegment(
+                                          value: CommentSort.newest,
+                                          label: Text(S.of(context).sortNewest),
+                                        ),
+                                        ButtonSegment(
+                                          value: CommentSort.mostHelpful,
+                                          label: Text(
+                                            S.of(context).sortMostHelpful,
+                                          ),
+                                        ),
+                                      ],
+                                      selected: {_commentSort},
+                                      onSelectionChanged: (selection) {
+                                        setState(
+                                          () => _commentSort = selection.first,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: ListView.separated(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                itemBuilder: (context, index) {
+                                  final comment = comments[index];
+                                  final isBestAnswer =
+                                      comment.id == post.bestAnswerCommentId;
+                                  final canMarkBest = post.isQuestion &&
+                                      user?.uid == post.authorId;
+                                  return CommentTile(
+                                    repository: widget.repository,
+                                    comment: comment,
+                                    isOp: comment.authorId == post.authorId,
+                                    isBestAnswer: isBestAnswer,
+                                    onBestAnswerPressed: canMarkBest
+                                        ? () => _handleBestAnswer(
+                                              post: post,
+                                              comment: comment,
+                                              isBestAnswer: isBestAnswer,
+                                            )
+                                        : null,
+                                  );
+                                },
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 8),
+                                itemCount: comments.length,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _commentController,
+                              textInputAction: TextInputAction.send,
+                              decoration: InputDecoration(
+                                hintText: S.of(context).writeComment,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: _sending ? null : _sendComment,
+                            icon: _sending
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),

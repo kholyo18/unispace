@@ -1809,6 +1809,336 @@ class S {
       args: [],
     );
   }
+
+  /// `Notifications`
+  String get notificationsTitle {
+    return Intl.message(
+      'Notifications',
+      name: 'notificationsTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Mark all as read`
+  String get markAllRead {
+    return Intl.message(
+      'Mark all as read',
+      name: 'markAllRead',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No notifications yet`
+  String get noNotificationsTitle {
+    return Intl.message(
+      'No notifications yet',
+      name: 'noNotificationsTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You're all caught up. Check back later.`
+  String get noNotificationsSubtitle {
+    return Intl.message(
+      'You\'re all caught up. Check back later.',
+      name: 'noNotificationsSubtitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Someone liked your post`
+  String get notificationLike {
+    return Intl.message(
+      'Someone liked your post',
+      name: 'notificationLike',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `New comment: {snippet}`
+  String notificationComment(String snippet) {
+    return Intl.message(
+      'New comment: $snippet',
+      name: 'notificationComment',
+      desc: '',
+      args: [snippet],
+    );
+  }
+
+  /// `New comment on your post`
+  String get notificationCommentNoSnippet {
+    return Intl.message(
+      'New comment on your post',
+      name: 'notificationCommentNoSnippet',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `New reply: {snippet}`
+  String notificationReply(String snippet) {
+    return Intl.message(
+      'New reply: $snippet',
+      name: 'notificationReply',
+      desc: '',
+      args: [snippet],
+    );
+  }
+
+  /// `New reply on your comment`
+  String get notificationReplyNoSnippet {
+    return Intl.message(
+      'New reply on your comment',
+      name: 'notificationReplyNoSnippet',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Just now`
+  String get timeJustNow {
+    return Intl.message(
+      'Just now',
+      name: 'timeJustNow',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `{count}m ago`
+  String timeMinutesAgo(int count) {
+    return Intl.message(
+      '${count}m ago',
+      name: 'timeMinutesAgo',
+      desc: '',
+      args: [count],
+    );
+  }
+
+  /// `{count}h ago`
+  String timeHoursAgo(int count) {
+    return Intl.message(
+      '${count}h ago',
+      name: 'timeHoursAgo',
+      desc: '',
+      args: [count],
+    );
+  }
+
+  /// `{count}d ago`
+  String timeDaysAgo(int count) {
+    return Intl.message(
+      '${count}d ago',
+      name: 'timeDaysAgo',
+      desc: '',
+      args: [count],
+    );
+  }
+
+  /// `This post is no longer available.`
+  String get postNotFound {
+    return Intl.message(
+      'This post is no longer available.',
+      name: 'postNotFound',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Post actions`
+  String get postActions {
+    return Intl.message(
+      'Post actions',
+      name: 'postActions',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Report post`
+  String get reportPost {
+    return Intl.message(
+      'Report post',
+      name: 'reportPost',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hide post`
+  String get hidePost {
+    return Intl.message(
+      'Hide post',
+      name: 'hidePost',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Block user`
+  String get blockUser {
+    return Intl.message(
+      'Block user',
+      name: 'blockUser',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Post hidden`
+  String get postHidden {
+    return Intl.message(
+      'Post hidden',
+      name: 'postHidden',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `User blocked`
+  String get userBlocked {
+    return Intl.message(
+      'User blocked',
+      name: 'userBlocked',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Select a reason`
+  String get reportReasonLabel {
+    return Intl.message(
+      'Select a reason',
+      name: 'reportReasonLabel',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add details (optional)`
+  String get reportDetailsHint {
+    return Intl.message(
+      'Add details (optional)',
+      name: 'reportDetailsHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Submit report`
+  String get submitReport {
+    return Intl.message(
+      'Submit report',
+      name: 'submitReport',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Report submitted. Thanks for helping keep the community safe.`
+  String get reportSubmitted {
+    return Intl.message(
+      'Report submitted. Thanks for helping keep the community safe.',
+      name: 'reportSubmitted',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Spam or scam`
+  String get reportReasonSpam {
+    return Intl.message(
+      'Spam or scam',
+      name: 'reportReasonSpam',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Harassment or bullying`
+  String get reportReasonHarassment {
+    return Intl.message(
+      'Harassment or bullying',
+      name: 'reportReasonHarassment',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hate speech`
+  String get reportReasonHate {
+    return Intl.message(
+      'Hate speech',
+      name: 'reportReasonHate',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Misinformation`
+  String get reportReasonMisinformation {
+    return Intl.message(
+      'Misinformation',
+      name: 'reportReasonMisinformation',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Other`
+  String get reportReasonOther {
+    return Intl.message(
+      'Other',
+      name: 'reportReasonOther',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please remove inappropriate language before posting.`
+  String get badWordsError {
+    return Intl.message(
+      'Please remove inappropriate language before posting.',
+      name: 'badWordsError',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Update university info`
+  String get updateUniversity {
+    return Intl.message(
+      'Update university info',
+      name: 'updateUniversity',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Content hidden`
+  String get blockedContentTitle {
+    return Intl.message(
+      'Content hidden',
+      name: 'blockedContentTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `You blocked this user, so their content is hidden.`
+  String get blockedContentSubtitle {
+    return Intl.message(
+      'You blocked this user, so their content is hidden.',
+      name: 'blockedContentSubtitle',
+      desc: '',
+      args: [],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<S> {
