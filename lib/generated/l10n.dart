@@ -1380,6 +1380,56 @@ class S {
     );
   }
 
+  /// `Later`
+  String get savedCategoryLater {
+    return Intl.message(
+      'Later',
+      name: 'savedCategoryLater',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Exams`
+  String get savedCategoryExams {
+    return Intl.message(
+      'Exams',
+      name: 'savedCategoryExams',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Advice`
+  String get savedCategoryAdvice {
+    return Intl.message(
+      'Advice',
+      name: 'savedCategoryAdvice',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Choose category`
+  String get chooseCategory {
+    return Intl.message(
+      'Choose category',
+      name: 'chooseCategory',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Saved to {category}`
+  String savedToCategory(Object category) {
+    return Intl.message(
+      'Saved to $category',
+      name: 'savedToCategory',
+      desc: '',
+      args: [category],
+    );
+  }
+
   /// `Tags`
   String get tags {
     return Intl.message(
@@ -1675,6 +1725,56 @@ class S {
     return Intl.message(
       'Most helpful',
       name: 'sortMostHelpful',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Best Answer`
+  String get bestAnswerLabel {
+    return Intl.message(
+      'Best Answer',
+      name: 'bestAnswerLabel',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Mark as Best Answer`
+  String get markBestAnswer {
+    return Intl.message(
+      'Mark as Best Answer',
+      name: 'markBestAnswer',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Unmark Best Answer`
+  String get unmarkBestAnswer {
+    return Intl.message(
+      'Unmark Best Answer',
+      name: 'unmarkBestAnswer',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Helper`
+  String get helperBadge {
+    return Intl.message(
+      'Helper',
+      name: 'helperBadge',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Top Contributor`
+  String get topContributorBadge {
+    return Intl.message(
+      'Top Contributor',
+      name: 'topContributorBadge',
       desc: '',
       args: [],
     );

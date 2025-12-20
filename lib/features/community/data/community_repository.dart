@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/comment_model.dart';
 import '../models/post_model.dart';
+import '../utils/community_score_utils.dart';
+import '../utils/saved_post_category.dart';
 import '../utils/tag_utils.dart';
 
 /// Suggested baseline Firestore rules for Community:
@@ -40,6 +42,7 @@ class CommunityRepository {
     bool showUnanswered = false,
     bool showTrending = false,
     bool showSavedOnly = false,
+    SavedPostCategory? savedCategoryFilter,
   }) async* {
     if (showSavedOnly) {
       yield* streamSavedPosts(
@@ -48,6 +51,7 @@ class CommunityRepository {
         tab: tab,
         showUnanswered: showUnanswered,
         showTrending: showTrending,
+        savedCategoryFilter: savedCategoryFilter,
       );
       return;
     }
@@ -134,6 +138,8 @@ class CommunityRepository {
       'commentsCount': 0,
       'tags': normalizedTags.toList(),
       'isQuestion': isQuestion,
+      'bestAnswerCommentId': null,
+      'bestAnswerAuthorId': null,
     });
   }
 
@@ -148,11 +154,21 @@ class CommunityRepository {
 
     return _firestore.runTransaction((transaction) async {
       final likeSnapshot = await transaction.get(likeRef);
+      final postSnapshot = await transaction.get(postRef);
+      final postData = postSnapshot.data();
+      final postAuthorId = postData?['authorId'] as String?;
       if (likeSnapshot.exists) {
         transaction.delete(likeRef);
         transaction.update(postRef, {
           'likesCount': FieldValue.increment(-1),
         });
+        if (postAuthorId != null && postAuthorId.isNotEmpty) {
+          transaction.set(
+            _firestore.collection('users').doc(postAuthorId),
+            {'communityScore': FieldValue.increment(-1)},
+            SetOptions(merge: true),
+          );
+        }
         return false;
       }
       transaction.set(likeRef, {
@@ -162,6 +178,13 @@ class CommunityRepository {
       transaction.update(postRef, {
         'likesCount': FieldValue.increment(1),
       });
+      if (postAuthorId != null && postAuthorId.isNotEmpty) {
+        transaction.set(
+          _firestore.collection('users').doc(postAuthorId),
+          {'communityScore': FieldValue.increment(1)},
+          SetOptions(merge: true),
+        );
+      }
       return true;
     });
   }
@@ -203,6 +226,9 @@ class CommunityRepository {
         user.displayName ?? user.email?.split('@').first ?? 'Student';
 
     await _firestore.runTransaction((transaction) async {
+      final postSnapshot = await transaction.get(postRef);
+      final postData = postSnapshot.data();
+      final postAuthorId = postData?['authorId'] as String?;
       transaction.set(commentRef, {
         'authorId': user.uid,
         'authorName': authorName,
@@ -212,10 +238,20 @@ class CommunityRepository {
       transaction.update(postRef, {
         'commentsCount': FieldValue.increment(1),
       });
+      if (postAuthorId != null && postAuthorId.isNotEmpty) {
+        transaction.set(
+          _firestore.collection('users').doc(postAuthorId),
+          {'communityScore': FieldValue.increment(2)},
+          SetOptions(merge: true),
+        );
+      }
     });
   }
 
-  Future<bool> toggleSave(String postId) async {
+  Future<bool> toggleSave(
+    String postId, {
+    SavedPostCategory defaultCategory = SavedPostCategory.later,
+  }) async {
     final user = _user;
     if (user == null) {
       throw StateError('User not authenticated');
@@ -236,8 +272,29 @@ class CommunityRepository {
     await savedRef.set({
       'postId': postId,
       'savedAt': FieldValue.serverTimestamp(),
+      'category': savedPostCategoryValue(defaultCategory),
     });
     return true;
+  }
+
+  Future<void> updateSavedCategory(
+    String postId,
+    SavedPostCategory category,
+  ) async {
+    final user = _user;
+    if (user == null) {
+      throw StateError('User not authenticated');
+    }
+
+    final savedRef = _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('savedPosts')
+        .doc(postId);
+
+    await savedRef.update({
+      'category': savedPostCategoryValue(category),
+    });
   }
 
   Stream<bool> streamIsPostSaved(String postId) {
@@ -254,18 +311,39 @@ class CommunityRepository {
         .map((snapshot) => snapshot.exists);
   }
 
-  Stream<Set<String>> streamSavedPostIds() {
+  Stream<Map<String, SavedPostCategory>> streamSavedPostCategories() {
     final user = _user;
     if (user == null) {
-      return Stream<Set<String>>.value(<String>{});
+      return Stream<Map<String, SavedPostCategory>>.value({});
     }
     return _firestore
         .collection('users')
         .doc(user.uid)
         .collection('savedPosts')
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => doc.id).toSet());
+        .map((snapshot) => {
+              for (final doc in snapshot.docs)
+                doc.id: savedPostCategoryFromValue(
+                  doc.data()['category'] as String?,
+                ),
+            });
+  }
+
+  Stream<SavedPostCategory?> streamSavedCategory(String postId) {
+    final user = _user;
+    if (user == null) {
+      return Stream<SavedPostCategory?>.value(null);
+    }
+    return _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('savedPosts')
+        .doc(postId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) return null;
+      return savedPostCategoryFromValue(snapshot.data()?['category'] as String?);
+    });
   }
 
   Stream<List<PostModel>> streamSavedPosts({
@@ -274,10 +352,11 @@ class CommunityRepository {
     required CommunityTab tab,
     bool showUnanswered = false,
     bool showTrending = false,
+    SavedPostCategory? savedCategoryFilter,
   }) {
-    return streamSavedPostIds().asyncMap((ids) async {
-      if (ids.isEmpty) return [];
-      final idList = ids.toList();
+    return streamSavedPostCategories().asyncMap((savedPosts) async {
+      if (savedPosts.isEmpty) return [];
+      final idList = savedPosts.keys.toList();
       final chunks = <List<String>>[];
       for (var i = 0; i < idList.length; i += 10) {
         chunks.add(idList.sublist(
@@ -293,6 +372,13 @@ class CommunityRepository {
         posts.addAll(snapshot.docs.map(PostModel.fromDoc));
       }
 
+      final filteredSavedPosts = savedCategoryFilter == null
+          ? posts
+          : posts
+              .where((post) =>
+                  savedPosts[post.id] == savedCategoryFilter)
+              .toList();
+
       final university = tab == CommunityTab.myUniversity
           ? await getUserUniversity()
           : null;
@@ -301,7 +387,7 @@ class CommunityRepository {
         return [];
       }
       return _applySearch(
-        posts,
+        filteredSavedPosts,
         query,
         tagFilter,
         tab: tab,
@@ -359,11 +445,12 @@ class CommunityRepository {
 
     if (trimmed.isEmpty) {
       if (showTrending) {
+        final now = DateTime.now();
         filtered.sort((a, b) {
-          final likeCompare = b.likesCount.compareTo(a.likesCount);
-          if (likeCompare != 0) return likeCompare;
-          final commentCompare = b.commentsCount.compareTo(a.commentsCount);
-          if (commentCompare != 0) return commentCompare;
+          final aScore = trendingScore(a, now);
+          final bScore = trendingScore(b, now);
+          final scoreCompare = bScore.compareTo(aScore);
+          if (scoreCompare != 0) return scoreCompare;
           final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
           final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
           return bDate.compareTo(aDate);
@@ -379,11 +466,12 @@ class CommunityRepository {
     }).toList();
 
     if (showTrending) {
+      final now = DateTime.now();
       filtered.sort((a, b) {
-        final likeCompare = b.likesCount.compareTo(a.likesCount);
-        if (likeCompare != 0) return likeCompare;
-        final commentCompare = b.commentsCount.compareTo(a.commentsCount);
-        if (commentCompare != 0) return commentCompare;
+        final aScore = trendingScore(a, now);
+        final bScore = trendingScore(b, now);
+        final scoreCompare = bScore.compareTo(aScore);
+        if (scoreCompare != 0) return scoreCompare;
         final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         return bDate.compareTo(aDate);
@@ -391,5 +479,63 @@ class CommunityRepository {
     }
 
     return filtered;
+  }
+
+  Stream<int> streamCommunityScore(String userId) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .snapshots()
+        .map((snapshot) =>
+            (snapshot.data()?['communityScore'] ?? 0) as int);
+  }
+
+  Future<void> setBestAnswer({
+    required String postId,
+    required String? commentId,
+    required String? commentAuthorId,
+  }) async {
+    final user = _user;
+    if (user == null) {
+      throw StateError('User not authenticated');
+    }
+
+    final postRef = _firestore.collection('posts').doc(postId);
+
+    await _firestore.runTransaction((transaction) async {
+      final postSnapshot = await transaction.get(postRef);
+      final postData = postSnapshot.data();
+      final currentBestAuthorId =
+          postData?['bestAnswerAuthorId'] as String?;
+
+      if (currentBestAuthorId != null && currentBestAuthorId.isNotEmpty) {
+        transaction.set(
+          _firestore.collection('users').doc(currentBestAuthorId),
+          {'communityScore': FieldValue.increment(-10)},
+          SetOptions(merge: true),
+        );
+      }
+
+      if (commentId == null || commentId.isEmpty) {
+        transaction.update(postRef, {
+          'bestAnswerCommentId': null,
+          'bestAnswerAuthorId': null,
+        });
+        return;
+      }
+
+      transaction.update(postRef, {
+        'bestAnswerCommentId': commentId,
+        'bestAnswerAuthorId': commentAuthorId,
+      });
+
+      if (commentAuthorId != null && commentAuthorId.isNotEmpty) {
+        transaction.set(
+          _firestore.collection('users').doc(commentAuthorId),
+          {'communityScore': FieldValue.increment(10)},
+          SetOptions(merge: true),
+        );
+      }
+    });
   }
 }

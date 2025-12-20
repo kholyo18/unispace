@@ -14,6 +14,8 @@ class PostModel {
   final int commentsCount;
   final List<String> tags;
   final bool isQuestion;
+  final String? bestAnswerCommentId;
+  final String? bestAnswerAuthorId;
 
   const PostModel({
     required this.id,
@@ -25,6 +27,8 @@ class PostModel {
     required this.commentsCount,
     required this.tags,
     required this.isQuestion,
+    this.bestAnswerCommentId,
+    this.bestAnswerAuthorId,
     this.authorMajor,
     this.authorYear,
     this.university,
@@ -47,6 +51,8 @@ class PostModel {
       commentsCount: (data['commentsCount'] ?? 0) as int,
       tags: List<String>.from(data['tags'] ?? const []),
       isQuestion: (data['isQuestion'] ?? false) as bool,
+      bestAnswerCommentId: data['bestAnswerCommentId'] as String?,
+      bestAnswerAuthorId: data['bestAnswerAuthorId'] as String?,
     );
   }
 
@@ -64,6 +70,8 @@ class PostModel {
       'commentsCount': commentsCount,
       'tags': tags,
       'isQuestion': isQuestion,
+      'bestAnswerCommentId': bestAnswerCommentId,
+      'bestAnswerAuthorId': bestAnswerAuthorId,
     };
   }
 }

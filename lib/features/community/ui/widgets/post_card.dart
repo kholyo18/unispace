@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../generated/l10n.dart';
 import '../../data/community_repository.dart';
 import '../../models/post_model.dart';
+import '../../utils/community_score_utils.dart';
+import '../../utils/saved_post_category.dart';
 import '../../utils/tag_utils.dart';
 
 class PostCard extends StatefulWidget {
@@ -13,6 +15,8 @@ class PostCard extends StatefulWidget {
     this.onOpen,
     this.showActions = true,
     this.showOpBadge = false,
+    this.savedCategory,
+    this.onSavedCategoryTap,
     this.onTagSelected,
   });
 
@@ -21,6 +25,8 @@ class PostCard extends StatefulWidget {
   final VoidCallback? onOpen;
   final bool showActions;
   final bool showOpBadge;
+  final SavedPostCategory? savedCategory;
+  final VoidCallback? onSavedCategoryTap;
   final ValueChanged<String>? onTagSelected;
 
   @override
@@ -134,6 +140,10 @@ class _PostCardState extends State<PostCard> {
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                             ),
+                            _AuthorBadge(
+                              repository: widget.repository,
+                              authorId: widget.post.authorId,
+                            ),
                             if (widget.showOpBadge)
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -193,6 +203,17 @@ class _PostCardState extends State<PostCard> {
                 widget.post.content,
                 style: theme.textTheme.bodyMedium,
               ),
+              if (widget.savedCategory != null &&
+                  widget.onSavedCategoryTap != null) ...[
+                const SizedBox(height: 12),
+                ActionChip(
+                  label: Text(
+                    savedPostCategoryLabel(context, widget.savedCategory!),
+                  ),
+                  onPressed: widget.onSavedCategoryTap,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ],
               if (tagChips.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Wrap(
@@ -287,5 +308,43 @@ class _PostCardState extends State<PostCard> {
         );
       }
     }
+  }
+}
+
+class _AuthorBadge extends StatelessWidget {
+  const _AuthorBadge({
+    required this.repository,
+    required this.authorId,
+  });
+
+  final CommunityRepository repository;
+  final String authorId;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: repository.streamCommunityScore(authorId),
+      builder: (context, snapshot) {
+        final score = snapshot.data ?? 0;
+        final badge = badgeForScore(score);
+        if (badge == null) return const SizedBox.shrink();
+        final theme = Theme.of(context);
+        return Container(
+          margin: const EdgeInsetsDirectional.only(start: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.secondary.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            badgeLabel(context, badge),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.secondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        );
+      },
+    );
   }
 }

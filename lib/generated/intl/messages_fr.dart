@@ -24,6 +24,8 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m1(e) => "Échec de l\'envoi : ${e}";
 
+  static String m2(category) => "Enregistré dans ${category}";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" Échoué"),
@@ -48,6 +50,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "basicUnit": MessageLookupByLibrary.simpleMessage("Unité fondamentale"),
         "beFirstToComment": MessageLookupByLibrary.simpleMessage(
             "Soyez le premier à ajouter une réponse utile."),
+        "bestAnswerLabel":
+            MessageLookupByLibrary.simpleMessage("Meilleure réponse"),
         "businessAdministration":
             MessageLookupByLibrary.simpleMessage("Administration des affaires"),
         "businessLaw":
@@ -59,6 +63,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "changeTheme": MessageLookupByLibrary.simpleMessage("Changer le thème"),
         "chooseLanguage":
             MessageLookupByLibrary.simpleMessage("Choisir la langue"),
+        "chooseCategory":
+            MessageLookupByLibrary.simpleMessage("Choisir une catégorie"),
         "chooseTheme": MessageLookupByLibrary.simpleMessage("Choisir le thème"),
         "clearSearch":
             MessageLookupByLibrary.simpleMessage("Effacer la recherche"),
@@ -111,6 +117,7 @@ class MessageLookup extends MessageLookupByLibrary {
             MessageLookupByLibrary.simpleMessage("Droit de la famille"),
         "filterUnanswered":
             MessageLookupByLibrary.simpleMessage("Sans réponse"),
+        "helperBadge": MessageLookupByLibrary.simpleMessage("Assistant"),
         "finance": MessageLookupByLibrary.simpleMessage("Finance"),
         "financeInternationalTrade": MessageLookupByLibrary.simpleMessage(
             "Finance et commerce international"),
@@ -183,6 +190,8 @@ class MessageLookup extends MessageLookupByLibrary {
             "Votre publication a été publiée ✅"),
         "postHint": MessageLookupByLibrary.simpleMessage(
             "Partagez quelque chose avec la communauté…"),
+        "markBestAnswer": MessageLookupByLibrary.simpleMessage(
+            "Marquer comme meilleure réponse"),
         "posted": MessageLookupByLibrary.simpleMessage("Publication"),
         "privacyPolicy": MessageLookupByLibrary.simpleMessage(
             "Politique de confidentialité"),
@@ -204,6 +213,11 @@ class MessageLookup extends MessageLookupByLibrary {
         "resetSent": MessageLookupByLibrary.simpleMessage(
             "Le lien de réinitialisation a été envoyé"),
         "save": MessageLookupByLibrary.simpleMessage("Enregistrer"),
+        "savedCategoryAdvice":
+            MessageLookupByLibrary.simpleMessage("Conseils"),
+        "savedCategoryExams": MessageLookupByLibrary.simpleMessage("Examens"),
+        "savedCategoryLater": MessageLookupByLibrary.simpleMessage("Plus tard"),
+        "savedToCategory": m2,
         "searchClipboard": MessageLookupByLibrary.simpleMessage(
             "Rechercher dans le presse-papiers…"),
         "searchFaculty":
@@ -218,6 +232,10 @@ class MessageLookup extends MessageLookupByLibrary {
         "sortMostHelpful":
             MessageLookupByLibrary.simpleMessage("Les plus utiles"),
         "sortNewest": MessageLookupByLibrary.simpleMessage("Les plus récents"),
+        "topContributorBadge":
+            MessageLookupByLibrary.simpleMessage("Meilleur contributeur"),
+        "unmarkBestAnswer": MessageLookupByLibrary.simpleMessage(
+            "Retirer la meilleure réponse"),
         "startDiscussion": MessageLookupByLibrary.simpleMessage(
             "Commencez la première discussion dans la communauté et partagez votre expérience avec vos collègues."),
         "studyResults":
