@@ -5,14 +5,15 @@ String? normalizeTag(String input) {
   if (trimmed.isEmpty) return null;
 
   while (trimmed.startsWith('#')) {
-    trimmed = trimmed.substring(1);
+    trimmed = trimmed.substring(1).trimLeft();
   }
 
-  final collapsed = trimmed.replaceAll(RegExp(r'\s+'), '');
+  final collapsed = trimmed.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (collapsed.isEmpty) return null;
-  if (collapsed.length > kMaxTagLength) return null;
+  final normalized = collapsed.toLowerCase();
+  if (normalized.length > kMaxTagLength) return null;
 
-  return collapsed;
+  return normalized;
 }
 
 String displayTag(String tag) {

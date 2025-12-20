@@ -62,6 +62,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "chooseTheme": MessageLookupByLibrary.simpleMessage("Choisir le thème"),
         "clearSearch":
             MessageLookupByLibrary.simpleMessage("Effacer la recherche"),
+        "clearTags": MessageLookupByLibrary.simpleMessage("Effacer les tags"),
         "clipboard": MessageLookupByLibrary.simpleMessage("Presse-papiers"),
         "close": MessageLookupByLibrary.simpleMessage("Fermer"),
         "coefficient": MessageLookupByLibrary.simpleMessage("Coefficient :"),
@@ -198,6 +199,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "resetFailed": m1,
         "resetPassword": MessageLookupByLibrary.simpleMessage(
             "Réinitialiser le mot de passe"),
+        "resetFilters":
+            MessageLookupByLibrary.simpleMessage("Réinitialiser les filtres"),
         "resetSent": MessageLookupByLibrary.simpleMessage(
             "Le lien de réinitialisation a été envoyé"),
         "save": MessageLookupByLibrary.simpleMessage("Enregistrer"),

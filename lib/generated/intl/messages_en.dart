@@ -59,6 +59,7 @@ class MessageLookup extends MessageLookupByLibrary {
             MessageLookupByLibrary.simpleMessage("Choose Language"),
         "chooseTheme": MessageLookupByLibrary.simpleMessage("Choose Theme"),
         "clearSearch": MessageLookupByLibrary.simpleMessage("Clear search"),
+        "clearTags": MessageLookupByLibrary.simpleMessage("Clear tags"),
         "clipboard": MessageLookupByLibrary.simpleMessage("Clipboard"),
         "close": MessageLookupByLibrary.simpleMessage("Close"),
         "coefficient": MessageLookupByLibrary.simpleMessage("Coefficient:"),
@@ -210,6 +211,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "report": MessageLookupByLibrary.simpleMessage("Report"),
         "resetFailed": m1,
         "resetPassword": MessageLookupByLibrary.simpleMessage("Reset Password"),
+        "resetFilters": MessageLookupByLibrary.simpleMessage("Reset filters"),
         "resetSent":
             MessageLookupByLibrary.simpleMessage("Reset link has been sent"),
         "save": MessageLookupByLibrary.simpleMessage("Save"),

@@ -145,6 +145,8 @@
   ,"createFirstPost": "أنشئ أول منشور"
   ,"noResultsTitle": "لا توجد نتائج"
   ,"clearSearch": "مسح البحث"
+  ,"clearTags": "مسح الوسوم"
+  ,"resetFilters": "إعادة ضبط عوامل التصفية"
   ,"suggestedTags": "وسوم مقترحة"
   ,"addTag": "إضافة وسم"
   ,"opBadge": "صاحب المنشور"

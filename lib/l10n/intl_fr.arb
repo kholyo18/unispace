@@ -147,6 +147,8 @@
   ,"createFirstPost": "Créer la première publication"
   ,"noResultsTitle": "Aucun résultat"
   ,"clearSearch": "Effacer la recherche"
+  ,"clearTags": "Effacer les tags"
+  ,"resetFilters": "Réinitialiser les filtres"
   ,"suggestedTags": "Tags suggérés"
   ,"addTag": "Ajouter un tag"
   ,"opBadge": "Auteur"

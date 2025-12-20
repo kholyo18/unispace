@@ -57,6 +57,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "chooseLanguage": MessageLookupByLibrary.simpleMessage("اختر اللغة"),
         "chooseTheme": MessageLookupByLibrary.simpleMessage("اختر المظهر"),
         "clearSearch": MessageLookupByLibrary.simpleMessage("مسح البحث"),
+        "clearTags": MessageLookupByLibrary.simpleMessage("مسح الوسوم"),
         "clipboard": MessageLookupByLibrary.simpleMessage("الحافظة"),
         "close": MessageLookupByLibrary.simpleMessage("إغلاق"),
         "coefficient": MessageLookupByLibrary.simpleMessage("معامل:"),
@@ -187,6 +188,8 @@ class MessageLookup extends MessageLookupByLibrary {
         "resetFailed": m1,
         "resetPassword":
             MessageLookupByLibrary.simpleMessage("إعادة تعيين كلمة المرور"),
+        "resetFilters":
+            MessageLookupByLibrary.simpleMessage("إعادة ضبط عوامل التصفية"),
         "resetSent":
             MessageLookupByLibrary.simpleMessage("تم إرسال رابط إعادة التعيين"),
         "save": MessageLookupByLibrary.simpleMessage("حفظ"),

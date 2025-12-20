@@ -171,6 +171,8 @@
   "createFirstPost": "Create first post",
   "noResultsTitle": "No results",
   "clearSearch": "Clear search",
+  "clearTags": "Clear tags",
+  "resetFilters": "Reset filters",
   "suggestedTags": "Suggested tags",
   "addTag": "Add tag",
   "opBadge": "OP",
@@ -184,7 +186,6 @@
 
 
 }
-
 
 
 
