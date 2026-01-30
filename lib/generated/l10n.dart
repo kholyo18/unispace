@@ -1829,6 +1829,186 @@ class S {
       args: [],
     );
   }
+
+  /// `Exam Calendar`
+  String get examCalendar {
+    return Intl.message(
+      'Exam Calendar',
+      name: 'examCalendar',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add Exam`
+  String get addExam {
+    return Intl.message(
+      'Add Exam',
+      name: 'addExam',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Edit Exam`
+  String get editExam {
+    return Intl.message(
+      'Edit Exam',
+      name: 'editExam',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Delete Exam`
+  String get deleteExam {
+    return Intl.message(
+      'Delete Exam',
+      name: 'deleteExam',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Are you sure you want to delete this exam?`
+  String get confirmDeleteExam {
+    return Intl.message(
+      'Are you sure you want to delete this exam?',
+      name: 'confirmDeleteExam',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Subject`
+  String get examSubject {
+    return Intl.message(
+      'Subject',
+      name: 'examSubject',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please enter the subject`
+  String get examSubjectRequired {
+    return Intl.message(
+      'Please enter the subject',
+      name: 'examSubjectRequired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Room`
+  String get examRoom {
+    return Intl.message(
+      'Room',
+      name: 'examRoom',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Note`
+  String get examNote {
+    return Intl.message(
+      'Note',
+      name: 'examNote',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reminders`
+  String get reminders {
+    return Intl.message(
+      'Reminders',
+      name: 'reminders',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `24 hours before`
+  String get reminder24h {
+    return Intl.message(
+      '24 hours before',
+      name: 'reminder24h',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `2 hours before`
+  String get reminder2h {
+    return Intl.message(
+      '2 hours before',
+      name: 'reminder2h',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `30 minutes before`
+  String get reminder30m {
+    return Intl.message(
+      '30 minutes before',
+      name: 'reminder30m',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Save Exam`
+  String get saveExam {
+    return Intl.message(
+      'Save Exam',
+      name: 'saveExam',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No exams for this day`
+  String get noExamsDay {
+    return Intl.message(
+      'No exams for this day',
+      name: 'noExamsDay',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reminder: {subject} in 24 hours`
+  String examReminder24h(String subject) {
+    return Intl.message(
+      'Reminder: $subject in 24 hours',
+      name: 'examReminder24h',
+      desc: '',
+      args: [subject],
+    );
+  }
+
+  /// `Reminder: {subject} in 2 hours`
+  String examReminder2h(String subject) {
+    return Intl.message(
+      'Reminder: $subject in 2 hours',
+      name: 'examReminder2h',
+      desc: '',
+      args: [subject],
+    );
+  }
+
+  /// `Reminder: {subject} in 30 minutes`
+  String examReminder30m(String subject) {
+    return Intl.message(
+      'Reminder: $subject in 30 minutes',
+      name: 'examReminder30m',
+      desc: '',
+      args: [subject],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<S> {

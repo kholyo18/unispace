@@ -26,6 +26,12 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m2(min) => "يرجى إدخال ${min} أحرف على الأقل";
 
+  static String m3(subject) => "تذكير: ${subject} بعد 24 ساعة";
+
+  static String m4(subject) => "تذكير: ${subject} بعد ساعتين";
+
+  static String m5(subject) => "تذكير: ${subject} بعد 30 دقيقة";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" راسب"),
@@ -251,6 +257,7 @@ class MessageLookup extends MessageLookupByLibrary {
         "resetSent":
             MessageLookupByLibrary.simpleMessage("تم إرسال رابط إعادة التعيين"),
         "save": MessageLookupByLibrary.simpleMessage("حفظ"),
+        "saveExam": MessageLookupByLibrary.simpleMessage("حفظ الامتحان"),
         "savePost": MessageLookupByLibrary.simpleMessage("حفظ المنشور"),
         "searchClipboard":
             MessageLookupByLibrary.simpleMessage("ابحث داخل الحافظة…"),
@@ -264,6 +271,27 @@ class MessageLookup extends MessageLookupByLibrary {
         "servicesMarketing":
             MessageLookupByLibrary.simpleMessage("تسويق الخدمات"),
         "share": MessageLookupByLibrary.simpleMessage("مشاركة"),
+        "addExam": MessageLookupByLibrary.simpleMessage("إضافة امتحان"),
+        "confirmDeleteExam":
+            MessageLookupByLibrary.simpleMessage("هل تريد حذف هذا الامتحان؟"),
+        "deleteExam": MessageLookupByLibrary.simpleMessage("حذف الامتحان"),
+        "editExam": MessageLookupByLibrary.simpleMessage("تعديل الامتحان"),
+        "examCalendar": MessageLookupByLibrary.simpleMessage("رزنامة الامتحانات"),
+        "examNote": MessageLookupByLibrary.simpleMessage("ملاحظة"),
+        "examReminder24h": m3,
+        "examReminder2h": m4,
+        "examReminder30m": m5,
+        "examRoom": MessageLookupByLibrary.simpleMessage("القاعة"),
+        "examSubject": MessageLookupByLibrary.simpleMessage("المادة"),
+        "examSubjectRequired":
+            MessageLookupByLibrary.simpleMessage("يرجى إدخال المادة"),
+        "noExamsDay":
+            MessageLookupByLibrary.simpleMessage("لا توجد امتحانات لهذا اليوم"),
+        "reminder24h":
+            MessageLookupByLibrary.simpleMessage("قبل 24 ساعة"),
+        "reminder2h": MessageLookupByLibrary.simpleMessage("قبل ساعتين"),
+        "reminder30m": MessageLookupByLibrary.simpleMessage("قبل 30 دقيقة"),
+        "reminders": MessageLookupByLibrary.simpleMessage("التذكيرات"),
         "startDiscussion": MessageLookupByLibrary.simpleMessage(
             "ابدأ النقاش الأول في المجتمع وشارك تجربتك مع زملائك."),
         "studyResults": MessageLookupByLibrary.simpleMessage("نتائج الدراسة"),
