@@ -1026,26 +1026,7 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
   }
 }
 
-// زر الملاحظات في المنتصف
-// class _NoteFab extends StatelessWidget {
-//   final VoidCallback onTap;
-//   const _NoteFab({required this.onTap});
-//   @override
-//   Widget build(BuildContext context) {
-//     return Padding(
-//       padding: const EdgeInsets.only(bottom: 16),
-//       child: SizedBox(
-//         width: 56,
-//         height: 56,
-//         child: FloatingActionButton(
-//           elevation: 3,
-//           onPressed: onTap,
-//           child: const Icon(Icons.note_alt_outlined, size: 26),
-//         ),
-//       ),
-//     );
-//   }
-// }
+
 
 // شريط سفلي مع شكل احترافي
 class _BottomBar extends StatefulWidget {
@@ -1265,7 +1246,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                       fontSize: 30,
                       fontWeight: FontWeight.w800,
                       fontStyle: FontStyle.italic,
-                      color: Colors.teal[800],
+                      color: Colors.teal[900],
                     ),
                   )),
             ],
@@ -1530,77 +1511,7 @@ class _FacultyQuickCard extends StatelessWidget {
   }
 }
 
-// class _FacultyTile extends StatefulWidget {
-//   const _FacultyTile({required this.faculty, required this.onTap});
-//
-//   final ProgramFaculty faculty;
-//   final VoidCallback onTap;
-//
-//   @override
-//   State<_FacultyTile> createState() => _FacultyTileState();
-// }
-//
-// class _FacultyTileState extends State<_FacultyTile> {
-//   bool _hovered = false;
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final theme = Theme.of(context);
-//     final majorsCount = widget.faculty.majors.length;
-//     final subtitle = majorsCount == 0
-//         ? 'لا تخصصات بعد'
-//         : majorsCount == 1
-//             ? 'تخصص واحد'
-//             : '$majorsCount تخصصات';
-//
-//     return MouseRegion(
-//       onEnter: (_) => setState(() => _hovered = true),
-//       onExit: (_) => setState(() => _hovered = false),
-//       child: Material(
-//         color: Colors.transparent,
-//         child: InkWell(
-//           onTap: widget.onTap,
-//           borderRadius: BorderRadius.circular(20),
-//           child: AnimatedContainer(
-//             duration: const Duration(milliseconds: 180),
-//             curve: Curves.easeInOut,
-//             padding: const EdgeInsets.all(16),
-//             decoration: BoxDecoration(
-//               color: theme.colorScheme.surface,
-//               borderRadius: BorderRadius.circular(20),
-//               border: Border.all(
-//                 color: _hovered
-//                     ? theme.colorScheme.primary.withOpacity(.4)
-//                     : theme.colorScheme.outlineVariant.withOpacity(.4),
-//               ),
-//             ),
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Icon(Icons.apartment_outlined,
-//                     color: theme.colorScheme.primary, size: 38),
-//                 const Spacer(),
-//                 Text(
-//                   widget.faculty.name,
-//                   maxLines: 2,
-//                   overflow: TextOverflow.ellipsis,
-//                   style: theme.textTheme.titleSmall,
-//                 ),
-//                 const SizedBox(height: 6),
-//                 Text(
-//                   subtitle,
-//                   style: theme.textTheme.bodySmall?.copyWith(
-//                     color: theme.colorScheme.onSurfaceVariant,
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
+
 
 // ============================================================================
 // Notes — واجهة ملاحظات احترافية (إنشاء/بحث/تثبيت/أرشفة)
