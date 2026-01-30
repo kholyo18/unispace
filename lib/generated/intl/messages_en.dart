@@ -202,6 +202,10 @@ class MessageLookup extends MessageLookupByLibrary {
             MessageLookupByLibrary.simpleMessage("Search inside Note-pade…"),
         "searchFaculty":
             MessageLookupByLibrary.simpleMessage("Search for a faculty..."),
+        "searchNoResults":
+            MessageLookupByLibrary.simpleMessage("No results found"),
+        "searchStartTyping":
+            MessageLookupByLibrary.simpleMessage("Start typing to search"),
         "sections": MessageLookupByLibrary.simpleMessage("Sections"),
         "servicesMarketing":
             MessageLookupByLibrary.simpleMessage("Services Marketing"),

@@ -33,6 +33,8 @@
   "welcomeEmoji": "Welcome 👋",
   "homeSubtitle": "Browse faculties, calculate your GPA, share your ideas, and write notes easily.",
   "searchFaculty": "Search for a faculty...",
+  "searchStartTyping": "Start typing to search",
+  "searchNoResults": "No results found",
   "quickCalc": "Quick Calculation",
   "welcomeUniSpace": "Welcome to UniSpace",
   "email": "Email",
@@ -170,7 +172,6 @@
 
 
 }
-
 
 
 

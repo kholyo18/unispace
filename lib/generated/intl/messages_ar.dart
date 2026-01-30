@@ -203,6 +203,10 @@ class MessageLookup extends MessageLookupByLibrary {
             MessageLookupByLibrary.simpleMessage("ابحث داخل الحافظة…"),
         "searchFaculty":
             MessageLookupByLibrary.simpleMessage("ابحث عن كلية..."),
+        "searchNoResults":
+            MessageLookupByLibrary.simpleMessage("لا توجد نتائج"),
+        "searchStartTyping":
+            MessageLookupByLibrary.simpleMessage("ابدأ بالكتابة للبحث"),
         "sections": MessageLookupByLibrary.simpleMessage("الأقسام"),
         "servicesMarketing":
             MessageLookupByLibrary.simpleMessage("تسويق الخدمات"),
