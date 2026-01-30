@@ -89,8 +89,8 @@ class AppTheme {
         ),
       ),
       bottomAppBarTheme: BottomAppBarTheme(
-        elevation: brightness == Brightness.light ? 2 : 0,
         color: scheme.surface,
+        elevation: brightness == Brightness.light ? 2 : 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
       tabBarTheme: TabBarThemeData(
