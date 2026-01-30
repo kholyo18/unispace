@@ -72,7 +72,14 @@ const kNoteYellow = Color(0xFFFFF3C4);
 // ============================================================================
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (error, stackTrace) {
+    debugPrint('Firebase initialization failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
   await Hive.initFlutter();
 
   // تسجيل Hive Adapter
@@ -651,33 +658,86 @@ class _SignInScreenState extends State<SignInScreen> {
   final password = TextEditingController();
   bool loading = false;
 
+  String _mapAuthError(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'invalid-email':
+        return 'البريد الإلكتروني غير صالح.';
+      case 'user-disabled':
+        return 'تم تعطيل الحساب.';
+      case 'user-not-found':
+        return 'لا يوجد حساب بهذا البريد.';
+      case 'wrong-password':
+        return 'كلمة المرور غير صحيحة.';
+      case 'email-already-in-use':
+        return 'البريد الإلكتروني مستخدم بالفعل.';
+      case 'weak-password':
+        return 'كلمة المرور ضعيفة. يجب أن تكون 6 أحرف على الأقل.';
+      case 'operation-not-allowed':
+        return 'تم تعطيل التسجيل بالبريد الإلكتروني.';
+      case 'network-request-failed':
+        return 'فشل الاتصال بالشبكة.';
+      default:
+        return error.message ?? 'حدث خطأ غير متوقع.';
+    }
+  }
+
+  void _showAuthSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _login() async {
+    final trimmedEmail = email.text.trim();
+    final trimmedPassword = password.text.trim();
+    if (trimmedEmail.isEmpty || trimmedPassword.isEmpty) {
+      _showAuthSnack('الرجاء إدخال البريد الإلكتروني وكلمة المرور.');
+      return;
+    }
     setState(() => loading = true);
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email.text.trim(),
-        password: password.text.trim(),
+        email: trimmedEmail,
+        password: trimmedPassword,
       );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('خطأ: $e')));
+    } on FirebaseAuthException catch (e, stackTrace) {
+      debugPrint('Login failed: ${e.code} ${e.message}');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack(_mapAuthError(e));
+    } catch (e, stackTrace) {
+      debugPrint('Login failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack('حدث خطأ أثناء تسجيل الدخول.');
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
 
   Future<void> _register() async {
+    final trimmedEmail = email.text.trim();
+    final trimmedPassword = password.text.trim();
+    if (trimmedEmail.isEmpty || trimmedPassword.isEmpty) {
+      _showAuthSnack('الرجاء إدخال البريد الإلكتروني وكلمة المرور.');
+      return;
+    }
+    if (trimmedPassword.length < 6) {
+      _showAuthSnack('كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
+      return;
+    }
     setState(() => loading = true);
     try {
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email.text.trim(),
-        password: password.text.trim(),
+        email: trimmedEmail,
+        password: trimmedPassword,
       );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('فشل التسجيل: $e')));
+    } on FirebaseAuthException catch (e, stackTrace) {
+      debugPrint('Registration failed: ${e.code} ${e.message}');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack(_mapAuthError(e));
+    } catch (e, stackTrace) {
+      debugPrint('Registration failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack('فشل التسجيل. حاول مرة أخرى.');
     } finally {
       if (mounted) setState(() => loading = false);
     }
