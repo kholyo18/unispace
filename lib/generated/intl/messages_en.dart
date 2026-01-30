@@ -24,6 +24,8 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m1(e) => "Failed to send: ${e}";
 
+  static String m2(min) => "Please enter at least ${min} characters";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" Failed"),
@@ -68,7 +70,62 @@ class MessageLookup extends MessageLookupByLibrary {
             "Department of Commercial Sciences"),
         "commonCore": MessageLookupByLibrary.simpleMessage("Common Core"),
         "community": MessageLookupByLibrary.simpleMessage("Community"),
+        "contactCategoryFeature": MessageLookupByLibrary.simpleMessage(
+            "New feature suggestion"),
+        "contactCategoryImprovement":
+            MessageLookupByLibrary.simpleMessage("Improvement"),
+        "contactCategoryIssue":
+            MessageLookupByLibrary.simpleMessage("Issue"),
+        "contactCategoryLabel":
+            MessageLookupByLibrary.simpleMessage("Category"),
+        "contactCategoryOther":
+            MessageLookupByLibrary.simpleMessage("Other"),
+        "contactCategoryReport":
+            MessageLookupByLibrary.simpleMessage("Report"),
+        "contactCopyAction": MessageLookupByLibrary.simpleMessage("Copy"),
+        "contactCopyDialogBody": MessageLookupByLibrary.simpleMessage(
+            "Copy the message and send it to support via your email app."),
+        "contactCopyDialogTitle":
+            MessageLookupByLibrary.simpleMessage("Copy message"),
+        "contactCopied": MessageLookupByLibrary.simpleMessage("Message copied"),
+        "contactDescriptionHint": MessageLookupByLibrary.simpleMessage(
+            "Explain the details so we can help quickly"),
+        "contactDescriptionLabel":
+            MessageLookupByLibrary.simpleMessage("Description"),
+        "contactIncludeUserInfo":
+            MessageLookupByLibrary.simpleMessage("Include my account information"),
+        "contactMailOpened": MessageLookupByLibrary.simpleMessage(
+            "Email app opened to send your message"),
+        "contactMailUnavailable": MessageLookupByLibrary.simpleMessage(
+            "Email app not available. You can copy the message instead."),
+        "contactMetadataAppVersion":
+            MessageLookupByLibrary.simpleMessage("App version"),
+        "contactMetadataEmail": MessageLookupByLibrary.simpleMessage("Email"),
+        "contactMetadataHeader":
+            MessageLookupByLibrary.simpleMessage("Metadata"),
+        "contactMetadataLocale": MessageLookupByLibrary.simpleMessage("Locale"),
+        "contactMetadataName": MessageLookupByLibrary.simpleMessage("Name"),
+        "contactMetadataPlatform":
+            MessageLookupByLibrary.simpleMessage("Platform"),
+        "contactMetadataTimestamp":
+            MessageLookupByLibrary.simpleMessage("Timestamp"),
+        "contactMetadataUserId": MessageLookupByLibrary.simpleMessage("User ID"),
+        "contactScreenshotPlaceholder":
+            MessageLookupByLibrary.simpleMessage("Attach a screenshot"),
+        "contactScreenshotSoon":
+            MessageLookupByLibrary.simpleMessage("Coming soon"),
+        "contactSend": MessageLookupByLibrary.simpleMessage("Send"),
+        "contactSubjectHint": MessageLookupByLibrary.simpleMessage(
+            "Short summary of your request"),
+        "contactSubjectLabel": MessageLookupByLibrary.simpleMessage("Subject"),
         "contactUs": MessageLookupByLibrary.simpleMessage("Contact Us"),
+        "contactUsSubtitle": MessageLookupByLibrary.simpleMessage(
+            "We are happy to hear from you. Send your message to support."),
+        "contactUserInfoUnavailable": MessageLookupByLibrary.simpleMessage(
+            "No signed-in user information available"),
+        "contactValidationMinLength": m2,
+        "contactValidationRequired":
+            MessageLookupByLibrary.simpleMessage("This field is required"),
         "content": MessageLookupByLibrary.simpleMessage("Content"),
         "copyText": MessageLookupByLibrary.simpleMessage("Copy Text"),
         "corporateFinance":

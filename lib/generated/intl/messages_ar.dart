@@ -24,6 +24,8 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m1(e) => "تعذر الإرسال: ${e}";
 
+  static String m2(min) => "يرجى إدخال ${min} أحرف على الأقل";
+
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
         "Fail": MessageLookupByLibrary.simpleMessage(" راسب"),
@@ -66,7 +68,58 @@ class MessageLookup extends MessageLookupByLibrary {
             MessageLookupByLibrary.simpleMessage("قسم علوم تجارية"),
         "commonCore": MessageLookupByLibrary.simpleMessage("جذع مشترك"),
         "community": MessageLookupByLibrary.simpleMessage("المجتمع"),
+        "contactCategoryFeature":
+            MessageLookupByLibrary.simpleMessage("اقتراح ميزة جديدة"),
+        "contactCategoryImprovement":
+            MessageLookupByLibrary.simpleMessage("تحسين"),
+        "contactCategoryIssue": MessageLookupByLibrary.simpleMessage("مشكلة"),
+        "contactCategoryLabel": MessageLookupByLibrary.simpleMessage("الفئة"),
+        "contactCategoryOther": MessageLookupByLibrary.simpleMessage("أخرى"),
+        "contactCategoryReport": MessageLookupByLibrary.simpleMessage("بلاغ"),
+        "contactCopyAction": MessageLookupByLibrary.simpleMessage("نسخ"),
+        "contactCopyDialogBody": MessageLookupByLibrary.simpleMessage(
+            "انسخ الرسالتك وأرسلها إلى الدعم عبر البريد."),
+        "contactCopyDialogTitle":
+            MessageLookupByLibrary.simpleMessage("نسخ الرسالة"),
+        "contactCopied": MessageLookupByLibrary.simpleMessage("تم نسخ الرسالة"),
+        "contactDescriptionHint": MessageLookupByLibrary.simpleMessage(
+            "اشرح التفاصيل لنساعدك بسرعة"),
+        "contactDescriptionLabel": MessageLookupByLibrary.simpleMessage("الوصف"),
+        "contactIncludeUserInfo":
+            MessageLookupByLibrary.simpleMessage("تضمين معلومات الحساب"),
+        "contactMailOpened": MessageLookupByLibrary.simpleMessage(
+            "تم فتح البريد لإرسال رسالتك"),
+        "contactMailUnavailable": MessageLookupByLibrary.simpleMessage(
+            "تعذر فتح تطبيق البريد. يمكنك نسخ الرسالة."),
+        "contactMetadataAppVersion":
+            MessageLookupByLibrary.simpleMessage("إصدار التطبيق"),
+        "contactMetadataEmail":
+            MessageLookupByLibrary.simpleMessage("البريد الإلكتروني"),
+        "contactMetadataHeader":
+            MessageLookupByLibrary.simpleMessage("بيانات إضافية"),
+        "contactMetadataLocale": MessageLookupByLibrary.simpleMessage("اللغة"),
+        "contactMetadataName": MessageLookupByLibrary.simpleMessage("الاسم"),
+        "contactMetadataPlatform":
+            MessageLookupByLibrary.simpleMessage("المنصة"),
+        "contactMetadataTimestamp": MessageLookupByLibrary.simpleMessage("الوقت"),
+        "contactMetadataUserId":
+            MessageLookupByLibrary.simpleMessage("معرّف المستخدم"),
+        "contactScreenshotPlaceholder":
+            MessageLookupByLibrary.simpleMessage("إرفاق لقطة شاشة"),
+        "contactScreenshotSoon":
+            MessageLookupByLibrary.simpleMessage("قريبًا"),
+        "contactSend": MessageLookupByLibrary.simpleMessage("إرسال"),
+        "contactSubjectHint":
+            MessageLookupByLibrary.simpleMessage("ملخص قصير لطلبك"),
+        "contactSubjectLabel": MessageLookupByLibrary.simpleMessage("الموضوع"),
         "contactUs": MessageLookupByLibrary.simpleMessage("تواصل معنا"),
+        "contactUsSubtitle": MessageLookupByLibrary.simpleMessage(
+            "يسعدنا سماع رسالتك. أرسل رسالتك إلى الدعم."),
+        "contactUserInfoUnavailable": MessageLookupByLibrary.simpleMessage(
+            "لا توجد معلومات مستخدم مسجّل الدخول"),
+        "contactValidationMinLength": m2,
+        "contactValidationRequired":
+            MessageLookupByLibrary.simpleMessage("هذا الحقل مطلوب"),
         "content": MessageLookupByLibrary.simpleMessage("المحتوى"),
         "copyText": MessageLookupByLibrary.simpleMessage("نسخ النص"),
         "corporateFinance":

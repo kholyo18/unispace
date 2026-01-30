@@ -161,7 +161,44 @@
   "facultyArtsLanguages": "كلية الآداب واللغات الأجنبية",
   "deptArabicLangLit": "قسم اللغة والأدب العربي",
   "deptFrenchLangLit": "قسم اللغة والأدب الفرنسي",
-  "deptEnglishLangLit": "قسم اللغة والأدب الإنجليزي"
+  "deptEnglishLangLit": "قسم اللغة والأدب الإنجليزي",
+  "contactUsSubtitle": "يسعدنا سماع رسالتك. أرسل رسالتك إلى الدعم.",
+  "contactCategoryLabel": "الفئة",
+  "contactCategoryIssue": "مشكلة",
+  "contactCategoryFeature": "اقتراح ميزة جديدة",
+  "contactCategoryImprovement": "تحسين",
+  "contactCategoryReport": "بلاغ",
+  "contactCategoryOther": "أخرى",
+  "contactSubjectLabel": "الموضوع",
+  "contactSubjectHint": "ملخص قصير لطلبك",
+  "contactDescriptionLabel": "الوصف",
+  "contactDescriptionHint": "اشرح التفاصيل لنساعدك بسرعة",
+  "contactScreenshotPlaceholder": "إرفاق لقطة شاشة",
+  "contactScreenshotSoon": "قريبًا",
+  "contactIncludeUserInfo": "تضمين معلومات الحساب",
+  "contactUserInfoUnavailable": "لا توجد معلومات مستخدم مسجّل الدخول",
+  "contactSend": "إرسال",
+  "contactValidationRequired": "هذا الحقل مطلوب",
+  "contactValidationMinLength": "يرجى إدخال {min} أحرف على الأقل",
+  "@contactValidationMinLength": {
+    "placeholders": {
+      "min": {}
+    }
+  },
+  "contactMailOpened": "تم فتح البريد لإرسال رسالتك",
+  "contactMailUnavailable": "تعذر فتح تطبيق البريد. يمكنك نسخ الرسالة.",
+  "contactCopyDialogTitle": "نسخ الرسالة",
+  "contactCopyDialogBody": "انسخ الرسالتك وأرسلها إلى الدعم عبر البريد.",
+  "contactCopyAction": "نسخ",
+  "contactCopied": "تم نسخ الرسالة",
+  "contactMetadataHeader": "بيانات إضافية",
+  "contactMetadataUserId": "معرّف المستخدم",
+  "contactMetadataEmail": "البريد الإلكتروني",
+  "contactMetadataName": "الاسم",
+  "contactMetadataPlatform": "المنصة",
+  "contactMetadataLocale": "اللغة",
+  "contactMetadataTimestamp": "الوقت",
+  "contactMetadataAppVersion": "إصدار التطبيق"
 
 
 
