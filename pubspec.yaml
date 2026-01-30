@@ -49,6 +49,7 @@ dependencies:
   gallery_saver_plus: ^3.2.9
   image_cropper: ^11.0.0
   video_player: ^2.10.1
+  flutter_local_notifications: ^17.2.3
 
 
 

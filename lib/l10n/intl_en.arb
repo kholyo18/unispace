@@ -201,7 +201,40 @@
   "contactMetadataPlatform": "Platform",
   "contactMetadataLocale": "Locale",
   "contactMetadataTimestamp": "Timestamp",
-  "contactMetadataAppVersion": "App version"
+  "contactMetadataAppVersion": "App version",
+  "examCalendar": "Exam Calendar",
+  "addExam": "Add Exam",
+  "editExam": "Edit Exam",
+  "deleteExam": "Delete Exam",
+  "confirmDeleteExam": "Are you sure you want to delete this exam?",
+  "examSubject": "Subject",
+  "examSubjectRequired": "Please enter the subject",
+  "examRoom": "Room",
+  "examNote": "Note",
+  "reminders": "Reminders",
+  "reminder24h": "24 hours before",
+  "reminder2h": "2 hours before",
+  "reminder30m": "30 minutes before",
+  "saveExam": "Save Exam",
+  "noExamsDay": "No exams for this day",
+  "examReminder24h": "Reminder: {subject} in 24 hours",
+  "@examReminder24h": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "examReminder2h": "Reminder: {subject} in 2 hours",
+  "@examReminder2h": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "examReminder30m": "Reminder: {subject} in 30 minutes",
+  "@examReminder30m": {
+    "placeholders": {
+      "subject": {}
+    }
+  }
 
 
 
@@ -209,7 +242,6 @@
 
 
 }
-
 
 
 

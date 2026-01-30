@@ -198,7 +198,40 @@
   "contactMetadataPlatform": "المنصة",
   "contactMetadataLocale": "اللغة",
   "contactMetadataTimestamp": "الوقت",
-  "contactMetadataAppVersion": "إصدار التطبيق"
+  "contactMetadataAppVersion": "إصدار التطبيق",
+  "examCalendar": "رزنامة الامتحانات",
+  "addExam": "إضافة امتحان",
+  "editExam": "تعديل الامتحان",
+  "deleteExam": "حذف الامتحان",
+  "confirmDeleteExam": "هل تريد حذف هذا الامتحان؟",
+  "examSubject": "المادة",
+  "examSubjectRequired": "يرجى إدخال المادة",
+  "examRoom": "القاعة",
+  "examNote": "ملاحظة",
+  "reminders": "التذكيرات",
+  "reminder24h": "قبل 24 ساعة",
+  "reminder2h": "قبل ساعتين",
+  "reminder30m": "قبل 30 دقيقة",
+  "saveExam": "حفظ الامتحان",
+  "noExamsDay": "لا توجد امتحانات لهذا اليوم",
+  "examReminder24h": "تذكير: {subject} بعد 24 ساعة",
+  "@examReminder24h": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "examReminder2h": "تذكير: {subject} بعد ساعتين",
+  "@examReminder2h": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "examReminder30m": "تذكير: {subject} بعد 30 دقيقة",
+  "@examReminder30m": {
+    "placeholders": {
+      "subject": {}
+    }
+  }
 
 
 

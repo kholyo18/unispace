@@ -200,7 +200,40 @@
   "contactMetadataPlatform": "Plateforme",
   "contactMetadataLocale": "Langue",
   "contactMetadataTimestamp": "Horodatage",
-  "contactMetadataAppVersion": "Version de l'application"
+  "contactMetadataAppVersion": "Version de l'application",
+  "examCalendar": "Calendrier des examens",
+  "addExam": "Ajouter un examen",
+  "editExam": "Modifier l'examen",
+  "deleteExam": "Supprimer l'examen",
+  "confirmDeleteExam": "Voulez-vous supprimer cet examen ?",
+  "examSubject": "Matière",
+  "examSubjectRequired": "Veuillez saisir la matière",
+  "examRoom": "Salle",
+  "examNote": "Note",
+  "reminders": "Rappels",
+  "reminder24h": "24 heures avant",
+  "reminder2h": "2 heures avant",
+  "reminder30m": "30 minutes avant",
+  "saveExam": "Enregistrer l'examen",
+  "noExamsDay": "Aucun examen pour ce jour",
+  "examReminder24h": "Rappel : {subject} dans 24 heures",
+  "@examReminder24h": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "examReminder2h": "Rappel : {subject} dans 2 heures",
+  "@examReminder2h": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "examReminder30m": "Rappel : {subject} dans 30 minutes",
+  "@examReminder30m": {
+    "placeholders": {
+      "subject": {}
+    }
+  }
 
 
 

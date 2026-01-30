@@ -43,6 +43,7 @@ import 'ui/theme.dart';
 import 'ui/contact/contact_us_sheet.dart';
 import 'ui/widgets/widgets.dart';
 import 'ui/faculty_search_page.dart';
+import 'features/exams/presentation/pages/exams_calendar_page.dart';
 import './moduls3.dart';
 import './moduls.dart';
 import 'module/moduls.dart';
@@ -212,6 +213,17 @@ class AppEndDrawer extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const NotesScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.calendar_month_outlined),
+              title: Text(S.of(context).examCalendar),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const ExamsCalendarPage()),
                 );
               },
             ),
