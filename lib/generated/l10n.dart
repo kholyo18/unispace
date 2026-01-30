@@ -360,6 +360,26 @@ class S {
     );
   }
 
+  /// `Start typing to search`
+  String get searchStartTyping {
+    return Intl.message(
+      'Start typing to search',
+      name: 'searchStartTyping',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No results found`
+  String get searchNoResults {
+    return Intl.message(
+      'No results found',
+      name: 'searchNoResults',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Quick Calculation`
   String get quickCalc {
     return Intl.message(

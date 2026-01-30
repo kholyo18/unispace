@@ -32,6 +32,8 @@
   "welcomeEmoji": "Bienvenue 👋",
   "homeSubtitle": "Parcourez les facultés, calculez votre moyenne, partagez vos idées et notez facilement.",
   "searchFaculty": "Rechercher une faculté...",
+  "searchStartTyping": "Commencez à taper pour rechercher",
+  "searchNoResults": "Aucun résultat",
   "quickCalc": "Calcul rapide",
   "welcomeUniSpace": "Bienvenue sur UniSpace",
   "email": "E-mail",

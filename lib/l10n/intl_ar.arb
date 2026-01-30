@@ -31,6 +31,8 @@
   "welcomeEmoji": "مرحباً بك 👋",
   "homeSubtitle": "تصفح الكليات، احسب معدلك، شارك أفكارك، ودوّن ملاحظاتك بسهولة.",
   "searchFaculty": "ابحث عن كلية...",
+  "searchStartTyping": "ابدأ بالكتابة للبحث",
+  "searchNoResults": "لا توجد نتائج",
   "quickCalc": "الحساب السريع",
   "welcomeUniSpace": "مرحبًا بك في UniSpace",
   "email": "البريد الإلكتروني",

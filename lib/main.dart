@@ -41,6 +41,7 @@ import 'firebase_options.dart';
 import 'generated/l10n.dart';
 import 'ui/theme.dart';
 import 'ui/widgets/widgets.dart';
+import 'ui/faculty_search_page.dart';
 import './moduls3.dart';
 import './moduls.dart';
 import 'module/moduls.dart';
@@ -1026,8 +1027,52 @@ class _BarItem extends StatelessWidget {
 // Home Landing — كروت كليات احترافية + دخول إلى Navigator الدراسة
 // ============================================================================
 
-class HomeLandingScreen extends StatelessWidget {
+class HomeLandingScreen extends StatefulWidget {
   const HomeLandingScreen({super.key});
+
+  @override
+  State<HomeLandingScreen> createState() => _HomeLandingScreenState();
+}
+
+class _HomeLandingScreenState extends State<HomeLandingScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearchOpen = false;
+
+  Future<void> _openSearch(BuildContext context, String initialQuery) async {
+    if (_isSearchOpen) {
+      return;
+    }
+    _isSearchOpen = true;
+    FocusScope.of(context).unfocus();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FacultySearchPage(
+          faculties: getDemoFaculties(context),
+          initialQuery: initialQuery,
+          onFacultySelected: _openFaculty,
+        ),
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    _searchController.clear();
+    _isSearchOpen = false;
+  }
+
+  void _openFaculty(BuildContext context, ProgramFaculty faculty) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => FacultyMajorsScreen(faculty: faculty)),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1038,14 +1083,6 @@ class HomeLandingScreen extends StatelessWidget {
     final gridFaculties = quickFaculty == null
         ? faculties
         : faculties.skip(1).toList(growable: false);
-
-    void openFaculty(ProgramFaculty faculty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => FacultyMajorsScreen(faculty: faculty)),
-      );
-    }
 
     return AppScaffold(
         // endDrawer:  AppEndDrawer(),
@@ -1126,8 +1163,14 @@ class HomeLandingScreen extends StatelessWidget {
                     ],
                   ),
                   child: TextField(
+                    controller: _searchController,
                     onChanged: (value) {
-                      // منطق البحث لتصفية الكليات لاحقًا
+                      if (value.trim().isNotEmpty) {
+                        _openSearch(context, value);
+                      }
+                    },
+                    onTap: () {
+                      _openSearch(context, _searchController.text);
                     },
                     decoration: InputDecoration(
                       hintText: S.of(context).searchFaculty,
@@ -1232,7 +1275,7 @@ class HomeLandingScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 9),
                         child: _FacultyQuickCard(
                           faculty: faculty,
-                          onTap: () => openFaculty(faculty),
+                          onTap: () => _openFaculty(context, faculty),
                         ),
                       );
                     },
