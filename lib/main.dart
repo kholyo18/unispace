@@ -40,6 +40,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'firebase_options.dart';
 import 'generated/l10n.dart';
 import 'ui/theme.dart';
+import 'ui/contact/contact_us_sheet.dart';
 import 'ui/widgets/widgets.dart';
 import 'ui/faculty_search_page.dart';
 import './moduls3.dart';
@@ -354,72 +355,11 @@ class AppEndDrawer extends StatelessWidget {
   }
 
   void _showContactDialog(BuildContext context) {
-    final TextEditingController messageController = TextEditingController();
-
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Contact Us"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Write your message below",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-              ),
-              SizedBox(height: 10),
-              TextField(
-                controller: messageController,
-                maxLines: 5,
-                decoration: InputDecoration(
-                  hintText: "Write your message here...",
-                  border: OutlineInputBorder(),
-                ),
-              )
-            ],
-          ),
-          actions: [
-            TextButton(
-              child: const Text("Cancel"),
-              onPressed: () => Navigator.pop(context),
-            ),
-            ElevatedButton(
-              child: const Text("Send"),
-              onPressed: () {
-                _sendEmail(messageController.text);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("تم إرسال الرسالة بنجاح ✅"),
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              },
-            ),
-          ],
-        );
-      },
+      isScrollControlled: true,
+      builder: (_) => const ContactUsSheet(),
     );
-  }
-
-  void _sendEmail(String message) async {
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: 'haitemmehidi@gmail.com', // ← ضع إيميلك هنا
-      queryParameters: {
-        'subject': 'Message from App',
-        'body': message,
-      },
-    );
-
-    if (await canLaunchUrl(emailUri)) {
-      await launchUrl(emailUri);
-    }
   }
 
   static String _langName(String code) {

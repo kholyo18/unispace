@@ -164,7 +164,44 @@
   "facultyArtsLanguages": "Faculty of Arts and Foreign Languages",
   "deptArabicLangLit": "Department of Arabic Language and Literature",
   "deptFrenchLangLit": "Department of French Language and Literature",
-  "deptEnglishLangLit": "Department of English Language and Literature"
+  "deptEnglishLangLit": "Department of English Language and Literature",
+  "contactUsSubtitle": "We are happy to hear from you. Send your message to support.",
+  "contactCategoryLabel": "Category",
+  "contactCategoryIssue": "Issue",
+  "contactCategoryFeature": "New feature suggestion",
+  "contactCategoryImprovement": "Improvement",
+  "contactCategoryReport": "Report",
+  "contactCategoryOther": "Other",
+  "contactSubjectLabel": "Subject",
+  "contactSubjectHint": "Short summary of your request",
+  "contactDescriptionLabel": "Description",
+  "contactDescriptionHint": "Explain the details so we can help quickly",
+  "contactScreenshotPlaceholder": "Attach a screenshot",
+  "contactScreenshotSoon": "Coming soon",
+  "contactIncludeUserInfo": "Include my account information",
+  "contactUserInfoUnavailable": "No signed-in user information available",
+  "contactSend": "Send",
+  "contactValidationRequired": "This field is required",
+  "contactValidationMinLength": "Please enter at least {min} characters",
+  "@contactValidationMinLength": {
+    "placeholders": {
+      "min": {}
+    }
+  },
+  "contactMailOpened": "Email app opened to send your message",
+  "contactMailUnavailable": "Email app not available. You can copy the message instead.",
+  "contactCopyDialogTitle": "Copy message",
+  "contactCopyDialogBody": "Copy the message and send it to support via your email app.",
+  "contactCopyAction": "Copy",
+  "contactCopied": "Message copied",
+  "contactMetadataHeader": "Metadata",
+  "contactMetadataUserId": "User ID",
+  "contactMetadataEmail": "Email",
+  "contactMetadataName": "Name",
+  "contactMetadataPlatform": "Platform",
+  "contactMetadataLocale": "Locale",
+  "contactMetadataTimestamp": "Timestamp",
+  "contactMetadataAppVersion": "App version"
 
 
 
@@ -172,7 +209,6 @@
 
 
 }
-
 
 
 

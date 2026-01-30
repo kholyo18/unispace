@@ -163,7 +163,44 @@
   "facultyArtsLanguages": "Faculté des lettres et des langues étrangères",
   "deptArabicLangLit": "Département de langue et littérature arabes",
   "deptFrenchLangLit": "Département de langue et littérature françaises",
-  "deptEnglishLangLit": "Département de langue et littérature anglaises"
+  "deptEnglishLangLit": "Département de langue et littérature anglaises",
+  "contactUsSubtitle": "Nous sommes ravis d'avoir votre message. Envoyez-le au support.",
+  "contactCategoryLabel": "Catégorie",
+  "contactCategoryIssue": "Problème",
+  "contactCategoryFeature": "Suggestion de nouvelle fonctionnalité",
+  "contactCategoryImprovement": "Amélioration",
+  "contactCategoryReport": "Signalement",
+  "contactCategoryOther": "Autre",
+  "contactSubjectLabel": "Sujet",
+  "contactSubjectHint": "Bref résumé de votre demande",
+  "contactDescriptionLabel": "Description",
+  "contactDescriptionHint": "Expliquez les détails pour vous aider rapidement",
+  "contactScreenshotPlaceholder": "Joindre une capture d'écran",
+  "contactScreenshotSoon": "Bientôt disponible",
+  "contactIncludeUserInfo": "Inclure mes informations de compte",
+  "contactUserInfoUnavailable": "Aucune information de compte disponible",
+  "contactSend": "Envoyer",
+  "contactValidationRequired": "Ce champ est obligatoire",
+  "contactValidationMinLength": "Veuillez saisir au moins {min} caractères",
+  "@contactValidationMinLength": {
+    "placeholders": {
+      "min": {}
+    }
+  },
+  "contactMailOpened": "Application e-mail ouverte pour envoyer votre message",
+  "contactMailUnavailable": "Aucune application e-mail disponible. Vous pouvez copier le message.",
+  "contactCopyDialogTitle": "Copier le message",
+  "contactCopyDialogBody": "Copiez le message et envoyez-le au support via votre messagerie.",
+  "contactCopyAction": "Copier",
+  "contactCopied": "Message copié",
+  "contactMetadataHeader": "Métadonnées",
+  "contactMetadataUserId": "ID utilisateur",
+  "contactMetadataEmail": "E-mail",
+  "contactMetadataName": "Nom",
+  "contactMetadataPlatform": "Plateforme",
+  "contactMetadataLocale": "Langue",
+  "contactMetadataTimestamp": "Horodatage",
+  "contactMetadataAppVersion": "Version de l'application"
 
 
 

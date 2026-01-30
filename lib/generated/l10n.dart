@@ -1310,6 +1310,326 @@ class S {
     );
   }
 
+  /// `We are happy to hear from you. Send your message to support.`
+  String get contactUsSubtitle {
+    return Intl.message(
+      'We are happy to hear from you. Send your message to support.',
+      name: 'contactUsSubtitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Category`
+  String get contactCategoryLabel {
+    return Intl.message(
+      'Category',
+      name: 'contactCategoryLabel',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Issue`
+  String get contactCategoryIssue {
+    return Intl.message(
+      'Issue',
+      name: 'contactCategoryIssue',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `New feature suggestion`
+  String get contactCategoryFeature {
+    return Intl.message(
+      'New feature suggestion',
+      name: 'contactCategoryFeature',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Improvement`
+  String get contactCategoryImprovement {
+    return Intl.message(
+      'Improvement',
+      name: 'contactCategoryImprovement',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Report`
+  String get contactCategoryReport {
+    return Intl.message(
+      'Report',
+      name: 'contactCategoryReport',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Other`
+  String get contactCategoryOther {
+    return Intl.message(
+      'Other',
+      name: 'contactCategoryOther',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Subject`
+  String get contactSubjectLabel {
+    return Intl.message(
+      'Subject',
+      name: 'contactSubjectLabel',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Short summary of your request`
+  String get contactSubjectHint {
+    return Intl.message(
+      'Short summary of your request',
+      name: 'contactSubjectHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Description`
+  String get contactDescriptionLabel {
+    return Intl.message(
+      'Description',
+      name: 'contactDescriptionLabel',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Explain the details so we can help quickly`
+  String get contactDescriptionHint {
+    return Intl.message(
+      'Explain the details so we can help quickly',
+      name: 'contactDescriptionHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Attach a screenshot`
+  String get contactScreenshotPlaceholder {
+    return Intl.message(
+      'Attach a screenshot',
+      name: 'contactScreenshotPlaceholder',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Coming soon`
+  String get contactScreenshotSoon {
+    return Intl.message(
+      'Coming soon',
+      name: 'contactScreenshotSoon',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Include my account information`
+  String get contactIncludeUserInfo {
+    return Intl.message(
+      'Include my account information',
+      name: 'contactIncludeUserInfo',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No signed-in user information available`
+  String get contactUserInfoUnavailable {
+    return Intl.message(
+      'No signed-in user information available',
+      name: 'contactUserInfoUnavailable',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Send`
+  String get contactSend {
+    return Intl.message(
+      'Send',
+      name: 'contactSend',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `This field is required`
+  String get contactValidationRequired {
+    return Intl.message(
+      'This field is required',
+      name: 'contactValidationRequired',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please enter at least {min} characters`
+  String contactValidationMinLength(Object min) {
+    return Intl.message(
+      'Please enter at least $min characters',
+      name: 'contactValidationMinLength',
+      desc: '',
+      args: [min],
+    );
+  }
+
+  /// `Email app opened to send your message`
+  String get contactMailOpened {
+    return Intl.message(
+      'Email app opened to send your message',
+      name: 'contactMailOpened',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Email app not available. You can copy the message instead.`
+  String get contactMailUnavailable {
+    return Intl.message(
+      'Email app not available. You can copy the message instead.',
+      name: 'contactMailUnavailable',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Copy message`
+  String get contactCopyDialogTitle {
+    return Intl.message(
+      'Copy message',
+      name: 'contactCopyDialogTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Copy the message and send it to support via your email app.`
+  String get contactCopyDialogBody {
+    return Intl.message(
+      'Copy the message and send it to support via your email app.',
+      name: 'contactCopyDialogBody',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Copy`
+  String get contactCopyAction {
+    return Intl.message(
+      'Copy',
+      name: 'contactCopyAction',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Message copied`
+  String get contactCopied {
+    return Intl.message(
+      'Message copied',
+      name: 'contactCopied',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Metadata`
+  String get contactMetadataHeader {
+    return Intl.message(
+      'Metadata',
+      name: 'contactMetadataHeader',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `User ID`
+  String get contactMetadataUserId {
+    return Intl.message(
+      'User ID',
+      name: 'contactMetadataUserId',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Email`
+  String get contactMetadataEmail {
+    return Intl.message(
+      'Email',
+      name: 'contactMetadataEmail',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Name`
+  String get contactMetadataName {
+    return Intl.message(
+      'Name',
+      name: 'contactMetadataName',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Platform`
+  String get contactMetadataPlatform {
+    return Intl.message(
+      'Platform',
+      name: 'contactMetadataPlatform',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Locale`
+  String get contactMetadataLocale {
+    return Intl.message(
+      'Locale',
+      name: 'contactMetadataLocale',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Timestamp`
+  String get contactMetadataTimestamp {
+    return Intl.message(
+      'Timestamp',
+      name: 'contactMetadataTimestamp',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `App version`
+  String get contactMetadataAppVersion {
+    return Intl.message(
+      'App version',
+      name: 'contactMetadataAppVersion',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Contact Us`
   String get contactUs {
     return Intl.message(
