@@ -8058,10 +8058,17 @@ class QuickAverageScreen extends StatefulWidget {
 }
 
 class _QuickAverageScreenState extends State<QuickAverageScreen> {
+  static const String _quickCalcStorageKey = 'quick_calc_state_v1';
   final List<NoteData> subjects = [];
   double threshold = 10;
   double avg = 0;
   double totalcred = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedState();
+  }
 
   void _add() => setState(() {
         subjects.add(NoteData(subject: ''));
@@ -8085,6 +8092,104 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
       avg = totalCoef == 0 ? 0 : totalWeighted / totalCoef;
       totalcred = totalCred;
     });
+  }
+
+  Future<void> _saveState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = <String, dynamic>{
+      'threshold': threshold,
+      'avg': avg,
+      'totalcred': totalcred,
+      'isSucceeded': avg >= threshold,
+      'subjects': subjects
+          .map(
+            (s) => <String, dynamic>{
+              'subject': s.subject,
+              'coef': s.coef,
+              'cred': s.cred,
+              'td': s.td,
+              'exam': s.exam,
+              'tp': s.tp,
+              'wtd': s.Wtd,
+              'wexam': s.Wexam,
+              'wtp': s.Wtp,
+            },
+          )
+          .toList(),
+    };
+    await prefs.setString(_quickCalcStorageKey, jsonEncode(payload));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Saved ✅')),
+    );
+  }
+
+  Future<void> _loadSavedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_quickCalcStorageKey);
+    if (raw == null || raw.isEmpty) {
+      return;
+    }
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+    final decodedSubjects = decoded['subjects'];
+    final List<NoteData> loaded = [];
+    if (decodedSubjects is List) {
+      for (final entry in decodedSubjects) {
+        if (entry is! Map) continue;
+        loaded.add(
+          NoteData(
+            subject: entry['subject']?.toString() ?? '',
+            coef: _toInt(entry['coef'], fallback: 1),
+            cred: _toInt(entry['cred'], fallback: 1),
+            td: _toDouble(entry['td'], fallback: 0),
+            exam: _toDouble(entry['exam'], fallback: 0),
+            tp: _toDouble(entry['tp'], fallback: 0),
+            Wtd: _toDouble(entry['wtd'], fallback: 0.4),
+            Wexam: _toDouble(entry['wexam'], fallback: 0.6),
+            Wtp: _toDouble(entry['wtp'], fallback: 0),
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      subjects
+        ..clear()
+        ..addAll(loaded);
+      threshold = _toDouble(decoded['threshold'], fallback: 10);
+      avg = _toDouble(decoded['avg'], fallback: 0);
+      totalcred = _toDouble(decoded['totalcred'], fallback: 0);
+    });
+  }
+
+  Future<void> _clearSavedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_quickCalcStorageKey);
+    if (!mounted) return;
+    setState(() {
+      subjects.clear();
+      avg = 0;
+      totalcred = 0;
+      threshold = 10;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Cleared ✅')),
+    );
+  }
+
+  double _toDouble(dynamic value, {required double fallback}) {
+    if (value == null) return fallback;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? fallback;
+  }
+
+  int _toInt(dynamic value, {required int fallback}) {
+    if (value == null) return fallback;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? fallback;
   }
 
   @override
@@ -8126,7 +8231,8 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
               ),
               const SizedBox(width: 8),
               FilledButton.icon(
-                  onPressed: _add,
+                  onPressed: _saveState,
+                  onLongPress: _clearSavedState,
                   icon: const Icon(Icons.save),
                   label: Text(
                     S.of(context).save,
