@@ -67,16 +67,41 @@ class _FacultySearchPageState extends State<FacultySearchPage> {
     final results = _filteredFaculties(query);
     final theme = Theme.of(context);
 
+    final inputTheme = theme.inputDecorationTheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: TextField(
-          controller: _controller,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            hintText: S.of(context).searchFaculty,
-            border: InputBorder.none,
-            prefixIcon: const Icon(Icons.search),
+        title: SizedBox(
+          height: 48,
+          child: TextField(
+            controller: _controller,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            textAlignVertical: TextAlignVertical.center,
+            decoration: InputDecoration(
+              hintText: S.of(context).searchFaculty,
+              isDense: true,
+              contentPadding: const EdgeInsetsDirectional.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              prefixIcon: const Icon(Icons.search),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 40,
+                minHeight: 40,
+              ),
+              suffixIconConstraints: const BoxConstraints(
+                minWidth: 40,
+                minHeight: 40,
+              ),
+              border: inputTheme.border,
+              enabledBorder: inputTheme.enabledBorder,
+              focusedBorder: inputTheme.focusedBorder,
+              errorBorder: inputTheme.errorBorder,
+              focusedErrorBorder: inputTheme.focusedErrorBorder,
+              filled: inputTheme.filled,
+              fillColor: inputTheme.fillColor,
+            ),
           ),
         ),
       ),
