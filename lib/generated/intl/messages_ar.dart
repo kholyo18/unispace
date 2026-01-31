@@ -26,11 +26,13 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m2(min) => "يرجى إدخال ${min} أحرف على الأقل";
 
-  static String m3(subject) => "تذكير: ${subject} بعد 24 ساعة";
+  static String m3(max) => "يرجى عدم تجاوز ${max} حرفًا";
 
-  static String m4(subject) => "تذكير: ${subject} بعد ساعتين";
+  static String m4(subject) => "تذكير: ${subject} بعد 24 ساعة";
 
-  static String m5(subject) => "تذكير: ${subject} بعد 30 دقيقة";
+  static String m5(subject) => "تذكير: ${subject} بعد ساعتين";
+
+  static String m6(subject) => "تذكير: ${subject} بعد 30 دقيقة";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -115,6 +117,12 @@ class MessageLookup extends MessageLookupByLibrary {
         "contactScreenshotSoon":
             MessageLookupByLibrary.simpleMessage("قريبًا"),
         "contactSend": MessageLookupByLibrary.simpleMessage("إرسال"),
+        "contactSendFailure": MessageLookupByLibrary.simpleMessage(
+            "تعذر إرسال رسالتك. يرجى المحاولة مرة أخرى."),
+        "contactSendSuccess":
+            MessageLookupByLibrary.simpleMessage("تم الإرسال ✅"),
+        "contactSending":
+            MessageLookupByLibrary.simpleMessage("جارٍ الإرسال..."),
         "contactSubjectHint":
             MessageLookupByLibrary.simpleMessage("ملخص قصير لطلبك"),
         "contactSubjectLabel": MessageLookupByLibrary.simpleMessage("الموضوع"),
@@ -123,6 +131,7 @@ class MessageLookup extends MessageLookupByLibrary {
             "يسعدنا سماع رسالتك. أرسل رسالتك إلى الدعم."),
         "contactUserInfoUnavailable": MessageLookupByLibrary.simpleMessage(
             "لا توجد معلومات مستخدم مسجّل الدخول"),
+        "contactValidationMaxLength": m3,
         "contactValidationMinLength": m2,
         "contactValidationRequired":
             MessageLookupByLibrary.simpleMessage("هذا الحقل مطلوب"),
@@ -278,9 +287,9 @@ class MessageLookup extends MessageLookupByLibrary {
         "editExam": MessageLookupByLibrary.simpleMessage("تعديل الامتحان"),
         "examCalendar": MessageLookupByLibrary.simpleMessage("رزنامة الامتحانات"),
         "examNote": MessageLookupByLibrary.simpleMessage("ملاحظة"),
-        "examReminder24h": m3,
-        "examReminder2h": m4,
-        "examReminder30m": m5,
+        "examReminder24h": m4,
+        "examReminder2h": m5,
+        "examReminder30m": m6,
         "examRoom": MessageLookupByLibrary.simpleMessage("القاعة"),
         "examSubject": MessageLookupByLibrary.simpleMessage("المادة"),
         "examSubjectRequired":

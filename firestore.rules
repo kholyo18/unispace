@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /supportMessages/{messageId} {
+      allow create: if isValidSupportMessage();
+      allow read, update, delete: if false;
+    }
+
+    function isValidSupportMessage() {
+      return request.resource.data.keys().hasOnly([
+            'uid',
+            'email',
+            'phone',
+            'displayName',
+            'includeAccountInfo',
+            'category',
+            'subject',
+            'message',
+            'appVersion',
+            'platform',
+            'locale',
+            'createdAt',
+            'deviceInfo',
+            'status'
+          ])
+          && request.resource.data.status == 'queued'
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.category in [
+            'issue',
+            'feature',
+            'improvement',
+            'report',
+            'other'
+          ]
+          && request.resource.data.subject is string
+          && request.resource.data.subject.size() >= 5
+          && request.resource.data.subject.size() <= 200
+          && request.resource.data.message is string
+          && request.resource.data.message.size() >= 5
+          && request.resource.data.message.size() <= 2000
+          && request.resource.data.appVersion is string
+          && request.resource.data.platform is string
+          && request.resource.data.locale is string
+          && request.resource.data.includeAccountInfo is bool
+          && request.resource.data.deviceInfo is map
+          && request.resource.data.deviceInfo.keys().hasOnly([
+            'deviceId',
+            'osVersion'
+          ])
+          && request.resource.data.deviceInfo.deviceId is string
+          && request.resource.data.deviceInfo.deviceId.size() >= 8
+          && request.resource.data.deviceInfo.osVersion is string
+          && (request.resource.data.uid == null
+              || request.resource.data.uid is string)
+          && (request.resource.data.email == null
+              || request.resource.data.email is string)
+          && (request.resource.data.phone == null
+              || request.resource.data.phone is string)
+          && (request.resource.data.displayName == null
+              || request.resource.data.displayName is string);
+    }
+  }
+}

@@ -26,11 +26,13 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m2(min) => "Veuillez saisir au moins ${min} caractères";
 
-  static String m3(subject) => "Rappel : ${subject} dans 24 heures";
+  static String m3(max) => "Veuillez rester sous ${max} caractères";
 
-  static String m4(subject) => "Rappel : ${subject} dans 2 heures";
+  static String m4(subject) => "Rappel : ${subject} dans 24 heures";
 
-  static String m5(subject) => "Rappel : ${subject} dans 30 minutes";
+  static String m5(subject) => "Rappel : ${subject} dans 2 heures";
+
+  static String m6(subject) => "Rappel : ${subject} dans 30 minutes";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -123,6 +125,11 @@ class MessageLookup extends MessageLookupByLibrary {
         "contactScreenshotSoon":
             MessageLookupByLibrary.simpleMessage("Bientôt disponible"),
         "contactSend": MessageLookupByLibrary.simpleMessage("Envoyer"),
+        "contactSendFailure": MessageLookupByLibrary.simpleMessage(
+            "Impossible d'envoyer votre message. Veuillez réessayer."),
+        "contactSendSuccess": MessageLookupByLibrary.simpleMessage("Envoyé ✅"),
+        "contactSending":
+            MessageLookupByLibrary.simpleMessage("Envoi en cours..."),
         "contactSubjectHint": MessageLookupByLibrary.simpleMessage(
             "Bref résumé de votre demande"),
         "contactSubjectLabel": MessageLookupByLibrary.simpleMessage("Sujet"),
@@ -131,6 +138,7 @@ class MessageLookup extends MessageLookupByLibrary {
             "Nous sommes ravis d'avoir votre message. Envoyez-le au support."),
         "contactUserInfoUnavailable": MessageLookupByLibrary.simpleMessage(
             "Aucune information de compte disponible"),
+        "contactValidationMaxLength": m3,
         "contactValidationMinLength": m2,
         "contactValidationRequired":
             MessageLookupByLibrary.simpleMessage("Ce champ est obligatoire"),
@@ -294,9 +302,9 @@ class MessageLookup extends MessageLookupByLibrary {
         "examCalendar":
             MessageLookupByLibrary.simpleMessage("Calendrier des examens"),
         "examNote": MessageLookupByLibrary.simpleMessage("Note"),
-        "examReminder24h": m3,
-        "examReminder2h": m4,
-        "examReminder30m": m5,
+        "examReminder24h": m4,
+        "examReminder2h": m5,
+        "examReminder30m": m6,
         "examRoom": MessageLookupByLibrary.simpleMessage("Salle"),
         "examSubject": MessageLookupByLibrary.simpleMessage("Matière"),
         "examSubjectRequired":
