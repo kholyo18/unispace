@@ -9166,7 +9166,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   late SemesterModel _semester1;
   late SemesterModel _semester2;
   final GradesLocalStore _gradesStore = GradesLocalStore();
-  final Set<String> _loadedModuleOverrides = {};
+  final Set<String> _loadedModuleStates = {};
 
   int currentIndex = 0; // ← هذا يمثل index الحالي
 
@@ -9211,26 +9211,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
 
     final currentSemester = currentIndex == 0 ? _semester1 : _semester2;
     final semesterKey = currentSemester.name;
-    for (final module in currentSemester.modules) {
-      final hasValues =
-          module.td != null || module.tp != null || module.exam != null;
-      final moy = hasValues ? module.moy : null;
-      await _gradesStore.saveGrade(
-        semesterKey,
-        module.id,
-        module.td,
-        module.exam,
-        module.tp,
-        moy,
-        module.coef,
-        module.credits,
-        module.wTD,
-        module.wEX,
-        module.wTP,
-      );
-
-    }
-    await _gradesStore.saveModuleOverrides(
+    await _gradesStore.saveModuleStates(
       semesterKey,
       currentSemester.modules,
     );
@@ -9246,33 +9227,22 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     final semesterKey = currentSemester.name;
 
     var updated = false;
-    if (!_loadedModuleOverrides.contains(semesterKey)) {
-      final overrides = await _gradesStore.loadModuleOverrides(semesterKey);
+    if (!_loadedModuleStates.contains(semesterKey)) {
+      final overrides = await _gradesStore.loadModuleStates(semesterKey);
       for (final module in currentSemester.modules) {
         final moduleOverride = overrides[module.id];
         if (moduleOverride == null) continue;
         module.coef = moduleOverride['coef']?.toDouble() ?? module.coef;
         module.credits = moduleOverride['cred']?.toDouble() ?? module.credits;
+        module.td = moduleOverride['td'] ?? module.td;
+        module.tp = moduleOverride['tp'] ?? module.tp;
+        module.exam = moduleOverride['exam'] ?? module.exam;
+        module.wTD = moduleOverride['wTD'] ?? module.wTD;
+        module.wEX = moduleOverride['wEX'] ?? module.wEX;
+        module.wTP = moduleOverride['wTP'] ?? module.wTP;
         updated = true;
       }
-      _loadedModuleOverrides.add(semesterKey);
-    }
-    for (final module in currentSemester.modules) {
-      final stored = await _gradesStore.loadGrade(semesterKey, module.id);
-      if (stored == null) {
-        continue;
-      }
-      module.td = stored['td'];
-      module.tp = stored['tp'];
-      module.exam = stored['exam'];
-
-      module.coef = stored['coef'] ?? module.coef;
-      module.credits = stored['cred'] ?? module.credits;
-      module.wTD = stored['wTD'] ?? module.wTD;
-      module.wEX = stored['wEX'] ?? module.wEX;
-      module.wTP = stored['wTP'] ?? module.wTP;
-
-      updated = true;
+      _loadedModuleStates.add(semesterKey);
     }
 
     if (mounted && updated) setState(() {});
@@ -9469,53 +9439,6 @@ class GradesLocalStore {
     await prefs.setString(_storageKey, jsonEncode(data));
   }
 
-  Future<Map<String, Map<String, int>>> loadModuleOverrides(
-      String semester) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_modulesKey(semester));
-    if (raw == null || raw.isEmpty) {
-      return <String, Map<String, int>>{};
-    }
-    final decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      return <String, Map<String, int>>{};
-    }
-    int? toInt(dynamic value) {
-      if (value == null) return null;
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      return int.tryParse(value.toString());
-    }
-
-    final Map<String, Map<String, int>> overrides = {};
-    for (final entry in decoded) {
-      if (entry is! Map) continue;
-      final id = entry['id']?.toString();
-      if (id == null || id.isEmpty) continue;
-      final coef = toInt(entry['coef']);
-      final cred = toInt(entry['cred']);
-      if (coef == null || cred == null) continue;
-      overrides[id] = {'coef': coef, 'cred': cred};
-    }
-    return overrides;
-  }
-
-  Future<void> saveModuleOverrides(
-      String semester, List<ModuleModel> modules) async {
-    final prefs = await SharedPreferences.getInstance();
-    final payload = modules
-        .map(
-          (module) => <String, dynamic>{
-            'id': module.id,
-            'name': module.title,
-            'coef': module.coef.toInt(),
-            'cred': module.credits.toInt(),
-          },
-        )
-        .toList(growable: false);
-    await prefs.setString(_modulesKey(semester), jsonEncode(payload));
-  }
-
   Future<Map<String, double?>?> loadGrade(
       String semester,
       String moduleId,
@@ -9591,6 +9514,107 @@ class GradesLocalStore {
     await _saveAll(all);
   }
 
+  Future<Map<String, Map<String, dynamic>>> loadModuleStates(
+      String semester) async {
+    double? toDouble(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString());
+    }
+
+    final Map<String, Map<String, dynamic>> states = {};
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_modulesKey(semester));
+    if (raw != null && raw.isNotEmpty) {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        for (final entry in decoded) {
+          if (entry is! Map) continue;
+          final id = entry['moduleId']?.toString() ?? entry['id']?.toString();
+          if (id == null || id.isEmpty) continue;
+          states[id] = {
+            'moduleId': id,
+            'moduleName': entry['moduleName']?.toString() ??
+                entry['name']?.toString(),
+            'semester': entry['semester']?.toString() ?? semester,
+            'coef': toDouble(entry['coef']),
+            'cred': toDouble(entry['cred']),
+            'td': toDouble(entry['td']),
+            'tp': toDouble(entry['tp']),
+            'exam': toDouble(entry['exam']),
+            'moy': toDouble(entry['moy']),
+            'wTD': toDouble(entry['wTD']),
+            'wEX': toDouble(entry['wEX']),
+            'wTP': toDouble(entry['wTP']),
+          };
+        }
+      }
+    }
+
+    final legacy = await _loadAll();
+    for (final entry in legacy.entries) {
+      if (entry.key is! String) continue;
+      final key = entry.key as String;
+      if (!key.startsWith('$semester|')) continue;
+      final moduleId = key.substring('$semester|'.length);
+      if (moduleId.isEmpty) continue;
+      final legacyEntry = entry.value;
+      if (legacyEntry is! Map) continue;
+      final state = states.putIfAbsent(moduleId, () {
+        return {
+          'moduleId': moduleId,
+          'moduleName': null,
+          'semester': semester,
+        };
+      });
+      void mergeIfNull(String field, dynamic value) {
+        if (state[field] == null && value != null) {
+          state[field] = value;
+        }
+      }
+
+      mergeIfNull('td', toDouble(legacyEntry['td']));
+      mergeIfNull('tp', toDouble(legacyEntry['tp']));
+      mergeIfNull('exam', toDouble(legacyEntry['exam']));
+      mergeIfNull('moy', toDouble(legacyEntry['moy']));
+      mergeIfNull('coef', toDouble(legacyEntry['coef']));
+      mergeIfNull('cred', toDouble(legacyEntry['cred']));
+      mergeIfNull('wTD', toDouble(legacyEntry['wTD']));
+      mergeIfNull('wEX', toDouble(legacyEntry['wEX']));
+      mergeIfNull('wTP', toDouble(legacyEntry['wTP']));
+    }
+
+    return states;
+  }
+
+  Future<void> saveModuleStates(
+      String semester, List<ModuleModel> modules) async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = modules
+        .map(
+          (module) {
+            final hasValues =
+                module.td != null || module.tp != null || module.exam != null;
+            final moy = hasValues ? module.moy : null;
+            return <String, dynamic>{
+              'moduleId': module.id,
+              'moduleName': module.title,
+              'semester': semester,
+              'coef': module.coef,
+              'cred': module.credits,
+              'td': module.td,
+              'tp': module.tp,
+              'exam': module.exam,
+              'moy': moy,
+              'wTD': module.wTD,
+              'wEX': module.wEX,
+              'wTP': module.wTP,
+            };
+          },
+        )
+        .toList(growable: false);
+    await prefs.setString(_modulesKey(semester), jsonEncode(payload));
+  }
 
   Future<void> clearGrade(String semester, String moduleId) async {
     final all = await _loadAll();
