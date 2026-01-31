@@ -8019,6 +8019,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
   double threshold = 10;
   double avg = 0;
   double totalcred = 0;
+  bool _hasSavedState = false;
 
   @override
   void initState() {
@@ -8074,10 +8075,40 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
           .toList(),
     };
     await prefs.setString(_quickCalcStorageKey, jsonEncode(payload));
+    _hasSavedState = true;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Saved ✅')),
     );
+  }
+
+  Future<void> _persistStateSilently() async {
+    if (!_hasSavedState) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final payload = <String, dynamic>{
+      'threshold': threshold,
+      'avg': avg,
+      'totalcred': totalcred,
+      'isSucceeded': avg >= threshold,
+      'subjects': subjects
+          .map(
+            (s) => <String, dynamic>{
+              'subject': s.subject,
+              'coef': s.coef,
+              'cred': s.cred,
+              'td': s.td,
+              'exam': s.exam,
+              'tp': s.tp,
+              'wtd': s.Wtd,
+              'wexam': s.Wexam,
+              'wtp': s.Wtp,
+            },
+          )
+          .toList(),
+    };
+    await prefs.setString(_quickCalcStorageKey, jsonEncode(payload));
   }
 
   Future<void> _loadSavedState() async {
@@ -8086,6 +8117,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
     if (raw == null || raw.isEmpty) {
       return;
     }
+    _hasSavedState = true;
     final decoded = jsonDecode(raw);
     if (decoded is! Map<String, dynamic>) {
       return;
@@ -8124,6 +8156,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
   Future<void> _clearSavedState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_quickCalcStorageKey);
+    _hasSavedState = false;
     if (!mounted) return;
     setState(() {
       subjects.clear();
@@ -8133,6 +8166,27 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Cleared ✅')),
+    );
+  }
+
+  Future<void> _removeSubjectAt(int index) async {
+    final removed = subjects.removeAt(index);
+    setState(() {});
+    await _persistStateSilently();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Deleted'),
+        action: SnackBarAction(
+          label: 'UNDO',
+          onPressed: () async {
+            subjects.insert(index, removed);
+            setState(() {});
+            await _persistStateSilently();
+          },
+        ),
+      ),
     );
   }
 
@@ -8160,12 +8214,36 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
           ...subjects.asMap().entries.map((e) {
             final i = e.key;
             final s = e.value;
+            final textDirection = Directionality.of(context);
+            final dismissDirection = textDirection == TextDirection.rtl
+                ? DismissDirection.endToStart
+                : DismissDirection.startToEnd;
+            final dismissBackground = ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                color: Colors.red.shade600,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                alignment: AlignmentDirectional.centerStart,
+                child: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+            );
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: NoteCardWidget(
+              child: Dismissible(
                 key: ValueKey(s),
-                data: s,
-                onDelete: () => setState(() => subjects.removeAt(i)),
+                direction: dismissDirection,
+                movementDuration: const Duration(milliseconds: 220),
+                resizeDuration: const Duration(milliseconds: 200),
+                background: dismissBackground,
+                secondaryBackground: dismissBackground,
+                onDismissed: (_) => _removeSubjectAt(i),
+                child: NoteCardWidget(
+                  data: s,
+                ),
               ),
             );
           }),
@@ -8270,12 +8348,10 @@ class NoteData {
 // -------------------------
 class NoteCardWidget extends StatefulWidget {
   final NoteData data;
-  final VoidCallback onDelete;
 
   const NoteCardWidget({
     super.key,
     required this.data,
-    required this.onDelete,
   });
 
   @override
@@ -8330,54 +8406,44 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
           // Header: Delete, Subject Name, Moy
           Row(
             children: [
-              IconButton(
-                  onPressed: widget.onDelete,
-                  icon: const Icon(Icons.delete, color: Colors.redAccent)),
-              Container(
-                width: 150,
-                height: 40,
-                alignment: Alignment.center,
-                child: TextField(
-                  controller: nameController,
-                  onChanged: (v) {
-                    widget.data.subject = v;
-                    setState(() {});
-                  },
-                  textAlign: TextAlign.center,
-                  decoration: const InputDecoration(
-                    contentPadding:
-                        EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
-                    border: InputBorder.none,
-                  ),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: TextField(
+                    controller: nameController,
+                    onChanged: (v) {
+                      widget.data.subject = v;
+                      setState(() {});
+                    },
+                    textAlign: TextAlign.center,
+                    decoration: const InputDecoration(
+                      contentPadding:
+                          EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
+                      border: InputBorder.none,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(
-                width: 46,
-              ),
-              Container(
-                padding: const EdgeInsets.all(0),
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                ),
-                child: Text(
-                  widget.data.moy.toStringAsFixed(2),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 18),
-                ),
+              const SizedBox(width: 12),
+              Text(
+                widget.data.moy.toStringAsFixed(2),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
               IconButton(
-                  onPressed: () {
-                    setState(() {
-                      expanded = !expanded;
-                    });
-                  },
-                  icon: Icon(expanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down))
+                onPressed: () {
+                  setState(() {
+                    expanded = !expanded;
+                  });
+                },
+                icon: Icon(expanded
+                    ? Icons.keyboard_arrow_up
+                    : Icons.keyboard_arrow_down),
+              )
             ],
           ),
           if (expanded)
@@ -8385,22 +8451,16 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
               crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Divider(),
-
                 // Coef & Cred أولاً
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  //mainAxisSize: MainAxisSize.min,
                   children: [
                     //coef
-                    Container(
+                    SizedBox(
                       width: 70,
                       child: Column(
                         children: [
                           const Text("Coef"),
-                          SizedBox(
-                            width: 200,
-                          ),
                           TextField(
                             controller: coefController,
                             textAlign: TextAlign.center,
@@ -8425,7 +8485,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                     ),
                     const SizedBox(height: 10),
                     //cred
-                    Container(
+                    SizedBox(
                       width: 70,
                       child: Column(
                         children: [
