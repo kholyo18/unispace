@@ -8561,66 +8561,67 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                 Flexible(
                   flex: 2,
                   child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    //coef
-                    SizedBox(
-                      width: double.infinity,
-                      child: Column(
-                        children: [
-                          const Text("Coef"),
-                          TextField(
-                            controller: coefController,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 15),
-                            decoration: const InputDecoration(
-                              counterText: '',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                vertical: 5,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      //coef
+                      SizedBox(
+                        width: double.infinity,
+                        child: Column(
+                          children: [
+                            const Text("Coef"),
+                            TextField(
+                              controller: coefController,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 15),
+                              decoration: const InputDecoration(
+                                counterText: '',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 5,
+                                ),
+                                border: OutlineInputBorder(),
                               ),
-                              border: OutlineInputBorder(),
+                              keyboardType: TextInputType.number,
+                              maxLength: 1,
+                              onChanged: (v) {
+                                widget.data.coef = int.tryParse(v) ?? 1;
+                                setState(() {});
+                              },
                             ),
-                            keyboardType: TextInputType.number,
-                            maxLength: 1,
-                            onChanged: (v) {
-                              widget.data.coef = int.tryParse(v) ?? 1;
-                              setState(() {});
-                            },
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    //cred
-                    SizedBox(
-                      width: double.infinity,
-                      child: Column(
-                        children: [
-                          const Text("Cred"),
-                          TextField(
-                            controller: credController,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 15),
-                            decoration: const InputDecoration(
-                              counterText: '',
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                vertical: 5,
+                      const SizedBox(height: 10),
+                      //cred
+                      SizedBox(
+                        width: double.infinity,
+                        child: Column(
+                          children: [
+                            const Text("Cred"),
+                            TextField(
+                              controller: credController,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 15),
+                              decoration: const InputDecoration(
+                                counterText: '',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 5,
+                                ),
+                                border: OutlineInputBorder(),
                               ),
-                              border: OutlineInputBorder(),
+                              keyboardType: TextInputType.number,
+                              maxLength: 1,
+                              onChanged: (v) {
+                                widget.data.cred = int.tryParse(v) ?? 1;
+                                setState(() {});
+                              },
                             ),
-                            keyboardType: TextInputType.number,
-                            maxLength: 1,
-                            onChanged: (v) {
-                              widget.data.cred = int.tryParse(v) ?? 1;
-                              setState(() {});
-                            },
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Container(
