@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../data/models/exam_model.dart';
 
@@ -59,8 +60,8 @@ class ExamNotificationsService {
     if (!_permissionsGranted) return;
 
     const androidDetails = AndroidNotificationDetails(
-      'exam_reminders',
-      'Exam Reminders',
+      'exams_channel',
+      'exams_channel',
       channelDescription: 'Notifications for upcoming exams',
       importance: Importance.max,
       priority: Priority.high,
@@ -78,12 +79,14 @@ class ExamNotificationsService {
         continue;
       }
       final id = _notificationId(exam.id, offset);
-      await _plugin.schedule(
+      await _plugin.zonedSchedule(
         id,
         exam.subject,
         bodyBuilder(offset),
-        scheduledDate,
+        tz.TZDateTime.from(scheduledDate, tz.local),
         notificationDetails,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
     }
