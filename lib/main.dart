@@ -9181,12 +9181,13 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
 
     // الاستماع لتغييرات الـ index عند التمرير أو الضغط على الـ Tab
     _tabController.addListener(() {
-      if (_tabController.indexIsChanging) return; // تجاهل أثناء التغيير عن طريق الضغط
+      if (_tabController.index == currentIndex) return;
       setState(() {
         currentIndex = _tabController.index;
       });
       Future.microtask(() async {
-        await loadSemesterNotes();});
+        await loadSemesterNotes();
+      });
     });
 
 
@@ -9207,23 +9208,27 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   }
   /// ==================== حفظ بيانات الفصل الحالي باستخدام SharedPreferences ====================
   Future<void> saveCurrentSemesterNotes() async {
+    debugPrint('SAVE_CLICKED');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Saved")),
+    );
     FocusScope.of(context).unfocus(); // ← يفرض إنهاء تحرير أي TextField
 
-    final currentSemester = currentIndex == 0 ? _semester1 : _semester2;
+    final currentSemester =
+        _tabController.index == 0 ? _semester1 : _semester2;
     final semesterKey = currentSemester.name;
     await _gradesStore.saveModuleStates(
       semesterKey,
       currentSemester.modules,
     );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Saved")),
-    );
   }
 
   /// ==================== تحميل بيانات الفصل الحالي من SharedPreferences ====================
   Future<void> loadSemesterNotes() async {
-    final currentSemester = currentIndex == 0 ? _semester1 : _semester2;
+    debugPrint('LOAD_START');
+    final currentSemester =
+        _tabController.index == 0 ? _semester1 : _semester2;
     final semesterKey = currentSemester.name;
 
     var updated = false;
@@ -9258,6 +9263,10 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     if (oldWidget.semester1Modules != widget.semester1Modules ||
         oldWidget.semester2Modules != widget.semester2Modules) {
       _initSemesters();
+      _loadedModuleStates.clear();
+      Future.microtask(() async {
+        await loadSemesterNotes();
+      });
     }
   }
 
@@ -9524,7 +9533,9 @@ class GradesLocalStore {
 
     final Map<String, Map<String, dynamic>> states = {};
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_modulesKey(semester));
+    final modulesKey = _modulesKey(semester);
+    final raw = prefs.getString(modulesKey);
+    debugPrint('LOAD_MODULES_RAW key=$modulesKey raw=$raw');
     if (raw != null && raw.isNotEmpty) {
       final decoded = jsonDecode(raw);
       if (decoded is List) {
@@ -9613,7 +9624,17 @@ class GradesLocalStore {
           },
         )
         .toList(growable: false);
-    await prefs.setString(_modulesKey(semester), jsonEncode(payload));
+    debugPrint('SAVE_MODULES payload=${jsonEncode(payload)}');
+    final modulesKey = _modulesKey(semester);
+    try {
+      await prefs.setString(modulesKey, jsonEncode(payload));
+    } catch (error, stackTrace) {
+      debugPrint('SAVE_MODULES_ERROR key=$modulesKey error=$error');
+      debugPrint('SAVE_MODULES_STACK $stackTrace');
+      rethrow;
+    }
+    final readBack = prefs.getString(modulesKey);
+    debugPrint('SAVE_MODULES_READBACK key=$modulesKey raw=$readBack');
   }
 
   Future<void> clearGrade(String semester, String moduleId) async {
