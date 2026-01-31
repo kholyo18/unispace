@@ -420,6 +420,116 @@ class S {
     );
   }
 
+  /// `Forgot password?`
+  String get forgotPassword {
+    return Intl.message(
+      'Forgot password?',
+      name: 'forgotPassword',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reset your password`
+  String get resetPasswordTitle {
+    return Intl.message(
+      'Reset your password',
+      name: 'resetPasswordTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Enter your email and we’ll send you a reset link.`
+  String get resetPasswordHelper {
+    return Intl.message(
+      'Enter your email and we’ll send you a reset link.',
+      name: 'resetPasswordHelper',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Send link`
+  String get sendResetLink {
+    return Intl.message(
+      'Send link',
+      name: 'sendResetLink',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sending...`
+  String get sendResetLinkLoading {
+    return Intl.message(
+      'Sending...',
+      name: 'sendResetLinkLoading',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please enter a valid email address.`
+  String get invalidEmailValidation {
+    return Intl.message(
+      'Please enter a valid email address.',
+      name: 'invalidEmailValidation',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The reset link was sent to your email.`
+  String get resetLinkSentSuccess {
+    return Intl.message(
+      'The reset link was sent to your email.',
+      name: 'resetLinkSentSuccess',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The email address is invalid.`
+  String get invalidEmailError {
+    return Intl.message(
+      'The email address is invalid.',
+      name: 'invalidEmailError',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No account found with that email.`
+  String get userNotFoundError {
+    return Intl.message(
+      'No account found with that email.',
+      name: 'userNotFoundError',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Too many requests, try again later.`
+  String get tooManyRequestsError {
+    return Intl.message(
+      'Too many requests, try again later.',
+      name: 'tooManyRequestsError',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Could not send the link, please try again.`
+  String get resetLinkFailed {
+    return Intl.message(
+      'Could not send the link, please try again.',
+      name: 'resetLinkFailed',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Reset link has been sent`
   String get resetSent {
     return Intl.message(

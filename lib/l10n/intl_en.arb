@@ -39,6 +39,17 @@
   "welcomeUniSpace": "Welcome to UniSpace",
   "email": "Email",
   "password": "Password",
+  "forgotPassword": "Forgot password?",
+  "resetPasswordTitle": "Reset your password",
+  "resetPasswordHelper": "Enter your email and we’ll send you a reset link.",
+  "sendResetLink": "Send link",
+  "sendResetLinkLoading": "Sending...",
+  "invalidEmailValidation": "Please enter a valid email address.",
+  "resetLinkSentSuccess": "The reset link was sent to your email.",
+  "invalidEmailError": "The email address is invalid.",
+  "userNotFoundError": "No account found with that email.",
+  "tooManyRequestsError": "Too many requests, try again later.",
+  "resetLinkFailed": "Could not send the link, please try again.",
   "resetSent": "Reset link has been sent",
   "resetFailed": "Failed to send: {e}",
   "notRegistered": "Not registered",
@@ -251,7 +262,6 @@
 
 
 }
-
 
 
 

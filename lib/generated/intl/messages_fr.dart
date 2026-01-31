@@ -252,6 +252,28 @@ class MessageLookup extends MessageLookupByLibrary {
         "oneMajor": MessageLookupByLibrary.simpleMessage("Une spécialité"),
         "otherNotes": MessageLookupByLibrary.simpleMessage("Autres notes"),
         "password": MessageLookupByLibrary.simpleMessage("Mot de passe"),
+        "forgotPassword":
+            MessageLookupByLibrary.simpleMessage("Mot de passe oublié ?"),
+        "resetPasswordTitle": MessageLookupByLibrary.simpleMessage(
+            "Réinitialiser le mot de passe"),
+        "resetPasswordHelper": MessageLookupByLibrary.simpleMessage(
+            "Entrez votre e-mail et nous vous enverrons un lien de réinitialisation."),
+        "sendResetLink":
+            MessageLookupByLibrary.simpleMessage("Envoyer le lien"),
+        "sendResetLinkLoading":
+            MessageLookupByLibrary.simpleMessage("Envoi..."),
+        "invalidEmailValidation": MessageLookupByLibrary.simpleMessage(
+            "Veuillez saisir une adresse e-mail valide."),
+        "resetLinkSentSuccess": MessageLookupByLibrary.simpleMessage(
+            "Le lien de réinitialisation a été envoyé à votre e-mail."),
+        "invalidEmailError": MessageLookupByLibrary.simpleMessage(
+            "L’adresse e-mail est invalide."),
+        "userNotFoundError": MessageLookupByLibrary.simpleMessage(
+            "Aucun compte trouvé avec cet e-mail."),
+        "tooManyRequestsError": MessageLookupByLibrary.simpleMessage(
+            "Trop de demandes, réessayez plus tard."),
+        "resetLinkFailed": MessageLookupByLibrary.simpleMessage(
+            "Impossible d’envoyer le lien, réessayez."),
         "pinNote": MessageLookupByLibrary.simpleMessage("Épingler la note"),
         "pinned": MessageLookupByLibrary.simpleMessage("Épinglées"),
         "politicalAdministrativeOrgs": MessageLookupByLibrary.simpleMessage(

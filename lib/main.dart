@@ -700,6 +700,194 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
+  String _mapPasswordResetError(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'invalid-email':
+        return S.of(context).invalidEmailError;
+      case 'user-not-found':
+        return S.of(context).userNotFoundError;
+      case 'too-many-requests':
+        return S.of(context).tooManyRequestsError;
+      default:
+        return S.of(context).resetLinkFailed;
+    }
+  }
+
+  Future<void> _showForgotPasswordSheet() async {
+    final resetEmailController =
+        TextEditingController(text: email.text.trim());
+    final resetFocusNode = FocusNode();
+    bool isSending = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final viewInsets = MediaQuery.of(context).viewInsets;
+            final localizations = S.of(context);
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  12,
+                  24,
+                  viewInsets.bottom + 24,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 48,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade400,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: kUniSpaceBlue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.lock_reset,
+                                color: kUniSpaceBlue),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              localizations.resetPasswordTitle,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: isSending
+                                ? null
+                                : () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        localizations.resetPasswordHelper,
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: resetEmailController,
+                        focusNode: resetFocusNode,
+                        enabled: !isSending,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.email_outlined),
+                          labelText: localizations.email,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: isSending
+                              ? null
+                              : () async {
+                                  final trimmedEmail =
+                                      resetEmailController.text.trim();
+                                  if (trimmedEmail.isEmpty ||
+                                      !trimmedEmail.contains('@')) {
+                                    _showAuthSnack(
+                                        localizations.invalidEmailValidation);
+                                    return;
+                                  }
+                                  setModalState(() => isSending = true);
+                                  var shouldResetLoading = true;
+                                  try {
+                                    await FirebaseAuth.instance
+                                        .sendPasswordResetEmail(
+                                      email: trimmedEmail,
+                                    );
+                                    if (!mounted) return;
+                                    shouldResetLoading = false;
+                                    Navigator.of(context).pop();
+                                    _showAuthSnack(
+                                        localizations.resetLinkSentSuccess);
+                                  } on FirebaseAuthException catch (e) {
+                                    _showAuthSnack(_mapPasswordResetError(e));
+                                  } catch (e) {
+                                    _showAuthSnack(
+                                        localizations.resetLinkFailed);
+                                  } finally {
+                                    if (shouldResetLoading && mounted) {
+                                      setModalState(() => isSending = false);
+                                    }
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (isSending)
+                                const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              if (isSending) const SizedBox(width: 12),
+                              Text(isSending
+                                  ? localizations.sendResetLinkLoading
+                                  : localizations.sendResetLink),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: TextButton(
+                          onPressed: isSending
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          child: Text(localizations.cancel),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    resetEmailController.dispose();
+    resetFocusNode.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -737,6 +925,18 @@ class _SignInScreenState extends State<SignInScreen> {
                   decoration: InputDecoration(
                     prefixIcon: Icon(Icons.lock_outline),
                     labelText: S.of(context).password,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: loading ? null : _showForgotPasswordSheet,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(S.of(context).forgotPassword),
                   ),
                 ),
                 const SizedBox(height: 20),

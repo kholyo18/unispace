@@ -242,6 +242,27 @@ class MessageLookup extends MessageLookupByLibrary {
         "oneMajor": MessageLookupByLibrary.simpleMessage("تخصص واحد"),
         "otherNotes": MessageLookupByLibrary.simpleMessage("باقي الملاحظات"),
         "password": MessageLookupByLibrary.simpleMessage("كلمة المرور"),
+        "forgotPassword":
+            MessageLookupByLibrary.simpleMessage("هل نسيت كلمة السر؟"),
+        "resetPasswordTitle":
+            MessageLookupByLibrary.simpleMessage("إعادة تعيين كلمة السر"),
+        "resetPasswordHelper": MessageLookupByLibrary.simpleMessage(
+            "أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة التعيين."),
+        "sendResetLink": MessageLookupByLibrary.simpleMessage("إرسال الرابط"),
+        "sendResetLinkLoading":
+            MessageLookupByLibrary.simpleMessage("جارٍ الإرسال..."),
+        "invalidEmailValidation":
+            MessageLookupByLibrary.simpleMessage("يرجى إدخال بريد إلكتروني صالح."),
+        "resetLinkSentSuccess": MessageLookupByLibrary.simpleMessage(
+            "تم إرسال رابط إعادة التعيين إلى بريدك."),
+        "invalidEmailError":
+            MessageLookupByLibrary.simpleMessage("البريد الإلكتروني غير صالح"),
+        "userNotFoundError":
+            MessageLookupByLibrary.simpleMessage("لا يوجد حساب بهذا البريد"),
+        "tooManyRequestsError":
+            MessageLookupByLibrary.simpleMessage("طلبات كثيرة، حاول لاحقًا"),
+        "resetLinkFailed": MessageLookupByLibrary.simpleMessage(
+            "تعذر إرسال الرابط، أعد المحاولة"),
         "pinNote": MessageLookupByLibrary.simpleMessage("تثبيت الملاحظة"),
         "pinned": MessageLookupByLibrary.simpleMessage("مثبّتة"),
         "politicalAdministrativeOrgs":
