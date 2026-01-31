@@ -1,16 +1,18 @@
 import 'dart:io';
+import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../generated/l10n.dart';
 
-const String _supportEmail = 'khaledfoll12@gmail.com';
 const String _appVersion = '1.0.0+1';
 const int _minMessageLength = 5;
+const int _maxMessageLength = 2000;
+const int _maxSubjectLength = 200;
+const String _supportDeviceIdKey = 'support_device_id';
 
 enum ContactCategory {
   issue,
@@ -51,6 +53,7 @@ class _ContactUsSheetState extends State<ContactUsSheet> {
   final _descriptionController = TextEditingController();
   ContactCategory _category = ContactCategory.issue;
   bool _includeUserInfo = true;
+  bool _isSending = false;
 
   @override
   void dispose() {
@@ -128,6 +131,9 @@ class _ContactUsSheetState extends State<ContactUsSheet> {
                         if (text.length < _minMessageLength) {
                           return s.contactValidationMinLength(_minMessageLength);
                         }
+                        if (text.length > _maxSubjectLength) {
+                          return s.contactValidationMaxLength(_maxSubjectLength);
+                        }
                         return null;
                       },
                     ),
@@ -146,6 +152,9 @@ class _ContactUsSheetState extends State<ContactUsSheet> {
                         }
                         if (text.length < _minMessageLength) {
                           return s.contactValidationMinLength(_minMessageLength);
+                        }
+                        if (text.length > _maxMessageLength) {
+                          return s.contactValidationMaxLength(_maxMessageLength);
                         }
                         return null;
                       },
@@ -188,9 +197,20 @@ class _ContactUsSheetState extends State<ContactUsSheet> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: FilledButton.icon(
-                            onPressed: () => _handleSend(context),
-                            icon: const Icon(Icons.send_rounded),
-                            label: Text(s.contactSend),
+                            onPressed:
+                                _isSending ? null : () => _handleSend(context),
+                            icon: _isSending
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send_rounded),
+                            label: Text(
+                              _isSending ? s.contactSending : s.contactSend,
+                            ),
                           ),
                         ),
                       ],
@@ -211,105 +231,79 @@ class _ContactUsSheetState extends State<ContactUsSheet> {
       return;
     }
 
-    final subject = _subjectController.text.trim();
-    final description = _descriptionController.text.trim();
-    final categoryLabel = _category.label(context);
-    final emailSubject = '[UniSpace] $categoryLabel - $subject';
-    final emailBody = _buildEmailBody(
-      context: context,
-      description: description,
-      includeUserInfo: _includeUserInfo,
-    );
+    if (_isSending) {
+      return;
+    }
 
-    final emailUri = Uri(
-      scheme: 'mailto',
-      path: _supportEmail,
-      queryParameters: {
-        'subject': emailSubject,
-        'body': emailBody,
-      },
-    );
+    setState(() => _isSending = true);
+    try {
+      final subject = _subjectController.text.trim();
+      final description = _descriptionController.text.trim();
+      final user = FirebaseAuth.instance.currentUser;
+      final includeAccountInfo = _includeUserInfo && user != null;
+      final locale = Localizations.localeOf(context).toLanguageTag();
+      final deviceId = await _getOrCreateDeviceId();
 
-    if (await canLaunchUrl(emailUri)) {
-      await launchUrl(emailUri);
-      if (context.mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.contactMailOpened)),
-        );
-      }
-    } else {
-      if (!context.mounted) return;
+      await FirebaseFirestore.instance
+          .collection('supportMessages')
+          .add(<String, dynamic>{
+        'uid': includeAccountInfo ? user?.uid : null,
+        'email': includeAccountInfo ? user?.email : null,
+        'phone': includeAccountInfo ? user?.phoneNumber : null,
+        'displayName': includeAccountInfo ? user?.displayName : null,
+        'includeAccountInfo': includeAccountInfo,
+        'category': _category.name,
+        'subject': subject,
+        'message': description,
+        'appVersion': _appVersion,
+        'platform': Platform.operatingSystem,
+        'locale': locale,
+        'createdAt': FieldValue.serverTimestamp(),
+        'deviceInfo': <String, dynamic>{
+          'deviceId': deviceId,
+          'osVersion': Platform.operatingSystemVersion,
+        },
+        'status': 'queued',
+      });
+
+      if (!mounted) return;
+      _subjectController.clear();
+      _descriptionController.clear();
+      setState(() {
+        _category = ContactCategory.issue;
+        _includeUserInfo = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.contactMailUnavailable)),
+        SnackBar(content: Text(s.contactSendSuccess)),
       );
-      await _showCopyDialog(context, emailSubject, emailBody);
-    }
-  }
-
-  String _buildEmailBody({
-    required BuildContext context,
-    required String description,
-    required bool includeUserInfo,
-  }) {
-    final s = S.of(context);
-    final user = FirebaseAuth.instance.currentUser;
-    final locale = Localizations.localeOf(context).toLanguageTag();
-    final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
-    final buffer = StringBuffer()
-      ..writeln(description)
-      ..writeln('')
-      ..writeln('---')
-      ..writeln(s.contactMetadataHeader)
-      ..writeln('${s.contactMetadataAppVersion}: $_appVersion')
-      ..writeln('${s.contactMetadataPlatform}: ${Platform.operatingSystem}')
-      ..writeln('${s.contactMetadataLocale}: $locale')
-      ..writeln('${s.contactMetadataTimestamp}: $timestamp');
-
-    if (includeUserInfo) {
-      if (user != null) {
-        buffer
-          ..writeln('${s.contactMetadataUserId}: ${user.uid}')
-          ..writeln('${s.contactMetadataEmail}: ${user.email ?? '-'}')
-          ..writeln('${s.contactMetadataName}: ${user.displayName ?? '-'}');
-      } else {
-        buffer.writeln(s.contactUserInfoUnavailable);
+      Navigator.of(context).pop();
+    } on FirebaseException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.contactSendFailure)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.contactSendFailure)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
       }
     }
-
-    return buffer.toString();
   }
 
-  Future<void> _showCopyDialog(
-    BuildContext context,
-    String subject,
-    String body,
-  ) async {
-    final s = S.of(context);
-    final message = '$subject\n\n$body';
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(s.contactCopyDialogTitle),
-        content: Text(s.contactCopyDialogBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(s.cancel),
-          ),
-          FilledButton(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: message));
-              if (!context.mounted) return;
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(s.contactCopied)),
-              );
-            },
-            child: Text(s.contactCopyAction),
-          ),
-        ],
-      ),
-    );
+  Future<String> _getOrCreateDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(_supportDeviceIdKey);
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final newId = bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    await prefs.setString(_supportDeviceIdKey, newId);
+    return newId;
   }
 }

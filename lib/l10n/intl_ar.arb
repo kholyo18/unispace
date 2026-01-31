@@ -180,11 +180,20 @@
   "contactSend": "إرسال",
   "contactValidationRequired": "هذا الحقل مطلوب",
   "contactValidationMinLength": "يرجى إدخال {min} أحرف على الأقل",
+  "contactValidationMaxLength": "يرجى عدم تجاوز {max} حرفًا",
   "@contactValidationMinLength": {
     "placeholders": {
       "min": {}
     }
   },
+  "@contactValidationMaxLength": {
+    "placeholders": {
+      "max": {}
+    }
+  },
+  "contactSending": "جارٍ الإرسال...",
+  "contactSendSuccess": "تم الإرسال ✅",
+  "contactSendFailure": "تعذر إرسال رسالتك. يرجى المحاولة مرة أخرى.",
   "contactMailOpened": "تم فتح البريد لإرسال رسالتك",
   "contactMailUnavailable": "تعذر فتح تطبيق البريد. يمكنك نسخ الرسالة.",
   "contactCopyDialogTitle": "نسخ الرسالة",

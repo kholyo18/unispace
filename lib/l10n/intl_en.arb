@@ -183,11 +183,20 @@
   "contactSend": "Send",
   "contactValidationRequired": "This field is required",
   "contactValidationMinLength": "Please enter at least {min} characters",
+  "contactValidationMaxLength": "Please keep this under {max} characters",
   "@contactValidationMinLength": {
     "placeholders": {
       "min": {}
     }
   },
+  "@contactValidationMaxLength": {
+    "placeholders": {
+      "max": {}
+    }
+  },
+  "contactSending": "Sending...",
+  "contactSendSuccess": "Sent ✅",
+  "contactSendFailure": "We couldn't send your message. Please try again.",
   "contactMailOpened": "Email app opened to send your message",
   "contactMailUnavailable": "Email app not available. You can copy the message instead.",
   "contactCopyDialogTitle": "Copy message",
@@ -242,7 +251,6 @@
 
 
 }
-
 
 
 

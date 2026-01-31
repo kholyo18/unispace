@@ -1490,6 +1490,46 @@ class S {
     );
   }
 
+  /// `Please keep this under {max} characters`
+  String contactValidationMaxLength(Object max) {
+    return Intl.message(
+      'Please keep this under $max characters',
+      name: 'contactValidationMaxLength',
+      desc: '',
+      args: [max],
+    );
+  }
+
+  /// `Sending...`
+  String get contactSending {
+    return Intl.message(
+      'Sending...',
+      name: 'contactSending',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sent ✅`
+  String get contactSendSuccess {
+    return Intl.message(
+      'Sent ✅',
+      name: 'contactSendSuccess',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `We couldn't send your message. Please try again.`
+  String get contactSendFailure {
+    return Intl.message(
+      'We couldn\'t send your message. Please try again.',
+      name: 'contactSendFailure',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Email app opened to send your message`
   String get contactMailOpened {
     return Intl.message(

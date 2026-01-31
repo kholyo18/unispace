@@ -182,11 +182,20 @@
   "contactSend": "Envoyer",
   "contactValidationRequired": "Ce champ est obligatoire",
   "contactValidationMinLength": "Veuillez saisir au moins {min} caractères",
+  "contactValidationMaxLength": "Veuillez rester sous {max} caractères",
   "@contactValidationMinLength": {
     "placeholders": {
       "min": {}
     }
   },
+  "@contactValidationMaxLength": {
+    "placeholders": {
+      "max": {}
+    }
+  },
+  "contactSending": "Envoi en cours...",
+  "contactSendSuccess": "Envoyé ✅",
+  "contactSendFailure": "Impossible d'envoyer votre message. Veuillez réessayer.",
   "contactMailOpened": "Application e-mail ouverte pour envoyer votre message",
   "contactMailUnavailable": "Aucune application e-mail disponible. Vous pouvez copier le message.",
   "contactCopyDialogTitle": "Copier le message",
