@@ -8637,8 +8637,26 @@ List<EvalWeight> _normalizeEvalWeights(List<ProgramComponent> components) {
   ];
 }
 
+String _slugifyModuleId(String value) {
+  final slug = value
+      .toLowerCase()
+      .trim()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+  if (slug.isNotEmpty) {
+    return slug;
+  }
+  final encoded = base64UrlEncode(utf8.encode(value));
+  return encoded.replaceAll('=', '');
+}
+
+String _moduleIdForSemester(String semester, String moduleName) {
+  return _slugifyModuleId('$semester-$moduleName');
+}
+
 class ModuleModel {
   ModuleModel({
+    required this.id,
     required this.title,
     required num coef,
     required num credits,
@@ -8656,6 +8674,7 @@ class ModuleModel {
         tp = 0,
         exam = 0;
 
+  final String id;
   final String title;
   double coef;
   double credits;
@@ -8710,6 +8729,7 @@ class SemesterModel {
       }
 
       return ModuleModel(
+        id: _moduleIdForSemester(spec.name, module.name),
         title: module.name,
         coef: module.coef,
         credits: module.credits,
@@ -8779,6 +8799,7 @@ class SemesterModel {
         }
 
         return ModuleModel(
+          id: _moduleIdForSemester(ps.label, m.name),
           title: m.name,
           coef: m.coef,
           credits: m.credits,
@@ -9145,6 +9166,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   late SemesterModel _semester1;
   late SemesterModel _semester2;
   final GradesLocalStore _gradesStore = GradesLocalStore();
+  final Set<String> _loadedModuleOverrides = {};
 
   int currentIndex = 0; // ← هذا يمثل index الحالي
 
@@ -9195,7 +9217,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
       final moy = hasValues ? module.moy : null;
       await _gradesStore.saveGrade(
         semesterKey,
-        module.title,
+        module.id,
         module.td,
         module.exam,
         module.tp,
@@ -9208,9 +9230,13 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
       );
 
     }
+    await _gradesStore.saveModuleOverrides(
+      semesterKey,
+      currentSemester.modules,
+    );
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Semester notes saved ✅")),
+      const SnackBar(content: Text("Saved")),
     );
   }
 
@@ -9220,8 +9246,19 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     final semesterKey = currentSemester.name;
 
     var updated = false;
+    if (!_loadedModuleOverrides.contains(semesterKey)) {
+      final overrides = await _gradesStore.loadModuleOverrides(semesterKey);
+      for (final module in currentSemester.modules) {
+        final moduleOverride = overrides[module.id];
+        if (moduleOverride == null) continue;
+        module.coef = moduleOverride['coef']?.toDouble() ?? module.coef;
+        module.credits = moduleOverride['cred']?.toDouble() ?? module.credits;
+        updated = true;
+      }
+      _loadedModuleOverrides.add(semesterKey);
+    }
     for (final module in currentSemester.modules) {
-      final stored = await _gradesStore.loadGrade(semesterKey, module.title);
+      final stored = await _gradesStore.loadGrade(semesterKey, module.id);
       if (stored == null) {
         continue;
       }
@@ -9404,9 +9441,14 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
 
 class GradesLocalStore {
   static const String _storageKey = 'unispace_grades_v1';
+  static const String _modulesStoragePrefix = 'modules_';
 
   String _entryKey(String semester, String moduleId) {
     return '$semester|$moduleId';
+  }
+
+  String _modulesKey(String semester) {
+    return '$_modulesStoragePrefix${semester.toLowerCase()}';
   }
 
   Future<Map<String, dynamic>> _loadAll() async {
@@ -9425,6 +9467,53 @@ class GradesLocalStore {
   Future<void> _saveAll(Map<String, dynamic> data) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, jsonEncode(data));
+  }
+
+  Future<Map<String, Map<String, int>>> loadModuleOverrides(
+      String semester) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_modulesKey(semester));
+    if (raw == null || raw.isEmpty) {
+      return <String, Map<String, int>>{};
+    }
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      return <String, Map<String, int>>{};
+    }
+    int? toInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString());
+    }
+
+    final Map<String, Map<String, int>> overrides = {};
+    for (final entry in decoded) {
+      if (entry is! Map) continue;
+      final id = entry['id']?.toString();
+      if (id == null || id.isEmpty) continue;
+      final coef = toInt(entry['coef']);
+      final cred = toInt(entry['cred']);
+      if (coef == null || cred == null) continue;
+      overrides[id] = {'coef': coef, 'cred': cred};
+    }
+    return overrides;
+  }
+
+  Future<void> saveModuleOverrides(
+      String semester, List<ModuleModel> modules) async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = modules
+        .map(
+          (module) => <String, dynamic>{
+            'id': module.id,
+            'name': module.title,
+            'coef': module.coef.toInt(),
+            'cred': module.credits.toInt(),
+          },
+        )
+        .toList(growable: false);
+    await prefs.setString(_modulesKey(semester), jsonEncode(payload));
   }
 
   Future<Map<String, double?>?> loadGrade(
@@ -9686,6 +9775,14 @@ class _NoteCardState extends State<NoteCard> {
         _examController.text = _formatGrade(exam);
       });
     }
+    if (widget.coef != coef || widget.cred != cred) {
+      setState(() {
+        coef = widget.coef;
+        cred = widget.cred;
+        _coefController.text = coef.toStringAsFixed(0);
+        _credController.text = cred.toStringAsFixed(0);
+      });
+    }
   }
 
   @override
@@ -9693,6 +9790,8 @@ class _NoteCardState extends State<NoteCard> {
     _tdController.dispose();
     _tpController.dispose();
     _examController.dispose();
+    _coefController.dispose();
+    _credController.dispose();
     super.dispose();
   }
 
@@ -9706,6 +9805,14 @@ class _NoteCardState extends State<NoteCard> {
     final sanitized = value.replaceAll(',', '.').trim();
     if (sanitized.isEmpty) return null;
     return double.tryParse(sanitized);
+  }
+
+  int? _parseNonNegativeInt(String value) {
+    final sanitized = value.trim();
+    if (sanitized.isEmpty) return 0;
+    final parsed = int.tryParse(sanitized);
+    if (parsed == null || parsed < 0) return null;
+    return parsed;
   }
   void onTDChanged(String v) {
     setState(() {
@@ -9903,15 +10010,17 @@ class _NoteCardState extends State<NoteCard> {
                           controller: _coefController,
                           keyboardType: TextInputType.number,
                           onChanged: (v) {
-                            final newValue = double.tryParse(v);
-                            if (newValue != null) {
-                              setState(() {
-                                coef = newValue;
-                                notifyParent();
-                              });
-                            }
+                            final parsed = _parseNonNegativeInt(v);
+                            if (parsed == null) return;
+                            setState(() {
+                              coef = parsed.toDouble();
+                              notifyParent();
+                            });
                           }
                           ,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           style: const TextStyle(fontSize: 15),
                           textAlign: TextAlign.center,
                           decoration: const InputDecoration(
@@ -9951,14 +10060,16 @@ class _NoteCardState extends State<NoteCard> {
                             controller: _credController,
                             keyboardType: TextInputType.number,
                             onChanged: (v) {
-                              final newValue = double.tryParse(v);
-                              if (newValue != null) {
-                                setState(() {
-                                  cred = newValue;
-                                  notifyParent();
-                                });
-                              }
+                              final parsed = _parseNonNegativeInt(v);
+                              if (parsed == null) return;
+                              setState(() {
+                                cred = parsed.toDouble();
+                                notifyParent();
+                              });
                             },
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
                             style: const TextStyle(fontSize: 15),
                             textAlign: TextAlign.center,
                             decoration: const InputDecoration(
