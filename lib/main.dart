@@ -10734,7 +10734,7 @@ class _AnnualSummaryCard extends StatelessWidget {
   Widget buildInfoCard(
       String title, double value, IconData icon, BuildContext cx) {
     return Container(
-      width: 150,
+      width: 140,
       height: 63,
       padding: const EdgeInsets.fromLTRB(15, 10, 5, 2),
       decoration: BoxDecoration(
