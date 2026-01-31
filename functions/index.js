@@ -1,24 +1,31 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const sgMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
 
 admin.initializeApp();
 
 const config = functions.config();
 const SUPPORT_EMAIL =
-  process.env.SUPPORT_EMAIL || config.support?.email || 'khaledfoll12@gmail.com';
+  process.env.SUPPORT_EMAIL ||
+  config.support?.email ||
+  'unispace.0.1.0@gmail.com';
 const SUPPORT_FROM_EMAIL =
   process.env.SUPPORT_FROM_EMAIL ||
   config.support?.from_email ||
   SUPPORT_EMAIL;
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || config.sendgrid?.key;
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
 const MAX_PER_HOUR_UID = 3;
 const MAX_PER_HOUR_DEVICE = 5;
 
-if (SENDGRID_API_KEY) {
-  sgMail.setApiKey(SENDGRID_API_KEY);
-}
+const mailTransport = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: GMAIL_USER,
+    pass: GMAIL_APP_PASSWORD,
+  },
+});
 
 const ALLOWED_CATEGORIES = new Set([
   'issue',
@@ -28,7 +35,9 @@ const ALLOWED_CATEGORIES = new Set([
   'other',
 ]);
 
-exports.onSupportMessageCreate = functions.firestore
+exports.onSupportMessageCreate = functions
+  .runWith({ secrets: ['GMAIL_USER', 'GMAIL_APP_PASSWORD'] })
+  .firestore
   .document('supportMessages/{id}')
   .onCreate(async (snap, context) => {
     const data = snap.data() || {};
@@ -52,10 +61,14 @@ exports.onSupportMessageCreate = functions.firestore
       return;
     }
 
-    if (!SENDGRID_API_KEY) {
+    if (data.emailSent) {
+      return;
+    }
+
+    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
       await snap.ref.update({
-        status: 'failed',
-        errorMessage: 'SendGrid API key is not configured.',
+        emailSent: false,
+        emailSendError: 'Gmail credentials are not configured.',
       });
       return;
     }
@@ -64,7 +77,7 @@ exports.onSupportMessageCreate = functions.firestore
     const text = buildEmailBody(data, messageId);
 
     try {
-      await sgMail.send({
+      await mailTransport.sendMail({
         to: SUPPORT_EMAIL,
         from: SUPPORT_FROM_EMAIL,
         subject,
@@ -72,14 +85,15 @@ exports.onSupportMessageCreate = functions.firestore
       });
 
       await snap.ref.update({
-        status: 'sent',
-        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        emailSent: true,
+        emailSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        emailSendError: null,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await snap.ref.update({
-        status: 'failed',
-        errorMessage: message,
+        emailSent: false,
+        emailSendError: message,
       });
     }
   });
@@ -165,32 +179,31 @@ async function enforceRateLimit(data) {
 }
 
 function buildEmailBody(data, messageId) {
-  const createdAt = data.createdAt && data.createdAt.toDate
-    ? data.createdAt.toDate().toISOString()
-    : 'unknown';
+  const createdAt =
+    data.createdAt && data.createdAt.toDate
+      ? data.createdAt.toDate().toISOString()
+      : 'unknown';
   const deviceInfo = data.deviceInfo || {};
+  const includeAccountInfo =
+    typeof data.includeAccountInfo === 'boolean'
+      ? data.includeAccountInfo
+      : null;
 
   return [
-    `Message ID: ${messageId}`,
-    `Category: ${data.category}`,
-    `Subject: ${data.subject}`,
+    `Document ID: ${messageId}`,
+    `Category: ${data.category || '-'}`,
+    `Subject: ${data.subject || '-'}`,
+    `Email: ${data.email || '-'}`,
+    `Locale: ${data.locale || '-'}`,
+    `Include Account Info: ${
+      includeAccountInfo === null ? '-' : includeAccountInfo
+    }`,
+    `Created At: ${createdAt}`,
     '',
     'Message:',
-    data.message,
+    data.message || '-',
     '',
-    '---',
-    'Account Info:',
-    `UID: ${data.uid || '-'}`,
-    `Email: ${data.email || '-'}`,
-    `Phone: ${data.phone || '-'}`,
-    `Name: ${data.displayName || '-'}`,
-    '',
-    'Metadata:',
-    `App Version: ${data.appVersion || '-'}`,
-    `Platform: ${data.platform || '-'}`,
-    `Locale: ${data.locale || '-'}`,
-    `Created At: ${createdAt}`,
-    `Device ID: ${deviceInfo.deviceId || '-'}`,
-    `OS Version: ${deviceInfo.osVersion || '-'}`,
+    'Device Info:',
+    JSON.stringify(deviceInfo, null, 2),
   ].join('\n');
 }
