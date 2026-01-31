@@ -8567,11 +8567,13 @@ class EvalWeight {
 }
 
 class ModuleSpec {
+  final String id;
   final String name;
   final double coef;
   final double credits;
   final List<EvalWeight> evalWeights;
   const ModuleSpec({
+    required this.id,
     required this.name,
     required this.coef,
     required this.credits,
@@ -8589,8 +8591,10 @@ class SemesterSpec {
 }
 
 List<SemesterSpec> createSemesterSpecsForTrack(ProgramTrack track) {
-  return track.semesters.map(
-    (sem) {
+  return track.semesters.asMap().entries.map(
+    (semEntry) {
+      final semIndex = semEntry.key;
+      final sem = semEntry.value;
       // جمع كل modules من كل الوحدات داخل السداسي
       final allModules =
           sem.unit.expand((u) => u.modules).toList(growable: false);
@@ -8598,13 +8602,20 @@ List<SemesterSpec> createSemesterSpecsForTrack(ProgramTrack track) {
       return SemesterSpec(
         name: sem.label,
         modules: allModules
+            .asMap()
+            .entries
             .map(
-              (module) => ModuleSpec(
-                name: module.name,
-                coef: module.coef.toDouble(),
-                credits: module.credits.toDouble(),
-                evalWeights: _normalizeEvalWeights(module.components),
-              ),
+              (moduleEntry) {
+                final moduleIndex = moduleEntry.key;
+                final module = moduleEntry.value;
+                return ModuleSpec(
+                  id: 'sem${semIndex + 1}-module${moduleIndex + 1}',
+                  name: module.name,
+                  coef: module.coef.toDouble(),
+                  credits: module.credits.toDouble(),
+                  evalWeights: _normalizeEvalWeights(module.components),
+                );
+              },
             )
             .toList(growable: false),
       );
@@ -8731,7 +8742,9 @@ class SemesterModel {
       }
 
       return ModuleModel(
-        id: _moduleIdForSemester(spec.name, module.name),
+        id: module.id.trim().isNotEmpty
+            ? module.id
+            : _moduleIdForSemester(spec.name, module.name),
         title: module.name,
         coef: module.coef,
         credits: module.credits,
@@ -8783,12 +8796,14 @@ class SemesterModel {
     ProgramSemester ps,
     VoidCallback onChanged,
   ) {
+    final allModules =
+        ps.unit.expand((u) => u.modules).toList(growable: false);
     return SemesterModel(
       name: ps.label,
       onChanged: onChanged,
-      modules: ps.unit
-          .expand((u) => u.modules) // جمع modules من جميع الوحدات
-          .map((m) {
+      modules: allModules.asMap().entries.map((entry) {
+        final moduleIndex = entry.key;
+        final m = entry.value;
         // تحويل ProgramComponent إلى أوزان TD/TP/EXAM
         double td = 0;
         double tp = 0;
@@ -8801,7 +8816,7 @@ class SemesterModel {
         }
 
         return ModuleModel(
-          id: _moduleIdForSemester(ps.label, m.name),
+          id: 'sem${ps.label.trim().toUpperCase()}-module${moduleIndex + 1}',
           title: m.name,
           coef: m.coef,
           credits: m.credits,
@@ -9254,12 +9269,23 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     debugPrint(
       'LOAD_OVERRIDES semesterKey=$semesterKey data=${jsonEncode(overrides)}',
     );
+    if (overrides.isEmpty) {
+      debugPrint(
+        'LOAD_DEFAULT semesterKey=$semesterKey reason=no_saved_data',
+      );
+    }
 
     var updated = false;
     if (!_loadedModuleStates.contains(semesterKey)) {
       for (final module in currentSemester.modules) {
         final moduleOverride = overrides[module.id];
-        if (moduleOverride == null) continue;
+        if (moduleOverride == null) {
+          debugPrint(
+            'LOAD_DEFAULT semesterKey=$semesterKey moduleId=${module.id} '
+            'reason=missing_override',
+          );
+          continue;
+        }
         module.coef = moduleOverride['coef']?.toDouble() ?? module.coef;
         module.credits = moduleOverride['cred']?.toDouble() ?? module.credits;
         module.td = moduleOverride['td'] ?? module.td;
