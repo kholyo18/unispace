@@ -9209,31 +9209,52 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   /// ==================== حفظ بيانات الفصل الحالي باستخدام SharedPreferences ====================
   Future<void> saveCurrentSemesterNotes() async {
     debugPrint('SAVE_CLICKED');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Saved")),
-    );
     FocusScope.of(context).unfocus(); // ← يفرض إنهاء تحرير أي TextField
 
     final currentSemester =
         _tabController.index == 0 ? _semester1 : _semester2;
     final semesterKey = currentSemester.name;
-    await _gradesStore.saveModuleStates(
-      semesterKey,
-      currentSemester.modules,
-    );
-
+    for (final module in currentSemester.modules) {
+      debugPrint(
+        'SAVE_PAYLOAD semesterKey=$semesterKey moduleId=${module.id} '
+        'cred=${module.credits} coef=${module.coef} td=${module.td} '
+        'exam=${module.exam} tp=${module.tp} '
+        'wTd=${module.wTD} wExam=${module.wEX} wTp=${module.wTP}',
+      );
+    }
+    try {
+      await _gradesStore.saveModuleStates(
+        semesterKey,
+        currentSemester.modules,
+      );
+      final readBack = await _gradesStore.loadModuleStates(semesterKey);
+      debugPrint(
+        'SAVE_READBACK semesterKey=$semesterKey data=${jsonEncode(readBack)}',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Saved")),
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('SAVE_ERROR semesterKey=$semesterKey error=$error');
+      debugPrint('SAVE_STACK $stackTrace');
+    }
   }
 
   /// ==================== تحميل بيانات الفصل الحالي من SharedPreferences ====================
   Future<void> loadSemesterNotes() async {
-    debugPrint('LOAD_START');
     final currentSemester =
         _tabController.index == 0 ? _semester1 : _semester2;
     final semesterKey = currentSemester.name;
+    debugPrint('LOAD_START semesterKey=$semesterKey');
+    final overrides = await _gradesStore.loadModuleStates(semesterKey);
+    debugPrint(
+      'LOAD_OVERRIDES semesterKey=$semesterKey data=${jsonEncode(overrides)}',
+    );
 
     var updated = false;
     if (!_loadedModuleStates.contains(semesterKey)) {
-      final overrides = await _gradesStore.loadModuleStates(semesterKey);
       for (final module in currentSemester.modules) {
         final moduleOverride = overrides[module.id];
         if (moduleOverride == null) continue;
@@ -9826,6 +9847,14 @@ class _NoteCardState extends State<NoteCard> {
         cred = widget.cred;
         _coefController.text = coef.toStringAsFixed(0);
         _credController.text = cred.toStringAsFixed(0);
+      });
+    }
+    if (widget.wTD != wTD || widget.wEX != wEX || widget.wTP != wTP) {
+      setState(() {
+        wTD = widget.wTD;
+        wEX = widget.wEX;
+        wTP = widget.wTP;
+        calculateMoy();
       });
     }
   }
