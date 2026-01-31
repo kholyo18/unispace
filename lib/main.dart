@@ -8015,6 +8015,7 @@ class QuickAverageScreen extends StatefulWidget {
 
 class _QuickAverageScreenState extends State<QuickAverageScreen> {
   static const String _quickCalcStorageKey = 'quick_calc_state_v1';
+  static const double _dismissThreshold = 0.4;
   final List<NoteData> subjects = [];
   double threshold = 10;
   double avg = 0;
@@ -8214,36 +8215,13 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
           ...subjects.asMap().entries.map((e) {
             final i = e.key;
             final s = e.value;
-            final textDirection = Directionality.of(context);
-            final dismissDirection = textDirection == TextDirection.rtl
-                ? DismissDirection.endToStart
-                : DismissDirection.startToEnd;
-            final dismissBackground = ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                color: Colors.red.shade600,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                alignment: AlignmentDirectional.centerStart,
-                child: const Icon(
-                  Icons.delete_outline,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-            );
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Dismissible(
-                key: ValueKey(s),
-                direction: dismissDirection,
-                movementDuration: const Duration(milliseconds: 220),
-                resizeDuration: const Duration(milliseconds: 200),
-                background: dismissBackground,
-                secondaryBackground: dismissBackground,
-                onDismissed: (_) => _removeSubjectAt(i),
-                child: NoteCardWidget(
-                  data: s,
-                ),
+              child: _QuickCalcDismissibleItem(
+                data: s,
+                index: i,
+                threshold: _dismissThreshold,
+                onRemove: _removeSubjectAt,
               ),
             );
           }),
@@ -8278,25 +8256,38 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(textDirection: TextDirection.ltr, children: [
-                Text(
-                  'Moy: ${avg.toStringAsFixed(2)} /         ',
-                  textDirection: TextDirection.ltr,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                ),
-                Text(
-                  avg == 0
-                      ? '___'
-                      : (avg >= threshold ? "✅ Succeeded" : "❌ Failed"),
-                  style: TextStyle(
-                    color: avg == 0
-                        ? Colors.grey
-                        : (avg >= threshold ? Colors.green : Colors.red),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
+              Row(
+                textDirection: TextDirection.ltr,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Moy: ${avg.toStringAsFixed(2)}',
+                      textDirection: TextDirection.ltr,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 18),
+                    ),
                   ),
-                )
-              ]),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      avg == 0
+                          ? '___'
+                          : (avg >= threshold ? "✅ Succeeded" : "❌ Failed"),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: avg == 0
+                            ? Colors.grey
+                            : (avg >= threshold ? Colors.green : Colors.red),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                      ),
+                    ),
+                  )
+                ],
+              ),
               const SizedBox(height: 12),
               Align(
                   alignment: Alignment.centerLeft,
@@ -8341,6 +8332,121 @@ class NoteData {
   });
 
   double get moy => (td * Wtd + exam * Wexam + tp * Wtp);
+}
+
+class _QuickCalcDismissibleItem extends StatefulWidget {
+  const _QuickCalcDismissibleItem({
+    required this.data,
+    required this.index,
+    required this.threshold,
+    required this.onRemove,
+  });
+
+  final NoteData data;
+  final int index;
+  final double threshold;
+  final Future<void> Function(int index) onRemove;
+
+  @override
+  State<_QuickCalcDismissibleItem> createState() =>
+      _QuickCalcDismissibleItemState();
+}
+
+class _QuickCalcDismissibleItemState extends State<_QuickCalcDismissibleItem> {
+  double _progress = 0;
+  bool _hapticTriggered = false;
+
+  void _handleUpdate(DismissUpdateDetails details) {
+    final progress = details.progress.clamp(0.0, 1.0);
+    if (progress >= widget.threshold && !_hapticTriggered) {
+      HapticFeedback.lightImpact();
+      _hapticTriggered = true;
+    }
+    if (progress < widget.threshold && _hapticTriggered) {
+      _hapticTriggered = false;
+    }
+    if (_progress != progress) {
+      setState(() {
+        _progress = progress;
+      });
+    }
+  }
+
+  Future<bool> _confirmDismiss() async {
+    return _progress >= widget.threshold;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ambientDirection = Directionality.of(context);
+    final eased = Curves.easeOut.transform(_progress);
+    final backgroundColor = Color.lerp(
+      Colors.red.withOpacity(0.08),
+      Colors.red.shade600,
+      eased,
+    )!;
+    final iconScale = 0.9 + (0.2 * eased);
+
+    final dismissBackground = ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              backgroundColor.withOpacity(0.9),
+              backgroundColor,
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Transform.scale(
+              scale: iconScale,
+              child: const Icon(
+                Icons.delete_outline,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Text(
+              'حذف',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Dismissible(
+        key: ValueKey(widget.data),
+        direction: DismissDirection.startToEnd,
+        movementDuration: const Duration(milliseconds: 220),
+        resizeDuration: const Duration(milliseconds: 200),
+        dismissThresholds: {DismissDirection.startToEnd: widget.threshold},
+        background: dismissBackground,
+        confirmDismiss: (_) => _confirmDismiss(),
+        onUpdate: _handleUpdate,
+        onDismissed: (_) => widget.onRemove(widget.index),
+        child: Directionality(
+          textDirection: ambientDirection,
+          child: NoteCardWidget(
+            data: widget.data,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // -------------------------
@@ -8452,12 +8558,14 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Coef & Cred أولاً
-                Column(
+                Flexible(
+                  flex: 2,
+                  child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     //coef
                     SizedBox(
-                      width: 70,
+                      width: double.infinity,
                       child: Column(
                         children: [
                           const Text("Coef"),
@@ -8486,7 +8594,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                     const SizedBox(height: 10),
                     //cred
                     SizedBox(
-                      width: 70,
+                      width: double.infinity,
                       child: Column(
                         children: [
                           const Text("Cred"),
@@ -8514,77 +8622,85 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                     ),
                   ],
                 ),
-                //const SizedBox(width:  12),
+                const SizedBox(width: 12),
                 Container(
                   color: Theme.of(context).colorScheme.onSurface,
                   height: 180,
                   width: 1,
                 ),
-                //const SizedBox(width:  12),
-
-                Row(children: [
-                  // wTD / wTP / wExam
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 5,
+                  child: Row(
                     children: [
-                      _buildScoreField("W.TD", WtdController, (v) {
-                        widget.data.Wtd = double.tryParse(v) ?? 0;
-                        setState(() {});
-                      }),
-                      const SizedBox(height: 5),
-                      Container(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1,
-                        width: 70,
+                      // wTD / wTP / wExam
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildScoreField("W.TD", WtdController, (v) {
+                              widget.data.Wtd = double.tryParse(v) ?? 0;
+                              setState(() {});
+                            }),
+                            const SizedBox(height: 5),
+                            Container(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              height: 1,
+                              width: double.infinity,
+                            ),
+                            _buildScoreField("W.TP", WtpController, (v) {
+                              widget.data.Wtp = double.tryParse(v) ?? 0;
+                              setState(() {});
+                            }),
+                            const SizedBox(height: 5),
+                            Container(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              height: 1,
+                              width: double.infinity,
+                            ),
+                            _buildScoreField("W.EX", WexamController, (v) {
+                              widget.data.Wexam = double.tryParse(v) ?? 0;
+                              setState(() {});
+                            }),
+                          ],
+                        ),
                       ),
-                      _buildScoreField("W.TP", WtpController, (v) {
-                        widget.data.Wtp = double.tryParse(v) ?? 0;
-                        setState(() {});
-                      }),
-                      const SizedBox(height: 5),
-                      Container(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1,
-                        width: 70,
+                      const SizedBox(width: 12),
+                      // TD / TP / Exam
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildScoreField("TD", tdController, (v) {
+                              widget.data.td = double.tryParse(v) ?? 0;
+                              setState(() {});
+                            }),
+                            const SizedBox(height: 5),
+                            Container(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              height: 1,
+                              width: double.infinity,
+                            ),
+                            _buildScoreField("TP", tpController, (v) {
+                              widget.data.tp = double.tryParse(v) ?? 0;
+                              setState(() {});
+                            }),
+                            const SizedBox(height: 5),
+                            Container(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              height: 1,
+                              width: double.infinity,
+                            ),
+                            _buildScoreField("Exam", examController, (v) {
+                              widget.data.exam = double.tryParse(v) ?? 0;
+                              setState(() {});
+                            }),
+                          ],
+                        ),
                       ),
-                      _buildScoreField("W.EX", WexamController, (v) {
-                        widget.data.Wexam = double.tryParse(v) ?? 0;
-                        setState(() {});
-                      }),
                     ],
                   ),
-                  const SizedBox(width: 12),
-                  // TD / TP / Exam
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildScoreField("TD", tdController, (v) {
-                        widget.data.td = double.tryParse(v) ?? 0;
-                        setState(() {});
-                      }),
-                      const SizedBox(height: 5),
-                      Container(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1,
-                        width: 70,
-                      ),
-                      _buildScoreField("TP", tpController, (v) {
-                        widget.data.tp = double.tryParse(v) ?? 0;
-                        setState(() {});
-                      }),
-                      const SizedBox(height: 5),
-                      Container(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1,
-                        width: 70,
-                      ),
-                      _buildScoreField("Exam", examController, (v) {
-                        widget.data.exam = double.tryParse(v) ?? 0;
-                        setState(() {});
-                      }),
-                    ],
-                  ),
-                ])
+                ),
               ],
             )
         ],
@@ -8599,7 +8715,6 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
         Text(label),
         const SizedBox(height: 4),
         SizedBox(
-          width: 70,
           height: 40,
           child: TextField(
             controller: controller,
