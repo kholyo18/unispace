@@ -243,6 +243,27 @@ class MessageLookup extends MessageLookupByLibrary {
         "oneMajor": MessageLookupByLibrary.simpleMessage("One major"),
         "otherNotes": MessageLookupByLibrary.simpleMessage("Other Notes"),
         "password": MessageLookupByLibrary.simpleMessage("Password"),
+        "forgotPassword":
+            MessageLookupByLibrary.simpleMessage("Forgot password?"),
+        "resetPasswordTitle":
+            MessageLookupByLibrary.simpleMessage("Reset your password"),
+        "resetPasswordHelper": MessageLookupByLibrary.simpleMessage(
+            "Enter your email and we’ll send you a reset link."),
+        "sendResetLink": MessageLookupByLibrary.simpleMessage("Send link"),
+        "sendResetLinkLoading":
+            MessageLookupByLibrary.simpleMessage("Sending..."),
+        "invalidEmailValidation": MessageLookupByLibrary.simpleMessage(
+            "Please enter a valid email address."),
+        "resetLinkSentSuccess": MessageLookupByLibrary.simpleMessage(
+            "The reset link was sent to your email."),
+        "invalidEmailError": MessageLookupByLibrary.simpleMessage(
+            "The email address is invalid."),
+        "userNotFoundError": MessageLookupByLibrary.simpleMessage(
+            "No account found with that email."),
+        "tooManyRequestsError": MessageLookupByLibrary.simpleMessage(
+            "Too many requests, try again later."),
+        "resetLinkFailed": MessageLookupByLibrary.simpleMessage(
+            "Could not send the link, please try again."),
         "pinNote": MessageLookupByLibrary.simpleMessage("Pin Note"),
         "pinned": MessageLookupByLibrary.simpleMessage("Pinned"),
         "politicalAdministrativeOrgs": MessageLookupByLibrary.simpleMessage(
