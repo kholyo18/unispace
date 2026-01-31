@@ -8651,7 +8651,9 @@ String _slugifyModuleId(String value) {
 }
 
 String _moduleIdForSemester(String semester, String moduleName) {
-  return _slugifyModuleId('$semester-$moduleName');
+  final normalizedSemester = semester.trim().toUpperCase();
+  final normalizedModule = moduleName.trim();
+  return _slugifyModuleId('$normalizedSemester-$normalizedModule');
 }
 
 class ModuleModel {
@@ -9213,7 +9215,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
 
     final currentSemester =
         _tabController.index == 0 ? _semester1 : _semester2;
-    final semesterKey = currentSemester.name;
+    final semesterKey = currentSemester.name.trim().toUpperCase();
     for (final module in currentSemester.modules) {
       debugPrint(
         'SAVE_PAYLOAD semesterKey=$semesterKey moduleId=${module.id} '
@@ -9246,7 +9248,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   Future<void> loadSemesterNotes() async {
     final currentSemester =
         _tabController.index == 0 ? _semester1 : _semester2;
-    final semesterKey = currentSemester.name;
+    final semesterKey = currentSemester.name.trim().toUpperCase();
     debugPrint('LOAD_START semesterKey=$semesterKey');
     final overrides = await _gradesStore.loadModuleStates(semesterKey);
     debugPrint(
@@ -9443,12 +9445,18 @@ class GradesLocalStore {
   static const String _storageKey = 'unispace_grades_v1';
   static const String _modulesStoragePrefix = 'modules_';
 
+  String _normalizeSemesterKey(String semester) {
+    return semester.trim().toUpperCase();
+  }
+
   String _entryKey(String semester, String moduleId) {
-    return '$semester|$moduleId';
+    final normalizedSemester = _normalizeSemesterKey(semester);
+    return '$normalizedSemester|$moduleId';
   }
 
   String _modulesKey(String semester) {
-    return '$_modulesStoragePrefix${semester.toLowerCase()}';
+    final normalizedSemester = _normalizeSemesterKey(semester).toLowerCase();
+    return '$_modulesStoragePrefix$normalizedSemester';
   }
 
   Future<Map<String, dynamic>> _loadAll() async {
@@ -9466,7 +9474,13 @@ class GradesLocalStore {
 
   Future<void> _saveAll(Map<String, dynamic> data) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(data));
+    try {
+      await prefs.setString(_storageKey, jsonEncode(data));
+    } catch (error, stackTrace) {
+      debugPrint('SAVE_ALL_ERROR error=$error');
+      debugPrint('SAVE_ALL_STACK $stackTrace');
+      rethrow;
+    }
   }
 
   Future<Map<String, double?>?> loadGrade(
@@ -9525,7 +9539,13 @@ class GradesLocalStore {
 
     if (!hasValues) {
       all.remove(key);
-      await _saveAll(all);
+      try {
+        await _saveAll(all);
+      } catch (error, stackTrace) {
+        debugPrint('SAVE_GRADE_REMOVE_ERROR key=$key error=$error');
+        debugPrint('SAVE_GRADE_REMOVE_STACK $stackTrace');
+        rethrow;
+      }
       return;
     }
 
@@ -9541,7 +9561,13 @@ class GradesLocalStore {
       'wTP': wTP,
     };
 
-    await _saveAll(all);
+    try {
+      await _saveAll(all);
+    } catch (error, stackTrace) {
+      debugPrint('SAVE_GRADE_ERROR key=$key error=$error');
+      debugPrint('SAVE_GRADE_STACK $stackTrace');
+      rethrow;
+    }
   }
 
   Future<Map<String, Map<String, dynamic>>> loadModuleStates(
@@ -9558,28 +9584,36 @@ class GradesLocalStore {
     final raw = prefs.getString(modulesKey);
     debugPrint('LOAD_MODULES_RAW key=$modulesKey raw=$raw');
     if (raw != null && raw.isNotEmpty) {
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        for (final entry in decoded) {
-          if (entry is! Map) continue;
-          final id = entry['moduleId']?.toString() ?? entry['id']?.toString();
-          if (id == null || id.isEmpty) continue;
-          states[id] = {
-            'moduleId': id,
-            'moduleName': entry['moduleName']?.toString() ??
-                entry['name']?.toString(),
-            'semester': entry['semester']?.toString() ?? semester,
-            'coef': toDouble(entry['coef']),
-            'cred': toDouble(entry['cred']),
-            'td': toDouble(entry['td']),
-            'tp': toDouble(entry['tp']),
-            'exam': toDouble(entry['exam']),
-            'moy': toDouble(entry['moy']),
-            'wTD': toDouble(entry['wTD']),
-            'wEX': toDouble(entry['wEX']),
-            'wTP': toDouble(entry['wTP']),
-          };
+      try {
+        final decoded = jsonDecode(raw);
+        debugPrint(
+          'LOAD_MODULES_PARSED key=$modulesKey payload=${jsonEncode(decoded)}',
+        );
+        if (decoded is List) {
+          for (final entry in decoded) {
+            if (entry is! Map) continue;
+            final id = entry['moduleId']?.toString() ?? entry['id']?.toString();
+            if (id == null || id.isEmpty) continue;
+            states[id] = {
+              'moduleId': id,
+              'moduleName': entry['moduleName']?.toString() ??
+                  entry['name']?.toString(),
+              'semester': entry['semester']?.toString() ?? semester,
+              'coef': toDouble(entry['coef']),
+              'cred': toDouble(entry['cred']),
+              'td': toDouble(entry['td']),
+              'tp': toDouble(entry['tp']),
+              'exam': toDouble(entry['exam']),
+              'moy': toDouble(entry['moy']),
+              'wTD': toDouble(entry['wTD']),
+              'wEX': toDouble(entry['wEX']),
+              'wTP': toDouble(entry['wTP']),
+            };
+          }
         }
+      } catch (error, stackTrace) {
+        debugPrint('LOAD_MODULES_ERROR key=$modulesKey error=$error');
+        debugPrint('LOAD_MODULES_STACK $stackTrace');
       }
     }
 
@@ -9587,8 +9621,9 @@ class GradesLocalStore {
     for (final entry in legacy.entries) {
       if (entry.key is! String) continue;
       final key = entry.key as String;
-      if (!key.startsWith('$semester|')) continue;
-      final moduleId = key.substring('$semester|'.length);
+      final normalizedSemester = _normalizeSemesterKey(semester);
+      if (!key.startsWith('$normalizedSemester|')) continue;
+      final moduleId = key.substring('$normalizedSemester|'.length);
       if (moduleId.isEmpty) continue;
       final legacyEntry = entry.value;
       if (legacyEntry is! Map) continue;
@@ -9645,8 +9680,10 @@ class GradesLocalStore {
           },
         )
         .toList(growable: false);
-    debugPrint('SAVE_MODULES payload=${jsonEncode(payload)}');
     final modulesKey = _modulesKey(semester);
+    debugPrint(
+      'SAVE_MODULES key=$modulesKey payload=${jsonEncode(payload)}',
+    );
     try {
       await prefs.setString(modulesKey, jsonEncode(payload));
     } catch (error, stackTrace) {
