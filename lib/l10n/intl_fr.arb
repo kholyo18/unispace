@@ -263,17 +263,35 @@
   "notificationsSettingsDescription": "Gérez les notifications et rappels.",
   "notificationsEnabled": "Activer les notifications",
   "notificationsEnabledHint": "Recevez des alertes sur les mises à jour et rappels.",
+  "notificationsExamReminders": "Rappels d'examens",
+  "notificationsExamRemindersHint": "Recevez des alertes locales pour les examens planifiés.",
+  "notificationsAnnouncements": "Annonces",
+  "notificationsAnnouncementsHint": "Restez informé des actualités du campus.",
+  "notificationsCommunity": "Mises à jour de la communauté",
+  "notificationsCommunityHint": "Soyez notifié de l'activité de la communauté.",
+  "notificationsDisabledHint": "Activez les notifications pour gérer les rappels et alertes.",
   "securityCenterTitle": "Sécurité",
   "twoFactorAuthTitle": "Authentification à deux facteurs",
   "twoFactorAuthHint": "Exiger un code OTP lors de la connexion.",
   "twoFactorEnabledToast": "Authentification à deux facteurs activée.",
   "twoFactorDisabledToast": "Authentification à deux facteurs désactivée.",
+  "manageDevicesTitle": "Gérer les appareils",
+  "manageDevicesHint": "Consultez les sessions actives et les appareils.",
+  "manageDevicesDescription": "Consultez les connexions et retirez l'accès si nécessaire.",
+  "currentDeviceTitle": "Appareil actuel",
+  "activeSessionsTitle": "Sessions actives",
+  "activeSessionsEmpty": "Aucune autre session active",
+  "activeSessionsHint": "La gestion des sessions nécessite un backend sécurisé.",
   "trustedDevicesTitle": "Appareils de confiance",
   "devicePrimary": "Appareil principal",
   "deviceActiveNow": "Actif maintenant",
   "signOut": "Se déconnecter",
   "logoutAllDevices": "Déconnecter tous les appareils",
   "logoutAllSuccess": "Déconnexion de tous les appareils réussie.",
+  "logoutAllDevicesPrompt": "Nous vous déconnecterons sur cet appareil. Activez la révocation backend pour les autres sessions.",
+  "logoutAllConfirm": "Se déconnecter",
+  "logoutAllLocalOnly": "Déconnecté ici. Configurez la révocation backend pour les autres appareils.",
+  "logoutAllFailed": "Impossible de déconnecter tous les appareils.",
   "privacySettingsTitle": "Confidentialité",
   "privacySettingsDescription": "Contrôlez ce que les autres voient sur votre profil.",
   "profileVisibilityTitle": "Visibilité du profil",
@@ -284,6 +302,16 @@
   "blockedUsersTitle": "Utilisateurs bloqués",
   "blockedUsersEmpty": "Aucun utilisateur bloqué",
   "blockedUsersHint": "Les utilisateurs bloqués apparaîtront ici.",
+  "blockedUsersAddTitle": "Bloquer un utilisateur",
+  "blockedUsersAddHint": "Saisissez l'identifiant ou l'e-mail",
+  "blockedUsersAddAction": "Bloquer",
+  "blockedUsersSince": "Bloqué le {date}",
+  "@blockedUsersSince": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "unblockUser": "Débloquer",
   "academicSettingsTitle": "Paramètres académiques",
   "academicSettingsDescription": "Mettez à jour votre faculté, spécialité et niveau.",
   "academicCollegeLabel": "Faculté",
@@ -297,10 +325,30 @@
   "downloadsEmptyHint": "Les éléments téléchargés apparaîtront ici.",
   "downloadsClearCache": "Vider le cache",
   "downloadsCacheCleared": "Cache vidé.",
+  "downloadsUpdatedAt": "Mis à jour {date}",
+  "@downloadsUpdatedAt": {
+    "placeholders": {
+      "date": {}
+    }
+  },
   "favoritesTitle": "Favoris",
   "favoritesDescription": "Vos éléments enregistrés apparaissent ici.",
   "favoritesEmptyTitle": "Aucun favori",
   "favoritesEmptyHint": "Enregistrez des publications ou fichiers pour les voir ici.",
+  "favoritesAddTitle": "Ajouter un favori",
+  "favoritesAddHint": "Saisissez l'ID de l'élément",
+  "favoritesAddTypeHint": "Type (optionnel)",
+  "favoritesAddAction": "Enregistrer",
+  "favoritesAdded": "Favori enregistré.",
+  "favoritesRemoved": "Favori supprimé.",
+  "favoritesSignInTitle": "Connectez-vous pour enregistrer des favoris",
+  "favoritesSignInHint": "Les favoris se synchronisent avec votre compte.",
+  "favoritesTypeLabel": "Type : {type}",
+  "@favoritesTypeLabel": {
+    "placeholders": {
+      "type": {}
+    }
+  },
   "fontSizeTitle": "Taille de police",
   "fontSizeDescription": "Choisissez une taille de lecture confortable.",
   "fontSizeSmall": "Petite",
@@ -315,8 +363,15 @@
   "emailVerified": "E-mail vérifié",
   "emailNotVerified": "E-mail non vérifié",
   "sendOtpNow": "Envoyer l'OTP maintenant",
+  "otpCooldownLabel": "Envoyer l'OTP dans {seconds}s",
+  "@otpCooldownLabel": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
   "otpSentSuccess": "OTP envoyé. Vérifiez votre e-mail.",
   "otpSentFailed": "Impossible d'envoyer l'OTP pour le moment.",
+  "signInRequired": "Veuillez vous connecter pour continuer.",
   "guestUser": "Invité",
   "emailUnavailable": "E-mail indisponible",
   "emailHidden": "E-mail masqué",

@@ -264,17 +264,35 @@
   "notificationsSettingsDescription": "Manage push notifications and reminders.",
   "notificationsEnabled": "Enable notifications",
   "notificationsEnabledHint": "Get alerts about updates and reminders.",
+  "notificationsExamReminders": "Exam reminders",
+  "notificationsExamRemindersHint": "Receive local alerts for scheduled exams.",
+  "notificationsAnnouncements": "Announcements",
+  "notificationsAnnouncementsHint": "Stay up to date on campus news.",
+  "notificationsCommunity": "Community updates",
+  "notificationsCommunityHint": "Get notified about community activity.",
+  "notificationsDisabledHint": "Enable notifications to manage reminders and alerts.",
   "securityCenterTitle": "Security",
   "twoFactorAuthTitle": "Two-factor authentication",
   "twoFactorAuthHint": "Require OTP verification on sign-in.",
   "twoFactorEnabledToast": "Two-factor authentication enabled.",
   "twoFactorDisabledToast": "Two-factor authentication disabled.",
+  "manageDevicesTitle": "Manage devices",
+  "manageDevicesHint": "Review active sessions and devices.",
+  "manageDevicesDescription": "See where your account is signed in and remove access if needed.",
+  "currentDeviceTitle": "Current device",
+  "activeSessionsTitle": "Active sessions",
+  "activeSessionsEmpty": "No other active sessions",
+  "activeSessionsHint": "Session management requires a secure backend.",
   "trustedDevicesTitle": "Trusted devices",
   "devicePrimary": "Primary device",
   "deviceActiveNow": "Active now",
   "signOut": "Sign out",
   "logoutAllDevices": "Log out of all devices",
   "logoutAllSuccess": "Signed out from all devices.",
+  "logoutAllDevicesPrompt": "We'll sign you out on this device. For other sessions, enable backend revocation.",
+  "logoutAllConfirm": "Log out",
+  "logoutAllLocalOnly": "Signed out here. Configure backend revocation for other devices.",
+  "logoutAllFailed": "Unable to sign out from all devices.",
   "privacySettingsTitle": "Privacy",
   "privacySettingsDescription": "Control what others can see on your profile.",
   "profileVisibilityTitle": "Profile visibility",
@@ -285,6 +303,16 @@
   "blockedUsersTitle": "Blocked users",
   "blockedUsersEmpty": "No blocked users",
   "blockedUsersHint": "Blocked users will appear here.",
+  "blockedUsersAddTitle": "Block a user",
+  "blockedUsersAddHint": "Enter user ID or email",
+  "blockedUsersAddAction": "Block",
+  "blockedUsersSince": "Blocked on {date}",
+  "@blockedUsersSince": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "unblockUser": "Unblock",
   "academicSettingsTitle": "Academic settings",
   "academicSettingsDescription": "Update your college, major, and level.",
   "academicCollegeLabel": "College",
@@ -298,10 +326,30 @@
   "downloadsEmptyHint": "Downloaded items will appear here.",
   "downloadsClearCache": "Clear cache",
   "downloadsCacheCleared": "Cache cleared.",
+  "downloadsUpdatedAt": "Updated {date}",
+  "@downloadsUpdatedAt": {
+    "placeholders": {
+      "date": {}
+    }
+  },
   "favoritesTitle": "Favorites",
   "favoritesDescription": "Your saved items appear here.",
   "favoritesEmptyTitle": "No favorites yet",
   "favoritesEmptyHint": "Save posts or files to see them here.",
+  "favoritesAddTitle": "Add favorite",
+  "favoritesAddHint": "Enter item ID",
+  "favoritesAddTypeHint": "Type (optional)",
+  "favoritesAddAction": "Save",
+  "favoritesAdded": "Favorite saved.",
+  "favoritesRemoved": "Favorite removed.",
+  "favoritesSignInTitle": "Sign in to save favorites",
+  "favoritesSignInHint": "Favorites sync to your account when signed in.",
+  "favoritesTypeLabel": "Type: {type}",
+  "@favoritesTypeLabel": {
+    "placeholders": {
+      "type": {}
+    }
+  },
   "fontSizeTitle": "Font size",
   "fontSizeDescription": "Choose a comfortable reading size.",
   "fontSizeSmall": "Small",
@@ -316,8 +364,15 @@
   "emailVerified": "Email verified",
   "emailNotVerified": "Email not verified",
   "sendOtpNow": "Send OTP now",
+  "otpCooldownLabel": "Send OTP in {seconds}s",
+  "@otpCooldownLabel": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
   "otpSentSuccess": "OTP sent. Check your email.",
   "otpSentFailed": "Unable to send OTP right now.",
+  "signInRequired": "Please sign in to continue.",
   "guestUser": "Guest",
   "emailUnavailable": "Email unavailable",
   "emailHidden": "Email hidden",
@@ -329,7 +384,6 @@
 
 
 }
-
 
 
 
