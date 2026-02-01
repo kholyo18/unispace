@@ -336,8 +336,8 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                     coef: 2,
                     credits: 4,
                     components: [
-                      ProgramComponent('TD', 0),
-                      ProgramComponent('EXAM', 100),
+                      ProgramComponent('TD', 40),
+                      ProgramComponent('EXAM', 60),
                     ],
                   ),
                   ProgramModule(
@@ -345,7 +345,7 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                     coef: 1,
                     credits: 1,
                     components: [
-                      //ProgramComponent('TD', 0),
+                      ProgramComponent('TD', 0),
                       ProgramComponent('EXAM', 100),
                     ],
                   ),
