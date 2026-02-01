@@ -25,6 +25,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -614,6 +615,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final email = TextEditingController();
   final password = TextEditingController();
   bool loading = false;
+  bool googleLoading = false;
 
   String _mapAuthError(FirebaseAuthException error) {
     switch (error.code) {
@@ -644,6 +646,22 @@ class _SignInScreenState extends State<SignInScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String _mapGoogleAuthError(Object error) {
+    if (error is FirebaseAuthException) {
+      if (error.code == 'network-request-failed') {
+        return 'تحقق من اتصال الإنترنت ثم أعد المحاولة.';
+      }
+      return 'حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.';
+    }
+    if (error is PlatformException) {
+      if (error.code == 'network_error') {
+        return 'تحقق من اتصال الإنترنت ثم أعد المحاولة.';
+      }
+      return 'حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.';
+    }
+    return 'حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.';
+  }
+
   Future<void> _login() async {
     final trimmedEmail = email.text.trim();
     final trimmedPassword = password.text.trim();
@@ -667,6 +685,35 @@ class _SignInScreenState extends State<SignInScreen> {
       _showAuthSnack('حدث خطأ أثناء تسجيل الدخول.');
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => googleLoading = true);
+    try {
+      // تأكد من إضافة SHA-1/SHA-256 في Firebase لكل من debug/release عند الحاجة.
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return;
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e, stackTrace) {
+      debugPrint('Google sign-in failed: ${e.code} ${e.message}');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack(_mapGoogleAuthError(e));
+    } on PlatformException catch (e, stackTrace) {
+      debugPrint('Google sign-in platform error: ${e.code} ${e.message}');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack(_mapGoogleAuthError(e));
+    } catch (e, stackTrace) {
+      debugPrint('Google sign-in failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack('حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.');
+    } finally {
+      if (mounted) setState(() => googleLoading = false);
     }
   }
 
@@ -930,7 +977,9 @@ class _SignInScreenState extends State<SignInScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: loading ? null : _showForgotPasswordSheet,
+                    onPressed: loading || googleLoading
+                        ? null
+                        : _showForgotPasswordSheet,
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,
                       minimumSize: Size.zero,
@@ -939,17 +988,62 @@ class _SignInScreenState extends State<SignInScreen> {
                     child: Text(S.of(context).forgotPassword),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed:
+                        loading || googleLoading ? null : _signInWithGoogle,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
+                      elevation: 3,
+                      shadowColor: Colors.black26,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (googleLoading)
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          else
+                            const FaIcon(
+                              FontAwesomeIcons.google,
+                              color: Color(0xFFDB4437),
+                              size: 18,
+                            ),
+                          const SizedBox(width: 10),
+                          const Text('تسجيل الدخول عبر Google'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       FilledButton.icon(
-                        onPressed: loading ? null : _login,
+                        onPressed: loading || googleLoading ? null : _login,
                         icon: const Icon(Icons.login),
                         label: Text(S.of(context).login),
                       ),
                       OutlinedButton.icon(
-                        onPressed: loading ? null : _register,
+                        onPressed: loading || googleLoading ? null : _register,
                         icon: const Icon(Icons.person_add_alt),
                         label: Text(S.of(context).register),
                       ),
