@@ -49,3 +49,27 @@ flutterfire configure   # يولّد lib/firebase_options.dart
 
 # 3) تشغيل
 flutter run   # اختر جهاز Android أو Web
+```
+
+---
+
+## ✉️ إعداد OTP عبر SendGrid (التسجيل متعدد الخطوات)
+1) ضبط أسرار SendGrid لوظائف Firebase:
+```bash
+firebase functions:secrets:set SENDGRID_API_KEY
+firebase functions:secrets:set SENDGRID_FROM_EMAIL
+```
+> **ملاحظة:** بريد الإرسال يجب أن يكون مُوثّقًا داخل SendGrid.
+
+2) نشر الوظائف:
+```bash
+cd functions
+npm install
+npm run build
+firebase deploy --only functions
+```
+
+3) اختبار التدفق:
+- افتح التطبيق واختر **تسجيل+**.
+- أكمل الخطوات الثلاث وأدخل رمز OTP المرسل.
+- بعد نجاح التحقق سيتم إنشاء الحساب وتسجيل الدخول تلقائيًا.
