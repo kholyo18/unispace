@@ -46,6 +46,7 @@ import 'ui/theme.dart';
 import 'ui/contact/contact_us_sheet.dart';
 import 'ui/widgets/widgets.dart';
 import 'ui/faculty_search_page.dart';
+import 'features/auth/signup_flow.dart';
 import 'features/exams/presentation/pages/exams_calendar_page.dart';
 import './moduls3.dart';
 import './moduls.dart';
@@ -718,33 +719,10 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _register() async {
-    final trimmedEmail = email.text.trim();
-    final trimmedPassword = password.text.trim();
-    if (trimmedEmail.isEmpty || trimmedPassword.isEmpty) {
-      _showAuthSnack('الرجاء إدخال البريد الإلكتروني وكلمة المرور.');
-      return;
-    }
-    if (trimmedPassword.length < 6) {
-      _showAuthSnack('كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
-      return;
-    }
-    setState(() => loading = true);
-    try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: trimmedEmail,
-        password: trimmedPassword,
-      );
-    } on FirebaseAuthException catch (e, stackTrace) {
-      debugPrint('Registration failed: ${e.code} ${e.message}');
-      debugPrintStack(stackTrace: stackTrace);
-      _showAuthSnack(_mapAuthError(e));
-    } catch (e, stackTrace) {
-      debugPrint('Registration failed: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      _showAuthSnack('فشل التسجيل. حاول مرة أخرى.');
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SignUpFlowScreen()),
+    );
   }
 
   String _mapPasswordResetError(FirebaseAuthException error) {

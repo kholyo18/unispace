@@ -6,6 +6,20 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    match /signup_sessions/{sessionId} {
+      allow read, write: if false;
+    }
+
+    match /usernames/{username} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, update, delete: if request.auth != null
+        && request.auth.uid == userId;
+      allow create: if false;
+    }
+
     function isValidSupportMessage() {
       return request.resource.data.keys().hasOnly([
             'uid',
