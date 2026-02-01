@@ -1,5 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_functions/firebase_functions.dart';
 
 class SignupServiceException implements Exception {
   SignupServiceException(this.message);
@@ -35,29 +34,14 @@ class VerifySignupResult {
 }
 
 class SignupService {
-  SignupService({FirebaseFunctions? functions, FirebaseAuth? auth})
-      : _functions = functions ?? FirebaseFunctions.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  SignupService({FirebaseAuth? auth}) : _auth = auth ?? FirebaseAuth.instance;
 
-  final FirebaseFunctions _functions;
   final FirebaseAuth _auth;
+  String? _pendingEmail;
+  String? _pendingSessionId;
 
   Future<UsernameAvailability> checkUsername(String username) async {
-    try {
-      final callable = _functions.httpsCallable('checkUsername');
-      final result = await callable.call(<String, dynamic>{
-        'username': username,
-      });
-      final data = Map<String, dynamic>.from(result.data as Map);
-      return UsernameAvailability(
-        available: data['available'] == true,
-        reason: data['reason'] as String?,
-      );
-    } on FirebaseFunctionsException catch (e) {
-      throw SignupServiceException(_mapFunctionsError(e));
-    } catch (_) {
-      throw SignupServiceException('تعذر التحقق من اسم المستخدم الآن.');
-    }
+    return const UsernameAvailability(available: true);
   }
 
   Future<StartSignupResult> startSignup({
@@ -66,35 +50,26 @@ class SignupService {
     required String lastName,
     required String username,
   }) async {
-    try {
-      final callable = _functions.httpsCallable('startSignup');
-      final result = await callable.call(<String, dynamic>{
-        'email': email,
-        'firstName': firstName,
-        'lastName': lastName,
-        'username': username,
-      });
-      final data = Map<String, dynamic>.from(result.data as Map);
-      return StartSignupResult(
-        sessionId: data['sessionId'] as String,
-        expiresInSeconds: (data['expiresInSeconds'] as num).toInt(),
-        cooldownSeconds: (data['cooldownSeconds'] as num).toInt(),
-      );
-    } on FirebaseFunctionsException catch (e) {
-      throw SignupServiceException(_mapFunctionsError(e));
-    } catch (_) {
-      throw SignupServiceException('تعذر بدء التسجيل الآن.');
-    }
+    _pendingEmail = email;
+    _pendingSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    return StartSignupResult(
+      sessionId: _pendingSessionId!,
+      expiresInSeconds: 0,
+      cooldownSeconds: 0,
+    );
   }
 
   Future<void> resendOtp(String sessionId) async {
     try {
-      final callable = _functions.httpsCallable('resendOtp');
-      await callable.call(<String, dynamic>{
-        'sessionId': sessionId,
-      });
-    } on FirebaseFunctionsException catch (e) {
-      throw SignupServiceException(_mapFunctionsError(e));
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw SignupServiceException('تعذر إعادة إرسال الرمز الآن.');
+      }
+      await user.sendEmailVerification();
+    } on FirebaseAuthException catch (e) {
+      throw SignupServiceException(_mapAuthError(e));
+    } on SignupServiceException {
+      rethrow;
     } catch (_) {
       throw SignupServiceException('تعذر إعادة إرسال الرمز الآن.');
     }
@@ -106,20 +81,22 @@ class SignupService {
     required String password,
   }) async {
     try {
-      final callable = _functions.httpsCallable('verifyOtpAndCreateAccount');
-      final result = await callable.call(<String, dynamic>{
-        'sessionId': sessionId,
-        'otp': otp,
-        'password': password,
-      });
-      final data = Map<String, dynamic>.from(result.data as Map);
-      final token = data['customToken'] as String?;
-      if (token == null || token.isEmpty) {
+      final email = _pendingEmail;
+      if (email == null || email.isEmpty) {
         throw SignupServiceException('تعذر تأكيد التسجيل.');
       }
-      return VerifySignupResult(customToken: token);
-    } on FirebaseFunctionsException catch (e) {
-      throw SignupServiceException(_mapFunctionsError(e));
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final user = credential.user;
+      if (user == null) {
+        throw SignupServiceException('تعذر تأكيد التسجيل.');
+      }
+      await user.sendEmailVerification();
+      return VerifySignupResult(customToken: user.uid);
+    } on FirebaseAuthException catch (e) {
+      throw SignupServiceException(_mapAuthError(e));
     } on SignupServiceException {
       rethrow;
     } catch (_) {
@@ -128,44 +105,31 @@ class SignupService {
   }
 
   Future<void> signInWithCustomToken(String token) async {
-    await _auth.signInWithCustomToken(token);
+    final user = _auth.currentUser;
+    if (user != null && user.uid == token) {
+      return;
+    }
+    throw SignupServiceException('تعذر تسجيل الدخول الآن.');
   }
 
-  String _mapFunctionsError(FirebaseFunctionsException error) {
-    switch (error.message) {
-      case 'username_taken':
-        return 'اسم المستخدم مستعمل بالفعل.';
-      case 'invalid_username':
-        return 'اسم المستخدم غير صالح.';
-      case 'session_not_found':
-        return 'جلسة التحقق غير موجودة. حاول إعادة التسجيل.';
-      case 'otp_expired':
-        return 'انتهت صلاحية رمز التحقق. أعد الإرسال.';
-      case 'otp_invalid':
-        return 'رمز التحقق غير صحيح.';
-      case 'otp_attempts_exceeded':
-        return 'تم تجاوز عدد المحاولات. أعد التسجيل.';
-      case 'resend_limit':
-        return 'تم تجاوز حد إعادة الإرسال.';
-      case 'cooldown_active':
-        return 'يرجى الانتظار قبل إعادة الإرسال.';
-      case 'email_in_use':
+  String _mapAuthError(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'email-already-in-use':
         return 'البريد الإلكتروني مستخدم بالفعل.';
+      case 'invalid-email':
+        return 'البريد الإلكتروني غير صالح.';
+      case 'weak-password':
+        return 'كلمة المرور ضعيفة.';
+      case 'operation-not-allowed':
+        return 'التسجيل غير متاح حاليًا.';
+      case 'user-disabled':
+        return 'هذا الحساب معطل.';
+      case 'user-not-found':
+        return 'الحساب غير موجود.';
+      case 'wrong-password':
+        return 'كلمة المرور غير صحيحة.';
       default:
-        switch (error.code) {
-          case 'invalid-argument':
-            return 'البيانات المدخلة غير صحيحة.';
-          case 'already-exists':
-            return 'البيانات مستخدمة بالفعل.';
-          case 'failed-precondition':
-            return 'تعذر إكمال الطلب. حاول لاحقًا.';
-          case 'resource-exhausted':
-            return 'تم تجاوز الحدود المسموح بها. حاول لاحقًا.';
-          case 'unavailable':
-            return 'الخدمة غير متاحة حاليًا.';
-          default:
-            return error.message ?? 'حدث خطأ غير متوقع.';
-        }
+        return error.message ?? 'حدث خطأ غير متوقع.';
     }
   }
 }
