@@ -254,7 +254,74 @@
     "placeholders": {
       "subject": {}
     }
-  }
+  },
+  "drawerSectionAccount": "Account",
+  "drawerSectionStudent": "Student",
+  "drawerSectionContent": "Content",
+  "drawerSectionApp": "App",
+  "editProfile": "Edit Profile",
+  "notificationsSettingsTitle": "Notifications",
+  "notificationsSettingsDescription": "Manage push notifications and reminders.",
+  "notificationsEnabled": "Enable notifications",
+  "notificationsEnabledHint": "Get alerts about updates and reminders.",
+  "securityCenterTitle": "Security",
+  "twoFactorAuthTitle": "Two-factor authentication",
+  "twoFactorAuthHint": "Require OTP verification on sign-in.",
+  "twoFactorEnabledToast": "Two-factor authentication enabled.",
+  "twoFactorDisabledToast": "Two-factor authentication disabled.",
+  "trustedDevicesTitle": "Trusted devices",
+  "devicePrimary": "Primary device",
+  "deviceActiveNow": "Active now",
+  "signOut": "Sign out",
+  "logoutAllDevices": "Log out of all devices",
+  "logoutAllSuccess": "Signed out from all devices.",
+  "privacySettingsTitle": "Privacy",
+  "privacySettingsDescription": "Control what others can see on your profile.",
+  "profileVisibilityTitle": "Profile visibility",
+  "profileVisibilityPublic": "Public",
+  "profileVisibilityPrivate": "Private",
+  "showEmailInProfileTitle": "Show email on profile",
+  "showEmailInProfileHint": "Allow others to see your email.",
+  "blockedUsersTitle": "Blocked users",
+  "blockedUsersEmpty": "No blocked users",
+  "blockedUsersHint": "Blocked users will appear here.",
+  "academicSettingsTitle": "Academic settings",
+  "academicSettingsDescription": "Update your college, major, and level.",
+  "academicCollegeLabel": "College",
+  "academicMajorLabel": "Major",
+  "academicLevelLabel": "Level",
+  "academicSettingsSaved": "Academic settings saved.",
+  "saveChanges": "Save changes",
+  "downloadsTitle": "Downloads",
+  "downloadsDescription": "Access your downloaded files and clear cache.",
+  "downloadsEmptyTitle": "No downloads yet",
+  "downloadsEmptyHint": "Downloaded items will appear here.",
+  "downloadsClearCache": "Clear cache",
+  "downloadsCacheCleared": "Cache cleared.",
+  "favoritesTitle": "Favorites",
+  "favoritesDescription": "Your saved items appear here.",
+  "favoritesEmptyTitle": "No favorites yet",
+  "favoritesEmptyHint": "Save posts or files to see them here.",
+  "fontSizeTitle": "Font size",
+  "fontSizeDescription": "Choose a comfortable reading size.",
+  "fontSizeSmall": "Small",
+  "fontSizeMedium": "Medium",
+  "fontSizeLarge": "Large",
+  "fontSizePreviewLabel": "Preview",
+  "fontSizePreviewText": "The quick brown fox jumps over the lazy dog.",
+  "rateApp": "Rate app",
+  "rateAppFailed": "Unable to open the store right now.",
+  "shareApp": "Share app",
+  "shareAppMessage": "Check out UniSpace for smart study tools and student community!",
+  "emailVerified": "Email verified",
+  "emailNotVerified": "Email not verified",
+  "sendOtpNow": "Send OTP now",
+  "otpSentSuccess": "OTP sent. Check your email.",
+  "otpSentFailed": "Unable to send OTP right now.",
+  "guestUser": "Guest",
+  "emailUnavailable": "Email unavailable",
+  "emailHidden": "Email hidden",
+  "aboutAppSummary": "A platform to calculate GPA, connect with students, and take notes."
 
 
 
@@ -262,7 +329,6 @@
 
 
 }
-
 
 
 

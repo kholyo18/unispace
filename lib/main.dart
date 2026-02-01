@@ -46,6 +46,9 @@ import 'ui/theme.dart';
 import 'ui/contact/contact_us_sheet.dart';
 import 'ui/widgets/widgets.dart';
 import 'ui/faculty_search_page.dart';
+import 'ui/settings/app_settings.dart';
+import 'ui/settings/drawer_screens.dart';
+import 'ui/settings/email_verification_service.dart';
 import 'features/auth/signup_flow.dart';
 import 'features/exams/presentation/pages/exams_calendar_page.dart';
 import './moduls3.dart';
@@ -93,6 +96,7 @@ Future<void> main() async {
 
   // تسجيل Hive Adapter
   Hive.registerAdapter(ModuleModelAdapter());
+  await AppSettings.instance.load();
   runApp(const UniSpaceApp());
 }
 
@@ -151,21 +155,35 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'UniSpace',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: _themeMode,
-      locale: _locale,
-      localizationsDelegates: [
-        S.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: S.delegate.supportedLocales,
-      home: const AuthGate(),
+    return ValueListenableBuilder<SettingsData>(
+      valueListenable: AppSettings.instance.notifier,
+      builder: (context, settings, _) {
+        return MaterialApp(
+          title: 'UniSpace',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: _themeMode,
+          locale: _locale,
+          localizationsDelegates: [
+            S.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: S.delegate.supportedLocales,
+          builder: (context, child) {
+            final mediaQuery = MediaQuery.of(context);
+            return MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: TextScaler.linear(settings.fontScale.scale),
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
+          home: const AuthGate(),
+        );
+      },
     );
   }
 }
@@ -173,202 +191,518 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
 // ============================================================================
 // Global End Drawer — يعمل فعليًا (مظهر/لغة/إعادة كلمة السر/روابط)
 // ============================================================================
-class AppEndDrawer extends StatelessWidget {
+class AppEndDrawer extends StatefulWidget {
   const AppEndDrawer({super.key});
+
+  @override
+  State<AppEndDrawer> createState() => _AppEndDrawerState();
+}
+
+class _AppEndDrawerState extends State<AppEndDrawer> {
+  bool _sendingOtp = false;
+
+  Future<void> _sendOtp(User user) async {
+    if (_sendingOtp) return;
+    setState(() => _sendingOtp = true);
+    try {
+      await EmailVerificationService.instance.sendOtp(user: user);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).otpSentSuccess)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).otpSentFailed)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _sendingOtp = false);
+      }
+    }
+  }
+
+  Future<void> _rateApp() async {
+    const storeUrl = 'https://example.com';
+    final launched = await launchUrl(
+      Uri.parse(storeUrl),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).rateAppFailed)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final app = UniSpaceApp.of(context);
+    final theme = Theme.of(context);
 
     return SafeArea(
       child: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(
-                gradient:
-                    LinearGradient(colors: [kUniSpaceBlue, kUniSpaceGreen]),
-              ),
-              accountName: Text(user?.email?.split('@').first ?? 'Guest',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-              accountEmail: Text(user?.email ?? 'غير مسجّل'),
-              currentAccountPicture: const CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person, color: kUniSpaceBlue, size: 36),
-              ),
-            ),
+        child: ValueListenableBuilder<SettingsData>(
+          valueListenable: AppSettings.instance.notifier,
+          builder: (context, settings, _) {
+            final displayName = user?.displayName ??
+                user?.email?.split('@').first ??
+                S.of(context).guestUser;
+            final emailText = user?.email == null
+                ? S.of(context).emailUnavailable
+                : settings.showEmailInProfile
+                    ? user!.email!
+                    : S.of(context).emailHidden;
+            final isVerified = user?.emailVerified ?? false;
 
-            // تنقّل سريع
-
-            ListTile(
-              leading: const Icon(Icons.calculate_outlined),
-              title: Text(S.of(context).quickCalc2),
-              onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const QuickAverageScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.note_alt_outlined),
-              title: Text(S.of(context).clipboard),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotesScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.calendar_month_outlined),
-              title: Text(S.of(context).examCalendar),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const ExamsCalendarPage()),
-                );
-              },
-            ),
-
-            const Divider(height: 24),
-
-            // المظهر واللغة
-            ListTile(
-              leading: const Icon(Icons.color_lens_outlined),
-              title: Text(S.of(context).changeTheme),
-              subtitle: Text(
-                app._themeMode == ThemeMode.light
-                    ? S.of(context).lightMode
-                    : app._themeMode == ThemeMode.dark
-                        ? S.of(context).darkMode
-                        : S.of(context).systemMode,
-              ),
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (_) => _ThemeModeSheet(app: app),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.language_outlined),
-              title: Text(S.of(context).changeLanguage),
-              subtitle: Text(_langName(app._locale.languageCode)),
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (_) => _LanguageSheet(),
-                );
-              },
-            ),
-
-            const Divider(height: 24),
-
-            // الحساب
-            if (user != null) ...[
-              ListTile(
-                leading: const Icon(Icons.lock_reset),
-                title: Text(S.of(context).resetPassword),
-                onTap: () async {
-                  try {
-                    await FirebaseAuth.instance
-                        .sendPasswordResetEmail(email: user.email!);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(S.of(context).resetSent),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('تعذر الإرسال: $e')),
-                      );
-                    }
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.redAccent),
-                title: Text(S.of(context).logout),
-                onTap: () async {
-                  await FirebaseAuth.instance.signOut();
-                  if (!context.mounted) return;
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const SignInScreen()),
-                    (_) => false,
-                  );
-                },
-              ),
-            ] else ...[
-              ListTile(
-                leading: const Icon(Icons.login),
-                title: Text(S.of(context).login),
-                onTap: () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const SignInScreen()),
-                  );
-                },
-              ),
-            ],
-
-            const Divider(height: 24),
-
-            // حول
-            ListTile(
-              leading: const Icon(Icons.email_outlined),
-              title: Text(S.of(context).contactUs),
-              onTap: () {
-                _showContactDialog(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: Text(S.of(context).aboutApp),
-              onTap: () => showAboutDialog(
-                context: context,
-                applicationName: 'UniSpace',
-                applicationVersion: '1.0.0',
-                applicationIcon: const CircleAvatar(
-                  backgroundColor: kUniSpaceBlue,
-                  child: Icon(Icons.school, color: Colors.teal),
-                ),
-                children: const [
-                  Text(
-                      'منصة لحساب المعدل الجامعي ومجتمع للطلبة، مع تدوين ملاحظات.'),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.privacy_tip_outlined),
-              title: Text(S.of(context).privacyPolicy),
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: Text(S.of(context).privacyPolicy),
-                    content: Text(S.of(context).aboutAppDetails),
+            return ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [kUniSpaceBlue, kUniSpaceGreen],
+                    ),
                   ),
-                );
-              },
-            ),
-
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                'UniSpace © ${DateTime.now().year}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const CircleAvatar(
+                            backgroundColor: Colors.white,
+                            child: Icon(
+                              Icons.person,
+                              color: kUniSpaceBlue,
+                              size: 30,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  displayName,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  emailText,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (user?.email != null) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isVerified
+                                    ? Colors.green.withOpacity(0.2)
+                                    : Colors.orange.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: isVerified
+                                      ? Colors.green.shade200
+                                      : Colors.orange.shade200,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isVerified
+                                        ? Icons.verified
+                                        : Icons.warning_amber_rounded,
+                                    size: 16,
+                                    color: isVerified
+                                        ? Colors.green.shade200
+                                        : Colors.orange.shade200,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    isVerified
+                                        ? S.of(context).emailVerified
+                                        : S.of(context).emailNotVerified,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!isVerified)
+                              TextButton.icon(
+                                onPressed: _sendingOtp
+                                    ? null
+                                    : () => _sendOtp(user!),
+                                icon: _sendingOtp
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(Icons.mark_email_unread),
+                                label: Text(S.of(context).sendOtpNow),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                _sectionHeader(context, S.of(context).drawerSectionAccount),
+                _drawerItem(
+                  context,
+                  icon: Icons.person_outline,
+                  title: S.of(context).editProfile,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ProfileScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.notifications_outlined,
+                  title: S.of(context).notificationsSettingsTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsSettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.security_outlined,
+                  title: S.of(context).securityCenterTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SecurityCenterScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.privacy_tip_outlined,
+                  title: S.of(context).privacySettingsTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PrivacySettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                if (user != null)
+                  _drawerItem(
+                    context,
+                    icon: Icons.lock_reset,
+                    title: S.of(context).resetPassword,
+                    onTap: () async {
+                      try {
+                        await FirebaseAuth.instance
+                            .sendPasswordResetEmail(email: user.email!);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(S.of(context).resetSent),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content:
+                                  Text(S.of(context).resetFailed(e.toString())),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                _sectionHeader(context, S.of(context).drawerSectionStudent),
+                _drawerItem(
+                  context,
+                  icon: Icons.school_outlined,
+                  title: S.of(context).academicSettingsTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AcademicSettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _sectionHeader(context, S.of(context).drawerSectionContent),
+                _drawerItem(
+                  context,
+                  icon: Icons.download_outlined,
+                  title: S.of(context).downloadsTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DownloadsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.star_border,
+                  title: S.of(context).favoritesTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FavoritesScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.calculate_outlined,
+                  title: S.of(context).quickCalc2,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const QuickAverageScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.note_alt_outlined,
+                  title: S.of(context).clipboard,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotesScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.calendar_month_outlined,
+                  title: S.of(context).examCalendar,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ExamsCalendarPage(),
+                      ),
+                    );
+                  },
+                ),
+                _sectionHeader(context, S.of(context).drawerSectionApp),
+                _drawerItem(
+                  context,
+                  icon: Icons.text_fields_outlined,
+                  title: S.of(context).fontSizeTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FontSizeScreen(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.color_lens_outlined),
+                  title: Text(S.of(context).changeTheme),
+                  subtitle: Text(
+                    app._themeMode == ThemeMode.light
+                        ? S.of(context).lightMode
+                        : app._themeMode == ThemeMode.dark
+                            ? S.of(context).darkMode
+                            : S.of(context).systemMode,
+                  ),
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (_) => _ThemeModeSheet(app: app),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.language_outlined),
+                  title: Text(S.of(context).changeLanguage),
+                  subtitle: Text(_langName(app._locale.languageCode)),
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (_) => _LanguageSheet(),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.star_rate_outlined,
+                  title: S.of(context).rateApp,
+                  onTap: _rateApp,
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.share_outlined,
+                  title: S.of(context).shareApp,
+                  onTap: () => Share.share(S.of(context).shareAppMessage),
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.email_outlined,
+                  title: S.of(context).contactUs,
+                  onTap: () {
+                    _showContactDialog(context);
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.info_outline,
+                  title: S.of(context).aboutApp,
+                  onTap: () => showAboutDialog(
+                    context: context,
+                    applicationName: 'UniSpace',
+                    applicationVersion: '1.0.0',
+                    applicationIcon: const CircleAvatar(
+                      backgroundColor: kUniSpaceBlue,
+                      child: Icon(Icons.school, color: Colors.teal),
+                    ),
+                    children: [Text(S.of(context).aboutAppSummary)],
+                  ),
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.privacy_tip_outlined,
+                  title: S.of(context).privacyPolicy,
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: Text(S.of(context).privacyPolicy),
+                        content: Text(S.of(context).aboutAppDetails),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                const Divider(height: 24),
+                if (user != null)
+                  _drawerItem(
+                    context,
+                    icon: Icons.logout,
+                    title: S.of(context).logout,
+                    iconColor: Colors.redAccent,
+                    textColor: Colors.redAccent,
+                    onTap: () async {
+                      await FirebaseAuth.instance.signOut();
+                      if (!context.mounted) return;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const SignInScreen()),
+                        (_) => false,
+                      );
+                    },
+                  )
+                else
+                  _drawerItem(
+                    context,
+                    icon: Icons.login,
+                    title: S.of(context).login,
+                    onTap: () {
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const SignInScreen()),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 12),
+                Center(
+                  child: Text(
+                    'UniSpace © ${DateTime.now().year}',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _sectionHeader(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
+  }
+
+  Widget _drawerItem(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    VoidCallback? onTap,
+    Color? iconColor,
+    Color? textColor,
+  }) {
+    final theme = Theme.of(context);
+    return ListTile(
+      leading: Icon(icon, color: iconColor ?? theme.iconTheme.color),
+      title: Text(
+        title,
+        style: TextStyle(color: textColor),
+      ),
+      onTap: onTap,
     );
   }
 
