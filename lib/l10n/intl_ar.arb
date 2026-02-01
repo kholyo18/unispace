@@ -261,17 +261,35 @@
   "notificationsSettingsDescription": "تحكم في الإشعارات والتنبيهات.",
   "notificationsEnabled": "تفعيل الإشعارات",
   "notificationsEnabledHint": "استلم تنبيهات للتحديثات والتذكيرات.",
+  "notificationsExamReminders": "تذكيرات الامتحانات",
+  "notificationsExamRemindersHint": "تنبيهات محلية للامتحانات المجدولة.",
+  "notificationsAnnouncements": "الإعلانات",
+  "notificationsAnnouncementsHint": "ابقَ على اطلاع بأخبار الحرم الجامعي.",
+  "notificationsCommunity": "تحديثات المجتمع",
+  "notificationsCommunityHint": "تنبيهات نشاط المجتمع.",
+  "notificationsDisabledHint": "فعّل الإشعارات لإدارة التذكيرات والتنبيهات.",
   "securityCenterTitle": "الأمان",
   "twoFactorAuthTitle": "المصادقة الثنائية",
   "twoFactorAuthHint": "يتطلب رمز تحقق عند تسجيل الدخول.",
   "twoFactorEnabledToast": "تم تفعيل المصادقة الثنائية.",
   "twoFactorDisabledToast": "تم إيقاف المصادقة الثنائية.",
+  "manageDevicesTitle": "إدارة الأجهزة",
+  "manageDevicesHint": "راجع الجلسات والأجهزة النشطة.",
+  "manageDevicesDescription": "اطلع على أماكن تسجيل الدخول وأزل الوصول عند الحاجة.",
+  "currentDeviceTitle": "الجهاز الحالي",
+  "activeSessionsTitle": "الجلسات النشطة",
+  "activeSessionsEmpty": "لا توجد جلسات أخرى نشطة",
+  "activeSessionsHint": "إدارة الجلسات تتطلب خدمة خلفية آمنة.",
   "trustedDevicesTitle": "الأجهزة الموثوقة",
   "devicePrimary": "الجهاز الأساسي",
   "deviceActiveNow": "نشط الآن",
   "signOut": "تسجيل الخروج",
   "logoutAllDevices": "تسجيل الخروج من جميع الأجهزة",
   "logoutAllSuccess": "تم تسجيل الخروج من جميع الأجهزة.",
+  "logoutAllDevicesPrompt": "سنقوم بتسجيل خروج هذا الجهاز. لإلغاء جلسات الأجهزة الأخرى فعّل الخدمة الخلفية.",
+  "logoutAllConfirm": "تسجيل الخروج",
+  "logoutAllLocalOnly": "تم تسجيل الخروج هنا. فعّل الخدمة الخلفية لإلغاء جلسات الأجهزة الأخرى.",
+  "logoutAllFailed": "تعذر تسجيل الخروج من جميع الأجهزة.",
   "privacySettingsTitle": "الخصوصية",
   "privacySettingsDescription": "تحكم في ما يراه الآخرون في ملفك.",
   "profileVisibilityTitle": "ظهور الملف الشخصي",
@@ -282,6 +300,16 @@
   "blockedUsersTitle": "المستخدمون المحظورون",
   "blockedUsersEmpty": "لا يوجد مستخدمون محظورون",
   "blockedUsersHint": "ستظهر هنا الحسابات المحظورة.",
+  "blockedUsersAddTitle": "حظر مستخدم",
+  "blockedUsersAddHint": "أدخل معرّف المستخدم أو البريد",
+  "blockedUsersAddAction": "حظر",
+  "blockedUsersSince": "تم الحظر في {date}",
+  "@blockedUsersSince": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "unblockUser": "إلغاء الحظر",
   "academicSettingsTitle": "الإعدادات الأكاديمية",
   "academicSettingsDescription": "حدّث الكلية والتخصص والمستوى.",
   "academicCollegeLabel": "الكلية",
@@ -295,10 +323,30 @@
   "downloadsEmptyHint": "ستظهر العناصر المحمّلة هنا.",
   "downloadsClearCache": "مسح التخزين المؤقت",
   "downloadsCacheCleared": "تم مسح التخزين المؤقت.",
+  "downloadsUpdatedAt": "آخر تحديث {date}",
+  "@downloadsUpdatedAt": {
+    "placeholders": {
+      "date": {}
+    }
+  },
   "favoritesTitle": "المفضلة",
   "favoritesDescription": "ستظهر عناصر الحفظ هنا.",
   "favoritesEmptyTitle": "لا توجد مفضلات بعد",
   "favoritesEmptyHint": "احفظ المنشورات أو الملفات لتظهر هنا.",
+  "favoritesAddTitle": "إضافة مفضلة",
+  "favoritesAddHint": "أدخل معرّف العنصر",
+  "favoritesAddTypeHint": "النوع (اختياري)",
+  "favoritesAddAction": "حفظ",
+  "favoritesAdded": "تم حفظ المفضلة.",
+  "favoritesRemoved": "تم حذف المفضلة.",
+  "favoritesSignInTitle": "سجّل الدخول لحفظ المفضلات",
+  "favoritesSignInHint": "تُزامن المفضلات مع حسابك عند تسجيل الدخول.",
+  "favoritesTypeLabel": "النوع: {type}",
+  "@favoritesTypeLabel": {
+    "placeholders": {
+      "type": {}
+    }
+  },
   "fontSizeTitle": "حجم الخط",
   "fontSizeDescription": "اختر الحجم المناسب للقراءة.",
   "fontSizeSmall": "صغير",
@@ -313,8 +361,15 @@
   "emailVerified": "البريد موثّق",
   "emailNotVerified": "البريد غير موثّق",
   "sendOtpNow": "أرسل الرمز الآن",
+  "otpCooldownLabel": "إرسال الرمز خلال {seconds}ث",
+  "@otpCooldownLabel": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
   "otpSentSuccess": "تم إرسال الرمز. تحقق من بريدك.",
   "otpSentFailed": "تعذر إرسال الرمز الآن.",
+  "signInRequired": "يرجى تسجيل الدخول للمتابعة.",
   "guestUser": "زائر",
   "emailUnavailable": "البريد غير متاح",
   "emailHidden": "البريد مخفي",

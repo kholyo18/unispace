@@ -49,11 +49,13 @@ import 'ui/faculty_search_page.dart';
 import 'ui/settings/app_settings.dart';
 import 'ui/settings/drawer_screens.dart';
 import 'ui/settings/email_verification_service.dart';
+import 'ui/settings/user_profile_service.dart';
 import 'features/auth/signup_flow.dart';
 import 'features/exams/presentation/pages/exams_calendar_page.dart';
 import './moduls3.dart';
 import './moduls.dart';
 import 'module/moduls.dart';
+import 'config/app_links.dart';
 import 'package:google_fonts/google_fonts.dart';
 //import 'package: UniSpace/generated/l10n.dart';
 //import 'core/local/grades_local_store.dart';
@@ -97,6 +99,7 @@ Future<void> main() async {
   // تسجيل Hive Adapter
   Hive.registerAdapter(ModuleModelAdapter());
   await AppSettings.instance.load();
+  await UserProfileService.instance.initialize();
   runApp(const UniSpaceApp());
 }
 
@@ -200,16 +203,20 @@ class AppEndDrawer extends StatefulWidget {
 
 class _AppEndDrawerState extends State<AppEndDrawer> {
   bool _sendingOtp = false;
+  int _otpCooldownSeconds = 0;
+  Timer? _otpTimer;
 
   Future<void> _sendOtp(User user) async {
     if (_sendingOtp) return;
+    if (_otpCooldownSeconds > 0) return;
     setState(() => _sendingOtp = true);
     try {
-      await EmailVerificationService.instance.sendOtp(user: user);
+      final result = await EmailVerificationService.instance.sendOtp(user: user);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(S.of(context).otpSentSuccess)),
       );
+      _startOtpCooldown(result.cooldownSeconds);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -222,10 +229,32 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
     }
   }
 
+  void _startOtpCooldown(int seconds) {
+    _otpTimer?.cancel();
+    setState(() => _otpCooldownSeconds = seconds);
+    _otpTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_otpCooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() => _otpCooldownSeconds = 0);
+      } else {
+        setState(() => _otpCooldownSeconds -= 1);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _otpTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _rateApp() async {
-    const storeUrl = 'https://example.com';
     final launched = await launchUrl(
-      Uri.parse(storeUrl),
+      Uri.parse(AppLinks.storeUrl),
       mode: LaunchMode.externalApplication,
     );
     if (!launched && mounted) {
@@ -243,15 +272,15 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
 
     return SafeArea(
       child: Drawer(
-        child: ValueListenableBuilder<SettingsData>(
-          valueListenable: AppSettings.instance.notifier,
-          builder: (context, settings, _) {
+        child: ValueListenableBuilder<UserProfileData>(
+          valueListenable: UserProfileService.instance.notifier,
+          builder: (context, profile, _) {
             final displayName = user?.displayName ??
                 user?.email?.split('@').first ??
                 S.of(context).guestUser;
             final emailText = user?.email == null
                 ? S.of(context).emailUnavailable
-                : settings.showEmailInProfile
+                : profile.showEmailInProfile
                     ? user!.email!
                     : S.of(context).emailHidden;
             final isVerified = user?.emailVerified ?? false;
@@ -353,7 +382,7 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                             ),
                             if (!isVerified)
                               TextButton.icon(
-                                onPressed: _sendingOtp
+                                onPressed: _sendingOtp || _otpCooldownSeconds > 0
                                     ? null
                                     : () => _sendOtp(user!),
                                 icon: _sendingOtp
@@ -366,7 +395,12 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                                         ),
                                       )
                                     : const Icon(Icons.mark_email_unread),
-                                label: Text(S.of(context).sendOtpNow),
+                                label: Text(
+                                  _otpCooldownSeconds > 0
+                                      ? S.of(context)
+                                          .otpCooldownLabel(_otpCooldownSeconds)
+                                      : S.of(context).sendOtpNow,
+                                ),
                                 style: TextButton.styleFrom(
                                   foregroundColor: Colors.white,
                                 ),
@@ -590,7 +624,7 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                   context,
                   icon: Icons.share_outlined,
                   title: S.of(context).shareApp,
-                  onTap: () => Share.share(S.of(context).shareAppMessage),
+                  onTap: () => Share.share(AppLinks.shareMessage),
                 ),
                 _drawerItem(
                   context,
@@ -2513,6 +2547,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = FirebaseAuth.instance.currentUser;
+    final emailText = user?.email ?? email;
 
     return Scaffold(
       drawer: _buildProfileDrawer(context),
@@ -2613,9 +2649,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold),
                                 ),
-                                Text(email,
-                                    style:
-                                        const TextStyle(color: Colors.white70)),
+                                ValueListenableBuilder<UserProfileData>(
+                                  valueListenable:
+                                      UserProfileService.instance.notifier,
+                                  builder: (context, profile, _) {
+                                    return Text(
+                                      profile.showEmailInProfile
+                                          ? emailText
+                                          : S.of(context).emailHidden,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    );
+                                  },
+                                ),
                                 Text(mood,
                                     style: const TextStyle(
                                         color: Colors.white70,

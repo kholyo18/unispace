@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../generated/l10n.dart';
+import '../../../../ui/settings/app_settings.dart';
 import '../../data/models/exam_model.dart';
 import '../../data/storage/exam_storage.dart';
 import '../../notifications/exam_notifications_service.dart';
@@ -77,6 +78,10 @@ class _ExamsCalendarPageState extends State<ExamsCalendarPage> {
   }
 
   Future<void> _scheduleNotifications(ExamModel exam) async {
+    final settings = AppSettings.instance.notifier.value;
+    if (!settings.notificationsEnabled || !settings.examRemindersEnabled) {
+      return;
+    }
     if (!exam.remindersEnabled || exam.reminderOffsets.isEmpty) return;
     final s = S.of(context);
     await _notifications.scheduleExamReminders(

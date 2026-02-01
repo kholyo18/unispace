@@ -369,6 +369,76 @@ export const resendOtp = onCall(
   },
 );
 
+export const sendEmailVerificationOtp = onCall(
+  {
+    secrets: ["SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "auth_required");
+    }
+    const email = String(
+      request.data?.email ?? request.auth.token.email ?? "",
+    ).trim();
+    if (!email || !isValidEmail(email)) {
+      throw new HttpsError("invalid-argument", "invalid_email");
+    }
+
+    const uid = request.auth.uid;
+    const otpRef = db.doc(`email_verification_otps/${uid}`);
+    const now = Timestamp.now();
+    const snap = await otpRef.get();
+    const existing = snap.data();
+
+    const resendCount = (existing?.resendCount as number | undefined) ?? 0;
+    if (resendCount >= OTP_RESEND_LIMIT) {
+      throw new HttpsError("resource-exhausted", "resend_limit");
+    }
+    const lastSentAt = existing?.lastSentAt as Timestamp | undefined;
+    if (
+      lastSentAt &&
+      now.toMillis() - lastSentAt.toMillis() <
+        OTP_RESEND_COOLDOWN_SECONDS * 1000
+    ) {
+      throw new HttpsError("failed-precondition", "cooldown_active");
+    }
+
+    const otp = String(randomInt(100000, 1000000));
+    const otpSalt = randomBytes(16).toString("hex");
+    const otpHash = hashOtp(otp, otpSalt);
+    const expiresAt = Timestamp.fromMillis(
+      now.toMillis() + OTP_TTL_MINUTES * 60 * 1000,
+    );
+
+    await otpRef.set(
+      {
+        email,
+        otpHash,
+        otpSalt,
+        expiresAt,
+        resendCount: resendCount + 1,
+        lastSentAt: now,
+        createdAt: existing?.createdAt ?? now,
+      },
+      { merge: true },
+    );
+
+    const fromEmail = ensureSendgridConfigured();
+    await sgMail.send({
+      to: email,
+      from: fromEmail,
+      subject: OTP_EMAIL_SUBJECT,
+      text: buildOtpEmailText(otp),
+    });
+
+    return {
+      ok: true,
+      cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS,
+      expiresInSeconds: OTP_TTL_MINUTES * 60,
+    };
+  },
+);
+
 export const verifyOtpAndCreateAccount = onCall(async (request) => {
   const sessionId = String(request.data?.sessionId ?? "").trim();
   const otp = String(request.data?.otp ?? "").trim();
