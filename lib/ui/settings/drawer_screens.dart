@@ -483,13 +483,15 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
               final faculty = _collegeController.text.trim();
               final specialty = _majorController.text.trim();
               final level = _levelController.text.trim();
+              final hasShortcut =
+                  faculty.isNotEmpty || specialty.isNotEmpty || level.isNotEmpty;
               await UserProfileService.instance.updateAcademic(
                 college: faculty,
                 major: specialty,
                 level: level,
               );
               await AppSettings.instance.setAcademicShortcut(
-                hasAcademicShortcut: specialty.isNotEmpty,
+                hasAcademicShortcut: hasShortcut,
                 facultyId: faculty,
                 departmentId: specialty,
                 specialtyId: specialty,
@@ -502,6 +504,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(S.of(context).academicSettingsSaved)),
               );
+              Navigator.pop(context);
             },
             child: Text(S.of(context).saveChanges),
           ),

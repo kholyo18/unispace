@@ -1929,8 +1929,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                 builder: (context, settings, _) {
                   final specialtyId =
                       settings.academicSpecialtyId.trim();
-                  if (!settings.hasAcademicShortcut ||
-                      specialtyId.isEmpty) {
+                  if (!settings.hasAcademicShortcut) {
                     return const SizedBox.shrink();
                   }
                   final theme = Theme.of(context);
@@ -1943,6 +1942,8 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                               ? settings.academicSpecialtyName
                               : specialtyId)
                           .trim();
+                  final displaySpecialty =
+                      specialtyName.isNotEmpty ? specialtyName : '—';
                   final level = settings.academicLevel.trim();
                   final displayLevel = level.isNotEmpty ? level : '—';
                   return Padding(
@@ -1985,7 +1986,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           const SizedBox(height: 4),
                           Text(
                             S.of(context).academicShortcutDetails(
-                              specialtyName,
+                              displaySpecialty,
                               displayLevel,
                             ),
                             style: theme.textTheme.bodySmall?.copyWith(
