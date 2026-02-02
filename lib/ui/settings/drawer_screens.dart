@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 
 import '../../generated/l10n.dart';
@@ -485,11 +486,6 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
               final level = _levelController.text.trim();
               final hasShortcut =
                   faculty.isNotEmpty || specialty.isNotEmpty || level.isNotEmpty;
-              await UserProfileService.instance.updateAcademic(
-                college: faculty,
-                major: specialty,
-                level: level,
-              );
               await AppSettings.instance.setAcademicShortcut(
                 hasAcademicShortcut: hasShortcut,
                 facultyId: faculty,
@@ -500,9 +496,25 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                 departmentName: specialty,
                 specialtyName: specialty,
               );
+              var syncFailed = false;
+              try {
+                await UserProfileService.instance.updateAcademic(
+                  college: faculty,
+                  major: specialty,
+                  level: level,
+                );
+              } on FirebaseException {
+                syncFailed = true;
+              }
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(S.of(context).academicSettingsSaved)),
+                SnackBar(
+                  content: Text(
+                    syncFailed
+                        ? 'Saved locally. Sync failed.'
+                        : S.of(context).academicSettingsSaved,
+                  ),
+                ),
               );
               Navigator.pop(context);
             },
