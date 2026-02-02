@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
+import 'package:unispace/generated/l10n.dart';
 
 import '../../exams/data/models/exam_model.dart';
 import '../../exams/data/storage/exam_storage.dart';
@@ -75,7 +75,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
     if (!mounted) return;
     if (generated == null) {
       setState(() => _isCreating = false);
-      _showSnackBar(AppLocalizations.of(context)!.smartReviewEmptyNoExamsBody);
+      _showSnackBar(S.of(context).smartReviewEmptyNoExamsBody);
       return;
     }
 
@@ -91,7 +91,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
     await _repository.clearPlan();
     if (!mounted) return;
     setState(() => _plan = null);
-    _showSnackBar(AppLocalizations.of(context)!.smartReviewPlanCleared);
+    _showSnackBar(S.of(context).smartReviewPlanCleared);
   }
 
   void _showSnackBar(String message) {
@@ -106,7 +106,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final t = AppLocalizations.of(context)!;
+    final t = S.of(context);
 
     final chipStyle = theme.textTheme.labelLarge?.copyWith(
       color: scheme.onSurfaceVariant,
@@ -342,7 +342,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
     return DateFormat.EEEE(locale).add_MMMd().format(date);
   }
 
-  String _taskTitle(AppLocalizations t, SmartReviewTask task) {
+  String _taskTitle(S t, SmartReviewTask task) {
     switch (task.type) {
       case SmartReviewTaskType.focusSession:
         return t.smartReviewTaskFocusTitle(task.subjectName);
@@ -372,7 +372,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
 class _HeroHeaderCard extends StatelessWidget {
   const _HeroHeaderCard({required this.t});
 
-  final AppLocalizations t;
+  final S t;
 
   @override
   Widget build(BuildContext context) {
