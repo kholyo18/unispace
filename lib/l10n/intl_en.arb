@@ -9,6 +9,7 @@
   "writeYourComment": "Write your comment",
   "publish": "Publish",
   "cancel": "Cancel",
+  "delete": "Delete",
   "posted": "Post",
   "searchClipboard": "Search inside Note-pade",
   "note": "Note",
@@ -326,16 +327,33 @@
   "downloadsEmptyHint": "Downloaded items will appear here.",
   "downloadsClearCache": "Clear cache",
   "downloadsCacheCleared": "Cache cleared.",
+  "downloadsCacheClearFailed": "Unable to clear the cache.",
   "downloadsRefreshList": "Refresh list",
-  "downloadsRefreshSoon": "Refresh will be added soon.",
   "downloadsStorageTitle": "Downloads storage",
   "downloadsStorageUserLabel": "User: 0 MB",
   "downloadsStorageCacheLabel": "Cache: 0 MB",
   "downloadsStorageInfo": "Sizes will be calculated automatically later.",
+  "downloadsStorageUserLabelValue": "User: {size}",
+  "@downloadsStorageUserLabelValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "downloadsStorageCacheLabelValue": "Cache: {size}",
+  "@downloadsStorageCacheLabelValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "downloadsStorageInfoValue": "Total used: {size}",
+  "@downloadsStorageInfoValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
   "downloadsClearCacheDialogTitle": "Clear cached downloads?",
   "downloadsClearCacheDialogBody": "This will remove cached files from this device. You can download them again later.",
   "downloadsClearCacheDialogConfirm": "Clear cache",
-  "downloadsCacheClearedExperimental": "Cache cleared (experimental).",
   "downloadsExploreCta": "Explore content",
   "downloadsFilterAll": "All",
   "downloadsFilterFiles": "Files",
@@ -343,6 +361,22 @@
   "downloadsSortLabel": "Sort by",
   "downloadsSortNewest": "Newest",
   "downloadsSortOldest": "Oldest",
+  "downloadsClearAllAction": "Clear all downloads",
+  "downloadsClearAllDialogTitle": "Clear all downloads?",
+  "downloadsClearAllDialogBody": "This will remove all downloaded files from this device.",
+  "downloadsClearAllDialogConfirm": "Clear all",
+  "downloadsClearAllSuccess": "All downloads cleared.",
+  "downloadsClearAllFailed": "Unable to clear all downloads.",
+  "downloadsDeleteDialogTitle": "Delete download?",
+  "downloadsDeleteDialogBody": "Delete {fileName} from this device?",
+  "@downloadsDeleteDialogBody": {
+    "placeholders": {
+      "fileName": {}
+    }
+  },
+  "downloadsDeleteSuccess": "Download deleted.",
+  "downloadsDeleteFailed": "Unable to delete the download.",
+  "downloadsLoadFailed": "Unable to load downloads.",
   "downloadsUpdatedAt": "Updated {date}",
   "@downloadsUpdatedAt": {
     "placeholders": {
@@ -401,7 +435,6 @@
 
 
 }
-
 
 
 

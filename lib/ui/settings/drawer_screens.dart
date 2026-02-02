@@ -3,10 +3,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 import '../../generated/l10n.dart';
 import 'app_settings.dart';
 import 'blocked_users_service.dart';
+import '../../features/downloads/download_item.dart';
+import '../../features/downloads/downloads_repository.dart';
 import 'favorites_service.dart';
 import 'security_service.dart';
 import 'user_profile_service.dart';
@@ -509,6 +512,54 @@ enum _DownloadSort { newest, oldest }
 class _DownloadsScreenState extends State<DownloadsScreen> {
   _DownloadFilter _selectedFilter = _DownloadFilter.all;
   _DownloadSort _selectedSort = _DownloadSort.newest;
+  final DownloadsRepository _repository = const DownloadsRepository();
+  List<DownloadItem> _downloads = [];
+  bool _isLoading = true;
+  bool _isWorking = false;
+  int _downloadsSizeBytes = 0;
+  int _cacheSizeBytes = 0;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDownloads();
+  }
+
+  Future<void> _loadDownloads({bool showError = false}) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final downloads = await _repository.listDownloads();
+      final downloadsSize = await _repository.computeDownloadsSizeBytes();
+      final cacheSize = await _repository.computeCacheSizeBytes();
+      if (!mounted) return;
+      setState(() {
+        _downloads = downloads;
+        _downloadsSizeBytes = downloadsSize;
+        _cacheSizeBytes = cacheSize;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = error.toString();
+      });
+      if (showError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).downloadsLoadFailed)),
+        );
+      }
+    } finally {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    return DownloadItem.humanReadableBytes(bytes);
+  }
 
   Future<void> _confirmClearCache() async {
     final s = S.of(context);
@@ -530,20 +581,126 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s.downloadsCacheClearedExperimental)),
-    );
+    setState(() => _isWorking = true);
+    try {
+      await _repository.clearCache();
+      await _loadDownloads();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.downloadsCacheCleared)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.downloadsCacheClearFailed)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isWorking = false);
+      }
+    }
   }
 
-  void _showRefreshSnack() {
+  Future<void> _confirmClearAllDownloads() async {
     final s = S.of(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s.downloadsRefreshSoon)),
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(s.downloadsClearAllDialogTitle),
+        content: Text(s.downloadsClearAllDialogBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(s.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(s.downloadsClearAllDialogConfirm),
+          ),
+        ],
+      ),
     );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isWorking = true);
+    try {
+      await _repository.clearAllDownloads();
+      await _loadDownloads();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.downloadsClearAllSuccess)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.downloadsClearAllFailed)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isWorking = false);
+      }
+    }
+  }
+
+  Future<void> _refreshDownloads() async {
+    await _loadDownloads(showError: true);
   }
 
   Future<void> _handleExplore() async {
     await Navigator.of(context).maybePop();
+  }
+
+  List<DownloadItem> _applyFilters(List<DownloadItem> items) {
+    Iterable<DownloadItem> filtered = items;
+    if (_selectedFilter == _DownloadFilter.images) {
+      filtered = filtered.where((item) => item.isImage);
+    } else if (_selectedFilter == _DownloadFilter.files) {
+      filtered = filtered.where((item) => !item.isImage);
+    }
+    final sorted = filtered.toList()
+      ..sort((a, b) => _selectedSort == _DownloadSort.newest
+          ? b.modifiedAt.compareTo(a.modifiedAt)
+          : a.modifiedAt.compareTo(b.modifiedAt));
+    return sorted;
+  }
+
+  Future<void> _confirmDeleteDownload(DownloadItem item) async {
+    final s = S.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(s.downloadsDeleteDialogTitle),
+        content: Text(s.downloadsDeleteDialogBody(item.name)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(s.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(s.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _isWorking = true);
+    try {
+      await _repository.deleteDownload(item.path);
+      await _loadDownloads();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.downloadsDeleteSuccess)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.downloadsDeleteFailed)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isWorking = false);
+      }
+    }
   }
 
   @override
@@ -551,207 +708,287 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final theme = Theme.of(context);
     final s = S.of(context);
     final colorScheme = theme.colorScheme;
+    final filteredDownloads = _applyFilters(_downloads);
+    final totalBytes = _downloadsSizeBytes + _cacheSizeBytes;
+    final progress = totalBytes == 0 ? 0.0 : _downloadsSizeBytes / totalBytes;
+    final dateFormatter =
+        DateFormat.yMMMd(Localizations.localeOf(context).languageCode);
     return Scaffold(
       appBar: AppBar(
         title: Text(s.downloadsTitle),
+        actions: [
+          IconButton(
+            tooltip: s.downloadsRefreshList,
+            onPressed: _isWorking ? null : _refreshDownloads,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            tooltip: s.downloadsClearAllAction,
+            onPressed: _isWorking || _downloads.isEmpty
+                ? null
+                : _confirmClearAllDownloads,
+            icon: const Icon(Icons.delete_sweep_outlined),
+          ),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            s.downloadsTitle,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w600,
+      body: RefreshIndicator(
+        onRefresh: _refreshDownloads,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(
+              s.downloadsTitle,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            s.downloadsDescription,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            const SizedBox(height: 8),
+            Text(
+              s.downloadsDescription,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            const SizedBox(height: 20),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.storage_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          s.downloadsStorageTitle,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: colorScheme.surfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            s.downloadsStorageUserLabelValue(
+                              _formatBytes(_downloadsSizeBytes),
+                            ),
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            s.downloadsStorageCacheLabelValue(
+                              _formatBytes(_cacheSizeBytes),
+                            ),
+                            style: theme.textTheme.bodyMedium,
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      s.downloadsStorageInfoValue(
+                        _formatBytes(totalBytes),
+                      ),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isWorking ? null : _confirmClearCache,
+                    icon: const Icon(Icons.delete_outline),
+                    label: Text(s.downloadsClearCache),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isWorking ? null : _refreshDownloads,
+                    icon: const Icon(Icons.refresh),
+                    label: Text(s.downloadsRefreshList),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: Text(s.downloadsFilterAll),
+                        selected: _selectedFilter == _DownloadFilter.all,
+                        onSelected: (_) => setState(() {
+                          _selectedFilter = _DownloadFilter.all;
+                        }),
+                      ),
+                      ChoiceChip(
+                        label: Text(s.downloadsFilterFiles),
+                        selected: _selectedFilter == _DownloadFilter.files,
+                        onSelected: (_) => setState(() {
+                          _selectedFilter = _DownloadFilter.files;
+                        }),
+                      ),
+                      ChoiceChip(
+                        label: Text(s.downloadsFilterImages),
+                        selected: _selectedFilter == _DownloadFilter.images,
+                        onSelected: (_) => setState(() {
+                          _selectedFilter = _DownloadFilter.images;
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 140,
+                  child: DropdownButtonFormField<_DownloadSort>(
+                    value: _selectedSort,
+                    decoration: InputDecoration(
+                      labelText: s.downloadsSortLabel,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: _DownloadSort.newest,
+                        child: Text(s.downloadsSortNewest),
+                      ),
+                      DropdownMenuItem(
+                        value: _DownloadSort.oldest,
+                        child: Text(s.downloadsSortOldest),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedSort = value);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (filteredDownloads.isEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
                     children: [
                       Icon(
-                        Icons.storage_outlined,
+                        Icons.cloud_download_outlined,
+                        size: 72,
                         color: colorScheme.primary,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(height: 12),
                       Text(
-                        s.downloadsStorageTitle,
+                        s.downloadsEmptyTitle,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _errorMessage == null
+                            ? s.downloadsEmptyHint
+                            : s.downloadsLoadFailed,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _handleExplore,
+                        child: Text(s.downloadsExploreCta),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: 0,
-                      minHeight: 8,
-                      backgroundColor: colorScheme.surfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          s.downloadsStorageUserLabel,
-                          style: theme.textTheme.bodyMedium,
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filteredDownloads.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final item = filteredDownloads[index];
+                  return Card(
+                    child: ListTile(
+                      leading: Icon(
+                        item.isImage
+                            ? Icons.image_outlined
+                            : Icons.insert_drive_file_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      title: Text(item.name),
+                      subtitle: Text(
+                        s.downloadsUpdatedAt(
+                          dateFormatter.format(item.modifiedAt),
                         ),
                       ),
-                      Expanded(
-                        child: Text(
-                          s.downloadsStorageCacheLabel,
-                          style: theme.textTheme.bodyMedium,
-                          textAlign: TextAlign.end,
-                        ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatBytes(item.sizeBytes),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: s.delete,
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: _isWorking
+                                ? null
+                                : () => _confirmDeleteDownload(item),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    s.downloadsStorageInfo,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _confirmClearCache,
-                  icon: const Icon(Icons.delete_outline),
-                  label: Text(s.downloadsClearCache),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _showRefreshSnack,
-                  icon: const Icon(Icons.refresh),
-                  label: Text(s.downloadsRefreshList),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: Text(s.downloadsFilterAll),
-                      selected: _selectedFilter == _DownloadFilter.all,
-                      onSelected: (_) => setState(() {
-                        _selectedFilter = _DownloadFilter.all;
-                      }),
-                    ),
-                    ChoiceChip(
-                      label: Text(s.downloadsFilterFiles),
-                      selected: _selectedFilter == _DownloadFilter.files,
-                      onSelected: (_) => setState(() {
-                        _selectedFilter = _DownloadFilter.files;
-                      }),
-                    ),
-                    ChoiceChip(
-                      label: Text(s.downloadsFilterImages),
-                      selected: _selectedFilter == _DownloadFilter.images,
-                      onSelected: (_) => setState(() {
-                        _selectedFilter = _DownloadFilter.images;
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<_DownloadSort>(
-                  value: _selectedSort,
-                  decoration: InputDecoration(
-                    labelText: s.downloadsSortLabel,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: const OutlineInputBorder(),
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: _DownloadSort.newest,
-                      child: Text(s.downloadsSortNewest),
-                    ),
-                    DropdownMenuItem(
-                      value: _DownloadSort.oldest,
-                      child: Text(s.downloadsSortOldest),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _selectedSort = value);
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.cloud_download_outlined,
-                    size: 72,
-                    color: colorScheme.primary,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    s.downloadsEmptyTitle,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    s.downloadsEmptyHint,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _handleExplore,
-                    child: Text(s.downloadsExploreCta),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

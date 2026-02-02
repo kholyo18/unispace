@@ -7,6 +7,7 @@
   "writeYourComment": "اكتب تعليقك",
   "publish": "نشر",
   "cancel": "إلغاء",
+  "delete": "حذف",
   "posted": "نشر",
   "searchClipboard": "ابحث داخل الحافظة",
   "note": "ملاحظة",
@@ -323,16 +324,33 @@
   "downloadsEmptyHint": "ستظهر العناصر المحمّلة هنا.",
   "downloadsClearCache": "مسح التخزين المؤقت",
   "downloadsCacheCleared": "تم مسح التخزين المؤقت.",
+  "downloadsCacheClearFailed": "تعذر مسح التخزين المؤقت.",
   "downloadsRefreshList": "تحديث القائمة",
-  "downloadsRefreshSoon": "سيتم إضافة التحديث قريباً",
   "downloadsStorageTitle": "مساحة التنزيلات",
   "downloadsStorageUserLabel": "المستخدم: 0 MB",
   "downloadsStorageCacheLabel": "التخزين المؤقت: 0 MB",
   "downloadsStorageInfo": "سيتم احتساب الأحجام تلقائياً لاحقاً.",
+  "downloadsStorageUserLabelValue": "المستخدم: {size}",
+  "@downloadsStorageUserLabelValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "downloadsStorageCacheLabelValue": "التخزين المؤقت: {size}",
+  "@downloadsStorageCacheLabelValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "downloadsStorageInfoValue": "الإجمالي المستخدم: {size}",
+  "@downloadsStorageInfoValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
   "downloadsClearCacheDialogTitle": "هل تريد مسح التخزين المؤقت؟",
   "downloadsClearCacheDialogBody": "سيؤدي ذلك إلى إزالة الملفات المخزنة مؤقتاً من هذا الجهاز. يمكنك تنزيلها لاحقاً.",
   "downloadsClearCacheDialogConfirm": "مسح التخزين المؤقت",
-  "downloadsCacheClearedExperimental": "تم مسح التخزين المؤقت (تجريبي)",
   "downloadsExploreCta": "استكشف المحتوى",
   "downloadsFilterAll": "الكل",
   "downloadsFilterFiles": "ملفات",
@@ -340,6 +358,22 @@
   "downloadsSortLabel": "الترتيب حسب",
   "downloadsSortNewest": "الأحدث",
   "downloadsSortOldest": "الأقدم",
+  "downloadsClearAllAction": "مسح جميع التنزيلات",
+  "downloadsClearAllDialogTitle": "مسح جميع التنزيلات؟",
+  "downloadsClearAllDialogBody": "سيؤدي ذلك إلى إزالة جميع الملفات التي تم تنزيلها من هذا الجهاز.",
+  "downloadsClearAllDialogConfirm": "مسح الكل",
+  "downloadsClearAllSuccess": "تم مسح جميع التنزيلات.",
+  "downloadsClearAllFailed": "تعذر مسح جميع التنزيلات.",
+  "downloadsDeleteDialogTitle": "حذف التنزيل؟",
+  "downloadsDeleteDialogBody": "هل تريد حذف {fileName} من هذا الجهاز؟",
+  "@downloadsDeleteDialogBody": {
+    "placeholders": {
+      "fileName": {}
+    }
+  },
+  "downloadsDeleteSuccess": "تم حذف التنزيل.",
+  "downloadsDeleteFailed": "تعذر حذف التنزيل.",
+  "downloadsLoadFailed": "تعذر تحميل التنزيلات.",
   "downloadsUpdatedAt": "آخر تحديث {date}",
   "@downloadsUpdatedAt": {
     "placeholders": {
