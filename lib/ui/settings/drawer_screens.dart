@@ -1,15 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:open_filex/open_filex.dart';
 
 import '../../generated/l10n.dart';
 import 'app_settings.dart';
 import 'blocked_users_service.dart';
-import 'downloads_repository.dart';
 import 'favorites_service.dart';
 import 'security_service.dart';
 import 'user_profile_service.dart';
@@ -505,93 +500,256 @@ class DownloadsScreen extends StatefulWidget {
   State<DownloadsScreen> createState() => _DownloadsScreenState();
 }
 
+enum _DownloadFilter { all, files, images }
+
+enum _DownloadSort { newest, oldest }
+
 class _DownloadsScreenState extends State<DownloadsScreen> {
-  late Future<List<DownloadEntry>> _downloadsFuture;
+  _DownloadFilter _selectedFilter = _DownloadFilter.all;
+  _DownloadSort _selectedSort = _DownloadSort.newest;
 
-  @override
-  void initState() {
-    super.initState();
-    _downloadsFuture = DownloadsRepository.instance.listDownloads();
-  }
-
-  Future<void> _refreshDownloads() async {
-    setState(() {
-      _downloadsFuture = DownloadsRepository.instance.listDownloads();
-    });
-  }
-
-  Future<void> _clearCache() async {
-    await DownloadsRepository.instance.clearDownloads();
-    await DefaultCacheManager().emptyCache();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(S.of(context).downloadsCacheCleared)),
+  Future<void> _confirmClearCache() async {
+    final s = S.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(s.downloadsClearCacheDialogTitle),
+        content: Text(s.downloadsClearCacheDialogBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(s.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(s.downloadsClearCacheDialogConfirm),
+          ),
+        ],
+      ),
     );
-    await _refreshDownloads();
+    if (confirmed != true || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s.downloadsCacheClearedExperimental)),
+    );
+  }
+
+  void _showRefreshSnack() {
+    final s = S.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s.downloadsRefreshSoon)),
+    );
+  }
+
+  Future<void> _handleExplore() async {
+    await Navigator.of(context).maybePop();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final s = S.of(context);
+    final colorScheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(S.of(context).downloadsTitle),
+        title: Text(s.downloadsTitle),
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshDownloads,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              S.of(context).downloadsDescription,
-              style: Theme.of(context).textTheme.bodyMedium,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            s.downloadsTitle,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 16),
-            FutureBuilder<List<DownloadEntry>>(
-              future: _downloadsFuture,
-              builder: (context, snapshot) {
-                final downloads = snapshot.data ?? [];
-                if (downloads.isEmpty) {
-                  return Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.folder_open),
-                      title: Text(S.of(context).downloadsEmptyTitle),
-                      subtitle: Text(S.of(context).downloadsEmptyHint),
-                    ),
-                  );
-                }
-                return Column(
-                  children: [
-                    for (final entry in downloads)
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.insert_drive_file_outlined),
-                          title: Text(entry.name),
-                          subtitle: Text(
-                            S.of(context).downloadsUpdatedAt(
-                              MaterialLocalizations.of(context)
-                                  .formatShortDate(entry.lastModified),
-                            ),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.open_in_new),
-                            onPressed: () async {
-                              await OpenFilex.open(entry.file.path);
-                            },
-                          ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            s.downloadsDescription,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.storage_outlined,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        s.downloadsStorageTitle,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: 0,
+                      minHeight: 8,
+                      backgroundColor: colorScheme.surfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          s.downloadsStorageUserLabel,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          s.downloadsStorageCacheLabel,
+                          style: theme.textTheme.bodyMedium,
+                          textAlign: TextAlign.end,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    s.downloadsStorageInfo,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _confirmClearCache,
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(s.downloadsClearCache),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showRefreshSnack,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(s.downloadsRefreshList),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: Text(s.downloadsFilterAll),
+                      selected: _selectedFilter == _DownloadFilter.all,
+                      onSelected: (_) => setState(() {
+                        _selectedFilter = _DownloadFilter.all;
+                      }),
+                    ),
+                    ChoiceChip(
+                      label: Text(s.downloadsFilterFiles),
+                      selected: _selectedFilter == _DownloadFilter.files,
+                      onSelected: (_) => setState(() {
+                        _selectedFilter = _DownloadFilter.files;
+                      }),
+                    ),
+                    ChoiceChip(
+                      label: Text(s.downloadsFilterImages),
+                      selected: _selectedFilter == _DownloadFilter.images,
+                      onSelected: (_) => setState(() {
+                        _selectedFilter = _DownloadFilter.images;
+                      }),
+                    ),
                   ],
-                );
-              },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<_DownloadSort>(
+                  value: _selectedSort,
+                  decoration: InputDecoration(
+                    labelText: s.downloadsSortLabel,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: _DownloadSort.newest,
+                      child: Text(s.downloadsSortNewest),
+                    ),
+                    DropdownMenuItem(
+                      value: _DownloadSort.oldest,
+                      child: Text(s.downloadsSortOldest),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _selectedSort = value);
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.cloud_download_outlined,
+                    size: 72,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    s.downloadsEmptyTitle,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    s.downloadsEmptyHint,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _handleExplore,
+                    child: Text(s.downloadsExploreCta),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: _clearCache,
-              icon: const Icon(Icons.delete_outline),
-              label: Text(S.of(context).downloadsClearCache),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

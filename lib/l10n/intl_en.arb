@@ -321,11 +321,28 @@
   "academicSettingsSaved": "Academic settings saved.",
   "saveChanges": "Save changes",
   "downloadsTitle": "Downloads",
-  "downloadsDescription": "Access your downloaded files and clear cache.",
+  "downloadsDescription": "Browse your downloaded files and clean the cache.",
   "downloadsEmptyTitle": "No downloads yet",
   "downloadsEmptyHint": "Downloaded items will appear here.",
   "downloadsClearCache": "Clear cache",
   "downloadsCacheCleared": "Cache cleared.",
+  "downloadsRefreshList": "Refresh list",
+  "downloadsRefreshSoon": "Refresh will be added soon.",
+  "downloadsStorageTitle": "Downloads storage",
+  "downloadsStorageUserLabel": "User: 0 MB",
+  "downloadsStorageCacheLabel": "Cache: 0 MB",
+  "downloadsStorageInfo": "Sizes will be calculated automatically later.",
+  "downloadsClearCacheDialogTitle": "Clear cached downloads?",
+  "downloadsClearCacheDialogBody": "This will remove cached files from this device. You can download them again later.",
+  "downloadsClearCacheDialogConfirm": "Clear cache",
+  "downloadsCacheClearedExperimental": "Cache cleared (experimental).",
+  "downloadsExploreCta": "Explore content",
+  "downloadsFilterAll": "All",
+  "downloadsFilterFiles": "Files",
+  "downloadsFilterImages": "Images",
+  "downloadsSortLabel": "Sort by",
+  "downloadsSortNewest": "Newest",
+  "downloadsSortOldest": "Oldest",
   "downloadsUpdatedAt": "Updated {date}",
   "@downloadsUpdatedAt": {
     "placeholders": {
@@ -384,8 +401,6 @@
 
 
 }
-
-
 
 
 
