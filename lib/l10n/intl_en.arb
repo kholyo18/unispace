@@ -246,6 +246,50 @@
   "smartReviewActionLater": "Maybe later",
   "smartReviewTipsTitle": "How it works",
   "smartReviewTipsBody": "We analyze your exams, time left, and difficulty to build daily sessions you can actually follow.",
+  "smartReviewEmptyNoExamsTitle": "No upcoming exams yet",
+  "smartReviewEmptyNoExamsBody": "Add at least one exam so we can build a focused review plan.",
+  "smartReviewEmptyNoPlanTitle": "Ready to build your plan",
+  "smartReviewEmptyNoPlanBody": "We will generate a 7-day schedule based on your nearest exam and study time.",
+  "smartReviewPlanSectionTitle": "Your plan",
+  "smartReviewPlanRange": "{start} → {end}",
+  "@smartReviewPlanRange": {
+    "placeholders": {
+      "start": {},
+      "end": {}
+    }
+  },
+  "smartReviewPlanCleared": "Plan cleared",
+  "smartReviewActionClearPlan": "Clear plan",
+  "smartReviewTaskDuration": "{minutes} min",
+  "@smartReviewTaskDuration": {
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "smartReviewTaskFocusTitle": "Focus session: {subject}",
+  "@smartReviewTaskFocusTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskPracticeTitle": "Practice quiz: {subject}",
+  "@smartReviewTaskPracticeTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskSummaryTitle": "Summary review: {subject}",
+  "@smartReviewTaskSummaryTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskMockTitle": "Mock test: {subject}",
+  "@smartReviewTaskMockTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
   "soon": "Coming soon",
   "addExam": "Add Exam",
   "editExam": "Edit Exam",
@@ -458,5 +502,4 @@
 
 
 }
-
 

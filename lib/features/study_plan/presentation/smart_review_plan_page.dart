@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:intl/intl.dart';
 
-import '../../../generated/l10n.dart';
+import '../../exams/data/models/exam_model.dart';
+import '../../exams/data/storage/exam_storage.dart';
 import '../../exams/presentation/pages/exams_calendar_page.dart';
+import '../application/smart_review_plan_generator.dart';
+import '../data/smart_review_repository.dart';
+import '../data/smart_review_storage.dart';
+import '../domain/models/smart_review_plan.dart';
 
 class SmartReviewPlanPage extends StatefulWidget {
   const SmartReviewPlanPage({super.key});
@@ -11,8 +18,16 @@ class SmartReviewPlanPage extends StatefulWidget {
 }
 
 class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
+  final ExamStorage _examStorage = ExamStorage();
+  final SmartReviewRepository _repository =
+      SmartReviewRepository(SmartReviewStorage());
+  final SmartReviewPlanGenerator _generator = SmartReviewPlanGenerator();
+
+  SmartReviewPlan? _plan;
+  List<ExamModel> _exams = [];
   bool _contentVisible = false;
-  bool _isLoading = false;
+  bool _isLoading = true;
+  bool _isCreating = false;
   bool _ctaPressed = false;
 
   @override
@@ -23,105 +38,75 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
         setState(() => _contentVisible = true);
       }
     });
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    final exams = await _examStorage.loadExams();
+    final plan = await _repository.loadPlan();
+    if (!mounted) return;
+    setState(() {
+      _exams = exams;
+      _plan = plan;
+      _isLoading = false;
+    });
+  }
+
+  List<ExamModel> get _upcomingExams {
+    final today = _dateOnly(DateTime.now());
+    final upcoming = _generator.filterUpcomingExams(_exams, today);
+    upcoming.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    return upcoming;
   }
 
   Future<void> _handleCreatePlan() async {
-    if (_isLoading) return;
+    if (_isCreating) return;
     setState(() {
-      _isLoading = true;
+      _isCreating = true;
       _ctaPressed = true;
     });
-    await Future.delayed(const Duration(milliseconds: 140));
+    await Future.delayed(const Duration(milliseconds: 120));
     if (mounted) {
       setState(() => _ctaPressed = false);
     }
-    await Future.delayed(const Duration(milliseconds: 460));
+
+    final generated = _generator.generatePlan(exams: _upcomingExams);
     if (!mounted) return;
-    setState(() => _isLoading = false);
-    _showRequirementsSheet();
+    if (generated == null) {
+      setState(() => _isCreating = false);
+      _showSnackBar(AppLocalizations.of(context)!.smartReviewEmptyNoExamsBody);
+      return;
+    }
+
+    await _repository.savePlan(generated);
+    if (!mounted) return;
+    setState(() {
+      _plan = generated;
+      _isCreating = false;
+    });
   }
 
-  void _showRequirementsSheet() {
-    final s = S.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.smartReviewBottomSheetTitle,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  s.smartReviewBottomSheetBody,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(content: Text(s.soon)),
-                          );
-                        },
-                        icon: const Icon(Icons.menu_book_outlined),
-                        label: Text(s.smartReviewActionAddSubjects),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          Navigator.of(this.context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ExamsCalendarPage(),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.event_available_outlined),
-                        label: Text(s.smartReviewActionAddExam),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(s.smartReviewActionLater),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  Future<void> _handleClearPlan() async {
+    await _repository.clearPlan();
+    if (!mounted) return;
+    setState(() => _plan = null);
+    _showSnackBar(AppLocalizations.of(context)!.smartReviewPlanCleared);
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
+
+  DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final s = S.of(context);
+    final t = AppLocalizations.of(context)!;
 
     final chipStyle = theme.textTheme.labelLarge?.copyWith(
       color: scheme.onSurfaceVariant,
@@ -129,7 +114,23 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(s.smartReviewTitle),
+        title: Text(t.smartReviewTitle),
+        actions: [
+          if (_plan != null)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'clear') {
+                  _handleClearPlan();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem<String>(
+                  value: 'clear',
+                  child: Text(t.smartReviewActionClearPlan),
+                ),
+              ],
+            ),
+        ],
       ),
       body: Stack(
         children: [
@@ -148,152 +149,230 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
             ),
           ),
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              child: AnimatedOpacity(
-                opacity: _contentVisible ? 1 : 0,
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeOut,
-                child: AnimatedSlide(
-                  offset: _contentVisible ? Offset.zero : const Offset(0, 0.06),
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeOut,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _HeroHeaderCard(s: s),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _InfoChip(
-                            label: s.smartReviewChipExams,
-                            icon: Icons.event_available_outlined,
-                            textStyle: chipStyle,
-                          ),
-                          _InfoChip(
-                            label: s.smartReviewChipTime,
-                            icon: Icons.access_time,
-                            textStyle: chipStyle,
-                          ),
-                          _InfoChip(
-                            label: s.smartReviewChipReminders,
-                            icon: Icons.notifications_active_outlined,
-                            textStyle: chipStyle,
-                          ),
-                          _InfoChip(
-                            label: s.smartReviewChipSimple,
-                            icon: Icons.auto_awesome_outlined,
-                            textStyle: chipStyle,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        s.smartReviewPreviewTitle,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      _PreviewCard(
-                        title: s.smartReviewPreviewItem1,
-                        icon: Icons.check_circle_outline,
-                        subtitle: s.smartReviewChipTime,
-                      ),
-                      const SizedBox(height: 12),
-                      _PreviewCard(
-                        title: s.smartReviewPreviewItem2,
-                        icon: Icons.auto_graph_outlined,
-                        subtitle: s.smartReviewChipReminders,
-                      ),
-                      const SizedBox(height: 12),
-                      _PreviewCard(
-                        title: s.smartReviewPreviewItem3,
-                        icon: Icons.tips_and_updates_outlined,
-                        subtitle: s.smartReviewChipSimple,
-                      ),
-                      const SizedBox(height: 24),
-                      AnimatedScale(
-                        scale: _ctaPressed ? 0.98 : 1,
-                        duration: const Duration(milliseconds: 120),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _isLoading ? null : _handleCreatePlan,
-                            icon: _isLoading
-                                ? SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        scheme.onPrimary,
-                                      ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    child: AnimatedOpacity(
+                      opacity: _contentVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 500),
+                      curve: Curves.easeOut,
+                      child: AnimatedSlide(
+                        offset: _contentVisible
+                            ? Offset.zero
+                            : const Offset(0, 0.06),
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.easeOut,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _HeroHeaderCard(t: t),
+                            const SizedBox(height: 16),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _InfoChip(
+                                  label: t.smartReviewChipExams,
+                                  icon: Icons.event_available_outlined,
+                                  textStyle: chipStyle,
+                                ),
+                                _InfoChip(
+                                  label: t.smartReviewChipTime,
+                                  icon: Icons.access_time,
+                                  textStyle: chipStyle,
+                                ),
+                                _InfoChip(
+                                  label: t.smartReviewChipReminders,
+                                  icon: Icons.notifications_active_outlined,
+                                  textStyle: chipStyle,
+                                ),
+                                _InfoChip(
+                                  label: t.smartReviewChipSimple,
+                                  icon: Icons.auto_awesome_outlined,
+                                  textStyle: chipStyle,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            if (_upcomingExams.isEmpty)
+                              _EmptyStateCard(
+                                title: t.smartReviewEmptyNoExamsTitle,
+                                description: t.smartReviewEmptyNoExamsBody,
+                                buttonLabel: t.smartReviewActionAddExam,
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const ExamsCalendarPage(),
                                     ),
-                                  )
-                                : const Icon(Icons.auto_awesome),
-                            label: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 12.0),
-                              child: Text(s.smartReviewCtaCreate),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Card(
-                        elevation: 0,
-                        color: scheme.surfaceVariant.withOpacity(0.6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: scheme.outlineVariant),
-                        ),
-                        child: Theme(
-                          data: theme.copyWith(
-                            dividerColor: Colors.transparent,
-                          ),
-                          child: ExpansionTile(
-                            leading: Icon(
-                              Icons.lightbulb_outline,
-                              color: scheme.primary,
-                            ),
-                            title: Text(
-                              s.smartReviewTipsTitle,
-                              style: theme.textTheme.titleSmall,
-                            ),
-                            childrenPadding: const EdgeInsets.fromLTRB(
-                              16,
-                              0,
-                              16,
-                              16,
-                            ),
-                            children: [
+                                  );
+                                },
+                              )
+                            else if (_plan == null) ...[
                               Text(
-                                s.smartReviewTipsBody,
+                                t.smartReviewPreviewTitle,
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 12),
+                              _PreviewCard(
+                                title: t.smartReviewPreviewItem1,
+                                icon: Icons.check_circle_outline,
+                                subtitle: t.smartReviewChipTime,
+                              ),
+                              const SizedBox(height: 12),
+                              _PreviewCard(
+                                title: t.smartReviewPreviewItem2,
+                                icon: Icons.auto_graph_outlined,
+                                subtitle: t.smartReviewChipReminders,
+                              ),
+                              const SizedBox(height: 12),
+                              _PreviewCard(
+                                title: t.smartReviewPreviewItem3,
+                                icon: Icons.tips_and_updates_outlined,
+                                subtitle: t.smartReviewChipSimple,
+                              ),
+                              const SizedBox(height: 20),
+                              _EmptyStateCard(
+                                title: t.smartReviewEmptyNoPlanTitle,
+                                description: t.smartReviewEmptyNoPlanBody,
+                                buttonLabel: t.smartReviewCtaCreate,
+                                isPrimary: true,
+                                onPressed: _isCreating ? null : _handleCreatePlan,
+                                isLoading: _isCreating,
+                                isPressed: _ctaPressed,
+                              ),
+                            ] else ...[
+                              _PlanRangeCard(
+                                title: t.smartReviewPlanSectionTitle,
+                                subtitle: t.smartReviewPlanRange(
+                                  _formatDate(context, _plan!.rangeStart),
+                                  _formatDate(context, _plan!.rangeEnd),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              for (final day in _plan!.days) ...[
+                                _PlanDayCard(
+                                  title: _formatDay(context, day.date),
+                                  tasks: day.tasks
+                                      .map(
+                                        (task) => _TaskItem(
+                                          icon: _taskIcon(task.type),
+                                          title: _taskTitle(t, task),
+                                          subtitle: t.smartReviewTaskDuration(
+                                            task.durationMinutes,
+                                          ),
+                                          notes: task.notes,
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              const SizedBox(height: 8),
+                              Text(
+                                t.smartReviewTipsTitle,
+                                style: theme.textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                t.smartReviewTipsBody,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: scheme.onSurfaceVariant,
                                 ),
                               ),
                             ],
-                          ),
+                            const SizedBox(height: 20),
+                            if (_plan == null)
+                              Card(
+                                elevation: 0,
+                                color: scheme.surfaceVariant.withOpacity(0.6),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(color: scheme.outlineVariant),
+                                ),
+                                child: Theme(
+                                  data: theme.copyWith(
+                                    dividerColor: Colors.transparent,
+                                  ),
+                                  child: ExpansionTile(
+                                    leading: Icon(
+                                      Icons.lightbulb_outline,
+                                      color: scheme.primary,
+                                    ),
+                                    title: Text(
+                                      t.smartReviewTipsTitle,
+                                      style: theme.textTheme.titleSmall,
+                                    ),
+                                    childrenPadding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      0,
+                                      16,
+                                      16,
+                                    ),
+                                    children: [
+                                      Text(
+                                        t.smartReviewTipsBody,
+                                        style:
+                                            theme.textTheme.bodyMedium?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-            ),
           ),
         ],
       ),
     );
   }
+
+  String _formatDate(BuildContext context, DateTime date) {
+    final locale = Localizations.localeOf(context).toString();
+    return DateFormat.yMMMd(locale).format(date);
+  }
+
+  String _formatDay(BuildContext context, DateTime date) {
+    final locale = Localizations.localeOf(context).toString();
+    return DateFormat.EEEE(locale).add_MMMd().format(date);
+  }
+
+  String _taskTitle(AppLocalizations t, SmartReviewTask task) {
+    switch (task.type) {
+      case SmartReviewTaskType.focusSession:
+        return t.smartReviewTaskFocusTitle(task.subjectName);
+      case SmartReviewTaskType.practiceQuiz:
+        return t.smartReviewTaskPracticeTitle(task.subjectName);
+      case SmartReviewTaskType.summaryReview:
+        return t.smartReviewTaskSummaryTitle(task.subjectName);
+      case SmartReviewTaskType.mockTest:
+        return t.smartReviewTaskMockTitle(task.subjectName);
+    }
+  }
+
+  IconData _taskIcon(SmartReviewTaskType type) {
+    switch (type) {
+      case SmartReviewTaskType.focusSession:
+        return Icons.track_changes;
+      case SmartReviewTaskType.practiceQuiz:
+        return Icons.quiz_outlined;
+      case SmartReviewTaskType.summaryReview:
+        return Icons.sticky_note_2_outlined;
+      case SmartReviewTaskType.mockTest:
+        return Icons.assignment_outlined;
+    }
+  }
 }
 
 class _HeroHeaderCard extends StatelessWidget {
-  const _HeroHeaderCard({required this.s});
+  const _HeroHeaderCard({required this.t});
 
-  final S s;
+  final AppLocalizations t;
 
   @override
   Widget build(BuildContext context) {
@@ -340,14 +419,14 @@ class _HeroHeaderCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    s.smartReviewTitle,
+                    t.smartReviewTitle,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    s.smartReviewSubtitle,
+                    t.smartReviewSubtitle,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -429,4 +508,216 @@ class _PreviewCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EmptyStateCard extends StatelessWidget {
+  const _EmptyStateCard({
+    required this.title,
+    required this.description,
+    required this.buttonLabel,
+    required this.onPressed,
+    this.isPrimary = false,
+    this.isLoading = false,
+    this.isPressed = false,
+  });
+
+  final String title;
+  final String description;
+  final String buttonLabel;
+  final VoidCallback? onPressed;
+  final bool isPrimary;
+  final bool isLoading;
+  final bool isPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final button = isPrimary
+        ? ElevatedButton.icon(
+            onPressed: onPressed,
+            icon: isLoading
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        scheme.onPrimary,
+                      ),
+                    ),
+                  )
+                : const Icon(Icons.auto_awesome),
+            label: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(buttonLabel),
+            ),
+          )
+        : OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: const Icon(Icons.event_available_outlined),
+            label: Text(buttonLabel),
+          );
+
+    return Card(
+      elevation: 0,
+      color: scheme.surfaceVariant.withOpacity(0.5),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            AnimatedScale(
+              scale: isPressed ? 0.98 : 1,
+              duration: const Duration(milliseconds: 120),
+              child: SizedBox(width: double.infinity, child: button),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanRangeCard extends StatelessWidget {
+  const _PlanRangeCard({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: scheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(Icons.calendar_today_outlined, color: scheme.primary),
+        ),
+        title: Text(title, style: theme.textTheme.titleSmall),
+        subtitle: Text(
+          subtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanDayCard extends StatelessWidget {
+  const _PlanDayCard({required this.title, required this.tasks});
+
+  final String title;
+  final List<_TaskItem> tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: theme.textTheme.titleSmall),
+            const SizedBox(height: 12),
+            for (final task in tasks) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(task.icon, size: 18, color: scheme.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.title,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          task.subtitle,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        if (task.notes != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            task.notes!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (task != tasks.last) const SizedBox(height: 12),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskItem {
+  const _TaskItem({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.notes,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? notes;
 }
