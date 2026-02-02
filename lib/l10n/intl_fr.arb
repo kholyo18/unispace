@@ -8,6 +8,7 @@
   "writeYourComment": "Écrivez votre commentaire",
   "publish": "Publier",
   "cancel": "Annuler",
+  "delete": "Supprimer",
   "posted": "Publication",
   "searchClipboard": "Rechercher dans le Note-pade",
   "note": "Note",
@@ -325,16 +326,33 @@
   "downloadsEmptyHint": "Les éléments téléchargés apparaîtront ici.",
   "downloadsClearCache": "Vider le cache",
   "downloadsCacheCleared": "Cache vidé.",
+  "downloadsCacheClearFailed": "Impossible de vider le cache.",
   "downloadsRefreshList": "Rafraîchir la liste",
-  "downloadsRefreshSoon": "Le rafraîchissement sera ajouté bientôt.",
   "downloadsStorageTitle": "Stockage des téléchargements",
   "downloadsStorageUserLabel": "Utilisateur : 0 Mo",
   "downloadsStorageCacheLabel": "Cache : 0 Mo",
   "downloadsStorageInfo": "Les tailles seront calculées automatiquement plus tard.",
+  "downloadsStorageUserLabelValue": "Utilisateur : {size}",
+  "@downloadsStorageUserLabelValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "downloadsStorageCacheLabelValue": "Cache : {size}",
+  "@downloadsStorageCacheLabelValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "downloadsStorageInfoValue": "Total utilisé : {size}",
+  "@downloadsStorageInfoValue": {
+    "placeholders": {
+      "size": {}
+    }
+  },
   "downloadsClearCacheDialogTitle": "Vider le cache des téléchargements ?",
   "downloadsClearCacheDialogBody": "Cela supprimera les fichiers mis en cache sur cet appareil. Vous pourrez les télécharger de nouveau plus tard.",
   "downloadsClearCacheDialogConfirm": "Vider le cache",
-  "downloadsCacheClearedExperimental": "Cache vidé (expérimental).",
   "downloadsExploreCta": "Explorer le contenu",
   "downloadsFilterAll": "Tout",
   "downloadsFilterFiles": "Fichiers",
@@ -342,6 +360,22 @@
   "downloadsSortLabel": "Trier par",
   "downloadsSortNewest": "Les plus récents",
   "downloadsSortOldest": "Les plus anciens",
+  "downloadsClearAllAction": "Tout supprimer",
+  "downloadsClearAllDialogTitle": "Supprimer tous les téléchargements ?",
+  "downloadsClearAllDialogBody": "Cela supprimera tous les fichiers téléchargés de cet appareil.",
+  "downloadsClearAllDialogConfirm": "Tout supprimer",
+  "downloadsClearAllSuccess": "Tous les téléchargements ont été supprimés.",
+  "downloadsClearAllFailed": "Impossible de supprimer tous les téléchargements.",
+  "downloadsDeleteDialogTitle": "Supprimer le téléchargement ?",
+  "downloadsDeleteDialogBody": "Supprimer {fileName} de cet appareil ?",
+  "@downloadsDeleteDialogBody": {
+    "placeholders": {
+      "fileName": {}
+    }
+  },
+  "downloadsDeleteSuccess": "Téléchargement supprimé.",
+  "downloadsDeleteFailed": "Impossible de supprimer le téléchargement.",
+  "downloadsLoadFailed": "Impossible de charger les téléchargements.",
   "downloadsUpdatedAt": "Mis à jour {date}",
   "@downloadsUpdatedAt": {
     "placeholders": {
