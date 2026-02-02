@@ -412,87 +412,87 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     ],
                   ),
                 ),
-                _sectionHeader(context, S.of(context).drawerSectionAccount),
-                _drawerItem(
-                  context,
-                  icon: Icons.person_outline,
-                  title: S.of(context).editProfile,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ProfileScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _drawerItem(
-                  context,
-                  icon: Icons.notifications_outlined,
-                  title: S.of(context).notificationsSettingsTitle,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const NotificationsSettingsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _drawerItem(
-                  context,
-                  icon: Icons.security_outlined,
-                  title: S.of(context).securityCenterTitle,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SecurityCenterScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _drawerItem(
-                  context,
-                  icon: Icons.privacy_tip_outlined,
-                  title: S.of(context).privacySettingsTitle,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const PrivacySettingsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                if (user != null)
-                  _drawerItem(
-                    context,
-                    icon: Icons.lock_reset,
-                    title: S.of(context).resetPassword,
-                    onTap: () async {
-                      try {
-                        await FirebaseAuth.instance
-                            .sendPasswordResetEmail(email: user.email!);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(S.of(context).resetSent),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text(S.of(context).resetFailed(e.toString())),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                  ),
+                //_sectionHeader(context, S.of(context).drawerSectionAccount),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.person_outline,
+                //   title: S.of(context).editProfile,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const ProfileScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.notifications_outlined,
+                //   title: S.of(context).notificationsSettingsTitle,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const NotificationsSettingsScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.security_outlined,
+                //   title: S.of(context).securityCenterTitle,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const SecurityCenterScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.privacy_tip_outlined,
+                //   title: S.of(context).privacySettingsTitle,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const PrivacySettingsScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
+                //if (user != null)
+                  // _drawerItem(
+                  //   context,
+                  //   icon: Icons.lock_reset,
+                  //   title: S.of(context).resetPassword,
+                  //   onTap: () async {
+                  //     try {
+                  //       await FirebaseAuth.instance
+                  //           .sendPasswordResetEmail(email: user.email!);
+                  //       if (context.mounted) {
+                  //         ScaffoldMessenger.of(context).showSnackBar(
+                  //           SnackBar(
+                  //             content: Text(S.of(context).resetSent),
+                  //           ),
+                  //         );
+                  //       }
+                  //     } catch (e) {
+                  //       if (context.mounted) {
+                  //         ScaffoldMessenger.of(context).showSnackBar(
+                  //           SnackBar(
+                  //             content:
+                  //                 Text(S.of(context).resetFailed(e.toString())),
+                  //           ),
+                  //         );
+                  //       }
+                  //     }
+                  //   },
+                  // ),
                 _sectionHeader(context, S.of(context).drawerSectionStudent),
                 _drawerItem(
                   context,
@@ -508,32 +508,32 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                   },
                 ),
                 _sectionHeader(context, S.of(context).drawerSectionContent),
-                _drawerItem(
-                  context,
-                  icon: Icons.download_outlined,
-                  title: S.of(context).downloadsTitle,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DownloadsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _drawerItem(
-                  context,
-                  icon: Icons.star_border,
-                  title: S.of(context).favoritesTitle,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const FavoritesScreen(),
-                      ),
-                    );
-                  },
-                ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.download_outlined,
+                //   title: S.of(context).downloadsTitle,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const DownloadsScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.star_border,
+                //   title: S.of(context).favoritesTitle,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const FavoritesScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
                 _drawerItem(
                   context,
                   icon: Icons.calculate_outlined,
@@ -547,19 +547,19 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     );
                   },
                 ),
-                _drawerItem(
-                  context,
-                  icon: Icons.note_alt_outlined,
-                  title: S.of(context).clipboard,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const NotesScreen(),
-                      ),
-                    );
-                  },
-                ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.note_alt_outlined,
+                //   title: S.of(context).clipboard,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const NotesScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
                 _drawerItem(
                   context,
                   icon: Icons.psychology_outlined,
@@ -587,19 +587,19 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                   },
                 ),
                 _sectionHeader(context, S.of(context).drawerSectionApp),
-                _drawerItem(
-                  context,
-                  icon: Icons.text_fields_outlined,
-                  title: S.of(context).fontSizeTitle,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const FontSizeScreen(),
-                      ),
-                    );
-                  },
-                ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.text_fields_outlined,
+                //   title: S.of(context).fontSizeTitle,
+                //   onTap: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //         builder: (_) => const FontSizeScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
                 ListTile(
                   leading: const Icon(Icons.color_lens_outlined),
                   title: Text(S.of(context).changeTheme),
@@ -628,18 +628,18 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     );
                   },
                 ),
-                _drawerItem(
-                  context,
-                  icon: Icons.star_rate_outlined,
-                  title: S.of(context).rateApp,
-                  onTap: _rateApp,
-                ),
-                _drawerItem(
-                  context,
-                  icon: Icons.share_outlined,
-                  title: S.of(context).shareApp,
-                  onTap: () => Share.share(AppLinks.shareMessage),
-                ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.star_rate_outlined,
+                //   title: S.of(context).rateApp,
+                //   onTap: _rateApp,
+                // ),
+                // _drawerItem(
+                //   context,
+                //   icon: Icons.share_outlined,
+                //   title: S.of(context).shareApp,
+                //   onTap: () => Share.share(AppLinks.shareMessage),
+                // ),
                 _drawerItem(
                   context,
                   icon: Icons.email_outlined,

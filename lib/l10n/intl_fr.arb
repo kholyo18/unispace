@@ -493,9 +493,7 @@
   "guestUser": "Invité",
   "emailUnavailable": "E-mail indisponible",
   "emailHidden": "E-mail masqué",
-  "aboutAppSummary": "Plateforme pour calculer la moyenne universitaire, échanger avec les étudiants et prendre des notes."
-
-
-
-
+  "aboutAppSummary": "Plateforme pour calculer la moyenne universitaire, échanger avec les étudiants et prendre des notes.",
+  "commonCore1": "Tronc commun",
+  "academicclass": "Section"
 }

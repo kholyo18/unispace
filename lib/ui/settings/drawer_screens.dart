@@ -460,14 +460,14 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
           TextField(
             controller: _majorController,
             decoration: InputDecoration(
-              labelText: S.of(context).academicMajorLabel,
+              labelText: S.of(context).academicclass,
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _levelController,
             decoration: InputDecoration(
-              labelText: S.of(context).academicLevelLabel,
+              labelText:S.of(context).academicMajorLabel,
             ),
           ),
           const SizedBox(height: 20),

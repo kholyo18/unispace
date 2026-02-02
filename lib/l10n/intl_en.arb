@@ -494,12 +494,8 @@
   "guestUser": "Guest",
   "emailUnavailable": "Email unavailable",
   "emailHidden": "Email hidden",
-  "aboutAppSummary": "A platform to calculate GPA, connect with students, and take notes."
-
-
-
-
-
-
+  "aboutAppSummary": "A platform to calculate GPA, connect with students, and take notes.",
+  "commonCore1": "Common Core",
+  "academicclass": "class"
 }
 
