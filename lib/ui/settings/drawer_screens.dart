@@ -7,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 
 import '../../generated/l10n.dart';
+import '../../moduls3.dart';
 import 'app_settings.dart';
 import 'blocked_users_service.dart';
 import '../../features/downloads/download_item.dart';
@@ -405,40 +406,275 @@ class AcademicSettingsScreen extends StatefulWidget {
 
 class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
   final _collegeController = TextEditingController();
-  final _majorController = TextEditingController();
+  final _departmentController = TextEditingController();
+  final _specialtyController = TextEditingController();
   final _levelController = TextEditingController();
+  final _collegeFocusNode = FocusNode();
+  final _departmentFocusNode = FocusNode();
+  final _specialtyFocusNode = FocusNode();
+  List<ProgramFaculty> _faculties = const [];
+  ProgramFaculty? _selectedFaculty;
+  ProgramMajor? _selectedDepartment;
+  ProgramTrack? _selectedSpecialty;
   bool _seededProfileValues = false;
   late final VoidCallback _profileListener;
 
   @override
   void initState() {
     super.initState();
+    _collegeController.addListener(_handleFacultyChanged);
+    _departmentController.addListener(_handleDepartmentChanged);
+    _specialtyController.addListener(_handleSpecialtyChanged);
     _profileListener = () {
-      if (_seededProfileValues) return;
+      if (_seededProfileValues || _faculties.isEmpty) return;
       final data = UserProfileService.instance.notifier.value;
       if (data.college.isEmpty && data.major.isEmpty && data.level.isEmpty) {
         return;
       }
-      _collegeController.text = data.college;
-      _majorController.text = data.major;
-      _levelController.text = data.level;
-      _seededProfileValues = true;
+      _seedFromProfile(data.college, data.major, data.level);
     };
     UserProfileService.instance.notifier.addListener(_profileListener);
     _profileListener();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_faculties.isEmpty) {
+      _faculties = getDemoFaculties(context);
+      _profileListener();
+    }
+  }
+
+  @override
   void dispose() {
     UserProfileService.instance.notifier.removeListener(_profileListener);
     _collegeController.dispose();
-    _majorController.dispose();
+    _departmentController.dispose();
+    _specialtyController.dispose();
     _levelController.dispose();
+    _collegeFocusNode.dispose();
+    _departmentFocusNode.dispose();
+    _specialtyFocusNode.dispose();
     super.dispose();
+  }
+
+  void _seedFromProfile(String college, String major, String level) {
+    final savedCollege = college.trim();
+    final savedMajor = major.trim();
+    final savedLevel = level.trim();
+    ProgramFaculty? matchedFaculty = savedCollege.isEmpty
+        ? null
+        : _faculties.cast<ProgramFaculty?>().firstWhere(
+              (faculty) => faculty?.name == savedCollege,
+              orElse: () => null,
+            );
+    Iterable<ProgramFaculty> facultyPool =
+        matchedFaculty == null ? _faculties : [matchedFaculty];
+    ProgramMajor? matchedDepartment;
+    ProgramTrack? matchedSpecialty;
+
+    if (savedMajor.isNotEmpty) {
+      for (final faculty in facultyPool) {
+        for (final major in faculty.majors) {
+          for (final track in major.tracks) {
+            final matchesName = track.name == savedMajor;
+            final matchesLevel =
+                savedLevel.isEmpty || track.level == savedLevel;
+            if (matchesName && matchesLevel) {
+              matchedFaculty = faculty;
+              matchedDepartment = major;
+              matchedSpecialty = track;
+              break;
+            }
+          }
+          if (matchedSpecialty != null) break;
+        }
+        if (matchedSpecialty != null) break;
+      }
+    }
+
+    if (matchedSpecialty == null && savedMajor.isNotEmpty) {
+      for (final faculty in facultyPool) {
+        for (final major in faculty.majors) {
+          if (major.name == savedMajor) {
+            matchedFaculty ??= faculty;
+            matchedDepartment = major;
+            if (savedLevel.isNotEmpty) {
+              matchedSpecialty = major.tracks.cast<ProgramTrack?>().firstWhere(
+                    (track) => track?.level == savedLevel,
+                    orElse: () => null,
+                  );
+            }
+            break;
+          }
+        }
+        if (matchedDepartment != null) break;
+      }
+    }
+
+    setState(() {
+      _selectedFaculty = matchedFaculty;
+      _selectedDepartment = matchedDepartment;
+      _selectedSpecialty = matchedSpecialty;
+      _collegeController.text = matchedFaculty?.name ?? savedCollege;
+      _departmentController.text = matchedDepartment?.name ?? '';
+      _specialtyController.text =
+          matchedSpecialty?.name ?? (matchedDepartment == null ? savedMajor : '');
+      _levelController.text =
+          matchedSpecialty?.level ?? savedLevel;
+      _seededProfileValues = true;
+    });
+  }
+
+  void _handleFacultyChanged() {
+    final text = _collegeController.text.trim();
+    if (_selectedFaculty != null && _selectedFaculty?.name != text) {
+      setState(() {
+        _selectedFaculty = null;
+        _clearDepartmentSelection();
+        _clearSpecialtySelection();
+      });
+    }
+  }
+
+  void _handleDepartmentChanged() {
+    final text = _departmentController.text.trim();
+    if (_selectedDepartment != null && _selectedDepartment?.name != text) {
+      setState(() {
+        _selectedDepartment = null;
+        _clearSpecialtySelection();
+      });
+    }
+  }
+
+  void _handleSpecialtyChanged() {
+    final text = _specialtyController.text.trim();
+    if (_selectedSpecialty != null && _selectedSpecialty?.name != text) {
+      setState(() {
+        _selectedSpecialty = null;
+        _levelController.clear();
+      });
+    }
+  }
+
+  void _clearDepartmentSelection() {
+    _selectedDepartment = null;
+    _departmentController.clear();
+  }
+
+  void _clearSpecialtySelection() {
+    _selectedSpecialty = null;
+    _specialtyController.clear();
+    _levelController.clear();
+  }
+
+  String _normalizeQuery(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Iterable<ProgramFaculty> _facultyOptions(TextEditingValue textEditingValue) {
+    final query = _normalizeQuery(textEditingValue.text).toLowerCase();
+    if (query.isEmpty) {
+      return const Iterable<ProgramFaculty>.empty();
+    }
+    return _faculties.where(
+      (faculty) => faculty.name.toLowerCase().contains(query),
+    );
+  }
+
+  Iterable<ProgramMajor> _departmentOptions(TextEditingValue textEditingValue) {
+    if (_selectedFaculty == null) {
+      return const Iterable<ProgramMajor>.empty();
+    }
+    final query = _normalizeQuery(textEditingValue.text).toLowerCase();
+    if (query.isEmpty) {
+      return const Iterable<ProgramMajor>.empty();
+    }
+    return _selectedFaculty!.majors.where(
+      (major) => major.name.toLowerCase().contains(query),
+    );
+  }
+
+  Iterable<ProgramTrack> _specialtyOptions(TextEditingValue textEditingValue) {
+    if (_selectedDepartment == null) {
+      return const Iterable<ProgramTrack>.empty();
+    }
+    final query = _normalizeQuery(textEditingValue.text).toLowerCase();
+    if (query.isEmpty) {
+      return const Iterable<ProgramTrack>.empty();
+    }
+    return _selectedDepartment!.tracks.where(
+      (track) => track.name.toLowerCase().contains(query),
+    );
+  }
+
+  Widget _buildAutocompleteField<T>({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String labelText,
+    required Iterable<T> Function(TextEditingValue) optionsBuilder,
+    required String Function(T) displayStringForOption,
+    required ValueChanged<T> onSelected,
+  }) {
+    return RawAutocomplete<T>(
+      textEditingController: controller,
+      focusNode: focusNode,
+      optionsBuilder: optionsBuilder,
+      displayStringForOption: displayStringForOption,
+      onSelected: onSelected,
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: textController,
+          focusNode: focusNode,
+          textAlign: TextAlign.start,
+          decoration: InputDecoration(
+            labelText: labelText,
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: AlignmentDirectional.topStart,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final option = options.elementAt(index);
+                  return ListTile(
+                    title: Text(
+                      displayStringForOption(option),
+                      textAlign: TextAlign.start,
+                    ),
+                    onTap: () => onSelected(option),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasValidSelections = _selectedFaculty != null &&
+        _selectedDepartment != null &&
+        _selectedSpecialty != null &&
+        _levelController.text.trim().isNotEmpty;
+    final allFieldsEmpty = _collegeController.text.trim().isEmpty &&
+        _departmentController.text.trim().isEmpty &&
+        _specialtyController.text.trim().isEmpty &&
+        _levelController.text.trim().isEmpty;
+    final canSave = hasValidSelections || allFieldsEmpty;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(S.of(context).academicSettingsTitle),
@@ -451,73 +687,113 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
-          TextField(
+          _buildAutocompleteField<ProgramFaculty>(
             controller: _collegeController,
-            decoration: InputDecoration(
-              labelText: S.of(context).academicCollegeLabel,
-            ),
+            focusNode: _collegeFocusNode,
+            labelText: S.of(context).academicCollegeLabel,
+            optionsBuilder: _facultyOptions,
+            displayStringForOption: (faculty) => faculty.name,
+            onSelected: (faculty) {
+              setState(() {
+                _selectedFaculty = faculty;
+                _collegeController.text = faculty.name;
+                _clearDepartmentSelection();
+                _clearSpecialtySelection();
+              });
+            },
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _majorController,
-            decoration: InputDecoration(
-              labelText: S.of(context).academicclass,
-            ),
+          _buildAutocompleteField<ProgramMajor>(
+            controller: _departmentController,
+            focusNode: _departmentFocusNode,
+            labelText: S.of(context).academicclass,
+            optionsBuilder: _departmentOptions,
+            displayStringForOption: (major) => major.name,
+            onSelected: (major) {
+              setState(() {
+                _selectedDepartment = major;
+                _departmentController.text = major.name;
+                _clearSpecialtySelection();
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          _buildAutocompleteField<ProgramTrack>(
+            controller: _specialtyController,
+            focusNode: _specialtyFocusNode,
+            labelText: S.of(context).academicMajorLabel,
+            optionsBuilder: _specialtyOptions,
+            displayStringForOption: (track) => track.name,
+            onSelected: (track) {
+              setState(() {
+                _selectedSpecialty = track;
+                _specialtyController.text = track.name;
+                _levelController.text = track.level;
+              });
+            },
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _levelController,
             decoration: InputDecoration(
-              labelText:S.of(context).academicMajorLabel,
+              labelText: S.of(context).academicLevelLabel,
             ),
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () async {
-              final user = FirebaseAuth.instance.currentUser;
-              if (user == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(S.of(context).signInRequired)),
-                );
-                return;
-              }
-              final faculty = _collegeController.text.trim();
-              final specialty = _majorController.text.trim();
-              final level = _levelController.text.trim();
-              final hasShortcut =
-                  faculty.isNotEmpty || specialty.isNotEmpty || level.isNotEmpty;
-              await AppSettings.instance.setAcademicShortcut(
-                hasAcademicShortcut: hasShortcut,
-                facultyId: faculty,
-                departmentId: specialty,
-                specialtyId: specialty,
-                level: level,
-                facultyName: faculty,
-                departmentName: specialty,
-                specialtyName: specialty,
-              );
-              var syncFailed = false;
-              try {
-                await UserProfileService.instance.updateAcademic(
-                  college: faculty,
-                  major: specialty,
-                  level: level,
-                );
-              } on FirebaseException {
-                syncFailed = true;
-              }
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    syncFailed
-                        ? 'Saved locally. Sync failed.'
-                        : S.of(context).academicSettingsSaved,
-                  ),
-                ),
-              );
-              Navigator.pop(context);
-            },
+            onPressed: canSave
+                ? () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(S.of(context).signInRequired)),
+                      );
+                      return;
+                    }
+                    final selectedFaculty = _selectedFaculty;
+                    final selectedDepartment = _selectedDepartment;
+                    final selectedSpecialty = _selectedSpecialty;
+                    final faculty = selectedFaculty?.name ?? '';
+                    final department = selectedDepartment?.name ?? '';
+                    final specialty = selectedSpecialty?.name ?? '';
+                    final level = _levelController.text.trim();
+                    final hasShortcut = faculty.isNotEmpty ||
+                        department.isNotEmpty ||
+                        specialty.isNotEmpty ||
+                        level.isNotEmpty;
+                    await AppSettings.instance.setAcademicShortcut(
+                      hasAcademicShortcut: hasShortcut,
+                      facultyId: faculty,
+                      departmentId: department,
+                      specialtyId: specialty,
+                      level: level,
+                      facultyName: faculty,
+                      departmentName: department,
+                      specialtyName: specialty,
+                    );
+                    var syncFailed = false;
+                    try {
+                      await UserProfileService.instance.updateAcademic(
+                        college: faculty,
+                        major: specialty,
+                        level: level,
+                      );
+                    } on FirebaseException {
+                      syncFailed = true;
+                    }
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          syncFailed
+                              ? 'Saved locally. Sync failed.'
+                              : S.of(context).academicSettingsSaved,
+                        ),
+                      ),
+                    );
+                    Navigator.pop(context);
+                  }
+                : null,
             child: Text(S.of(context).saveChanges),
           ),
         ],
