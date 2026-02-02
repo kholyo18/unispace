@@ -1709,15 +1709,32 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
     if (matchedTrack != null &&
         matchedMajor != null &&
         matchedFaculty != null) {
-      final specs = createSemesterSpecsForTrack(matchedTrack);
+      final selectedFaculty = matchedFaculty;
+      final selectedMajor = matchedMajor;
+      final selectedTrack = matchedTrack;
+      if (selectedFaculty == null ||
+          selectedMajor == null ||
+          selectedTrack == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AcademicSettingsScreen(),
+          ),
+        );
+        return;
+      }
+      final specs = createSemesterSpecsForTrack(selectedTrack);
       final sem1 = _pickSemester(specs, 'S1');
       final sem2 = _pickSemester(specs, 'S2');
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => StudiesTableScreen(
-            facultyName: matchedFaculty.name,
-            programName: '${matchedMajor.name} • ${matchedTrack.name}',
+            facultyName: selectedFaculty.name,
+            programName: '${selectedMajor.name} • ${selectedTrack.name}',
             semester1Modules: sem1,
             semester2Modules: sem2,
           ),
@@ -1727,12 +1744,26 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
     }
 
     if (matchedMajor != null && matchedFaculty != null) {
+      final selectedMajor = matchedMajor;
+      final selectedFaculty = matchedFaculty;
+      if (selectedMajor == null || selectedFaculty == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AcademicSettingsScreen(),
+          ),
+        );
+        return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => MajorTracksScreen(
-            major: matchedMajor,
-            faculty: matchedFaculty,
+            major: selectedMajor,
+            faculty: selectedFaculty,
           ),
         ),
       );
@@ -1740,10 +1771,23 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
     }
 
     if (matchedFaculty != null) {
+      final selectedFaculty = matchedFaculty;
+      if (selectedFaculty == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AcademicSettingsScreen(),
+          ),
+        );
+        return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => FacultyMajorsScreen(faculty: matchedFaculty),
+          builder: (_) => FacultyMajorsScreen(faculty: selectedFaculty),
         ),
       );
       return;
@@ -1751,6 +1795,12 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AcademicSettingsScreen(),
+      ),
     );
   }
 
