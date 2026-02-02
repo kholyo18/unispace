@@ -228,6 +228,25 @@
   "smartReviewPlanDescription": "Generate a focused review plan based on your upcoming exams and study goals.",
   "smartReviewPlanCtaCreate": "Create a plan",
   "smartReviewPlanComingSoon": "Coming soon",
+  "smartReviewTitle": "Smart Review Plan",
+  "smartReviewSubtitle": "Turn upcoming exams into a balanced, achievable daily plan.",
+  "smartReviewCtaCreate": "Create review plan",
+  "smartReviewChipExams": "Exam-aware",
+  "smartReviewChipTime": "Time-smart",
+  "smartReviewChipReminders": "Reminders",
+  "smartReviewChipSimple": "Easy to follow",
+  "smartReviewPreviewTitle": "Preview your week",
+  "smartReviewPreviewItem1": "Today · 2 focus sessions (45 min)",
+  "smartReviewPreviewItem2": "Tomorrow · 1 mock quiz + recap",
+  "smartReviewPreviewItem3": "This week · Prioritize hardest subjects",
+  "smartReviewBottomSheetTitle": "Before we build your plan",
+  "smartReviewBottomSheetBody": "Add your subjects and exam dates so we can personalize your schedule.",
+  "smartReviewActionAddSubjects": "Add subjects",
+  "smartReviewActionAddExam": "Add exam",
+  "smartReviewActionLater": "Maybe later",
+  "smartReviewTipsTitle": "How it works",
+  "smartReviewTipsBody": "We analyze your exams, time left, and difficulty to build daily sessions you can actually follow.",
+  "soon": "Coming soon",
   "addExam": "Add Exam",
   "editExam": "Edit Exam",
   "deleteExam": "Delete Exam",
@@ -439,6 +458,5 @@
 
 
 }
-
 
 
