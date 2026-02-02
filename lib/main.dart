@@ -52,6 +52,7 @@ import 'ui/settings/email_verification_service.dart';
 import 'ui/settings/user_profile_service.dart';
 import 'features/auth/signup_flow.dart';
 import 'features/exams/presentation/pages/exams_calendar_page.dart';
+import 'features/study_plan/presentation/smart_review_plan_page.dart';
 import './moduls3.dart';
 import './moduls.dart';
 import 'module/moduls.dart';
@@ -555,6 +556,19 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => const NotesScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.psychology_outlined,
+                  title: S.of(context).smartReviewPlanTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SmartReviewPlanPage(),
                       ),
                     );
                   },

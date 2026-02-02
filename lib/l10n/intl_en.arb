@@ -224,6 +224,10 @@
   "contactMetadataTimestamp": "Timestamp",
   "contactMetadataAppVersion": "App version",
   "examCalendar": "Exam Calendar",
+  "smartReviewPlanTitle": "Smart review plan",
+  "smartReviewPlanDescription": "Generate a focused review plan based on your upcoming exams and study goals.",
+  "smartReviewPlanCtaCreate": "Create a plan",
+  "smartReviewPlanComingSoon": "Coming soon",
   "addExam": "Add Exam",
   "editExam": "Edit Exam",
   "deleteExam": "Delete Exam",
@@ -435,7 +439,6 @@
 
 
 }
-
 
 
 
