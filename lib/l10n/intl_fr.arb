@@ -386,6 +386,17 @@
   "academicMajorLabel": "Spécialité",
   "academicLevelLabel": "Niveau",
   "academicSettingsSaved": "Paramètres académiques enregistrés.",
+  "academicShortcutTitle": "Votre raccourci académique",
+  "academicShortcutDetails": "Spécialité : {specialty} | Niveau : {level}",
+  "@academicShortcutDetails": {
+    "placeholders": {
+      "specialty": {},
+      "level": {}
+    }
+  },
+  "academicShortcutGo": "Aller",
+  "academicShortcutEdit": "Modifier",
+  "academicShortcutNotFound": "Impossible de trouver cette spécialité. Veuillez mettre à jour vos paramètres académiques.",
   "saveChanges": "Enregistrer les modifications",
   "downloadsTitle": "Téléchargements",
   "downloadsDescription": "Consultez vos fichiers téléchargés et nettoyez le cache.",

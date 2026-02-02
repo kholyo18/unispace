@@ -480,10 +480,23 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                 );
                 return;
               }
+              final faculty = _collegeController.text.trim();
+              final specialty = _majorController.text.trim();
+              final level = _levelController.text.trim();
               await UserProfileService.instance.updateAcademic(
-                college: _collegeController.text.trim(),
-                major: _majorController.text.trim(),
-                level: _levelController.text.trim(),
+                college: faculty,
+                major: specialty,
+                level: level,
+              );
+              await AppSettings.instance.setAcademicShortcut(
+                hasAcademicShortcut: specialty.isNotEmpty,
+                facultyId: faculty,
+                departmentId: specialty,
+                specialtyId: specialty,
+                level: level,
+                facultyName: faculty,
+                departmentName: specialty,
+                specialtyName: specialty,
               );
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(

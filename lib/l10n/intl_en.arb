@@ -387,6 +387,17 @@
   "academicMajorLabel": "Major",
   "academicLevelLabel": "Level",
   "academicSettingsSaved": "Academic settings saved.",
+  "academicShortcutTitle": "Your academic shortcut",
+  "academicShortcutDetails": "Specialty: {specialty} | Level: {level}",
+  "@academicShortcutDetails": {
+    "placeholders": {
+      "specialty": {},
+      "level": {}
+    }
+  },
+  "academicShortcutGo": "Go",
+  "academicShortcutEdit": "Edit",
+  "academicShortcutNotFound": "We couldn't find that specialty. Please update your academic settings.",
   "saveChanges": "Save changes",
   "downloadsTitle": "Downloads",
   "downloadsDescription": "Browse your downloaded files and clean the cache.",
@@ -498,4 +509,3 @@
   "commonCore1": "Common Core",
   "academicclass": "class"
 }
-
