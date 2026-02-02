@@ -245,6 +245,50 @@
   "smartReviewActionLater": "Plus tard",
   "smartReviewTipsTitle": "Comment ça marche",
   "smartReviewTipsBody": "Nous analysons vos examens, le temps restant et la difficulté pour créer des sessions quotidiennes réalistes.",
+  "smartReviewEmptyNoExamsTitle": "Aucun examen à venir",
+  "smartReviewEmptyNoExamsBody": "Ajoutez au moins un examen pour générer un plan de révision ciblé.",
+  "smartReviewEmptyNoPlanTitle": "Prêt à créer votre plan",
+  "smartReviewEmptyNoPlanBody": "Nous générerons un planning de 7 jours basé sur votre examen le plus proche et votre temps d’étude.",
+  "smartReviewPlanSectionTitle": "Votre plan",
+  "smartReviewPlanRange": "{start} → {end}",
+  "@smartReviewPlanRange": {
+    "placeholders": {
+      "start": {},
+      "end": {}
+    }
+  },
+  "smartReviewPlanCleared": "Plan supprimé",
+  "smartReviewActionClearPlan": "Supprimer le plan",
+  "smartReviewTaskDuration": "{minutes} min",
+  "@smartReviewTaskDuration": {
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "smartReviewTaskFocusTitle": "Session focus : {subject}",
+  "@smartReviewTaskFocusTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskPracticeTitle": "Quiz d'entraînement : {subject}",
+  "@smartReviewTaskPracticeTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskSummaryTitle": "Révision synthèse : {subject}",
+  "@smartReviewTaskSummaryTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskMockTitle": "Examen blanc : {subject}",
+  "@smartReviewTaskMockTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
   "soon": "Bientôt",
   "addExam": "Ajouter un examen",
   "editExam": "Modifier l'examen",

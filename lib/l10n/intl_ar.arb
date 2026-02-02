@@ -243,6 +243,50 @@
   "smartReviewActionLater": "لاحقاً",
   "smartReviewTipsTitle": "كيف يعمل",
   "smartReviewTipsBody": "نحلّل الامتحانات والوقت المتبقي والصعوبة لبناء جلسات يومية واقعية.",
+  "smartReviewEmptyNoExamsTitle": "لا توجد امتحانات قادمة",
+  "smartReviewEmptyNoExamsBody": "أضف امتحاناً واحداً على الأقل لننشئ خطة مراجعة مركزة.",
+  "smartReviewEmptyNoPlanTitle": "جاهز لإنشاء خطتك",
+  "smartReviewEmptyNoPlanBody": "سنولّد جدولاً لمدة 7 أيام بناءً على أقرب امتحان ووقت الدراسة.",
+  "smartReviewPlanSectionTitle": "خطتك",
+  "smartReviewPlanRange": "{start} → {end}",
+  "@smartReviewPlanRange": {
+    "placeholders": {
+      "start": {},
+      "end": {}
+    }
+  },
+  "smartReviewPlanCleared": "تم حذف الخطة",
+  "smartReviewActionClearPlan": "مسح الخطة",
+  "smartReviewTaskDuration": "{minutes} دقيقة",
+  "@smartReviewTaskDuration": {
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "smartReviewTaskFocusTitle": "جلسة تركيز: {subject}",
+  "@smartReviewTaskFocusTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskPracticeTitle": "اختبار تدريبي: {subject}",
+  "@smartReviewTaskPracticeTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskSummaryTitle": "مراجعة ملخصة: {subject}",
+  "@smartReviewTaskSummaryTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
+  "smartReviewTaskMockTitle": "اختبار تجريبي: {subject}",
+  "@smartReviewTaskMockTitle": {
+    "placeholders": {
+      "subject": {}
+    }
+  },
   "soon": "قريباً",
   "addExam": "إضافة امتحان",
   "editExam": "تعديل الامتحان",
