@@ -166,7 +166,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _HeroHeaderCard(t: t),
+                            const _HeroHeaderCard(),
                             const SizedBox(height: 16),
                             Wrap(
                               spacing: 8,
@@ -257,7 +257,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
                                       .map(
                                         (task) => _TaskItem(
                                           icon: _taskIcon(task.type),
-                                          title: _taskTitle(t, task),
+                                          title: _taskTitle(context, task),
                                           subtitle: t.smartReviewTaskDuration(
                                             task.durationMinutes,
                                           ),
@@ -342,7 +342,8 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
     return DateFormat.EEEE(locale).add_MMMd().format(date);
   }
 
-  String _taskTitle(S t, SmartReviewTask task) {
+  String _taskTitle(BuildContext context, SmartReviewTask task) {
+    final t = S.of(context);
     switch (task.type) {
       case SmartReviewTaskType.focusSession:
         return t.smartReviewTaskFocusTitle(task.subjectName);
@@ -370,14 +371,13 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
 }
 
 class _HeroHeaderCard extends StatelessWidget {
-  const _HeroHeaderCard({required this.t});
-
-  final S t;
+  const _HeroHeaderCard();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final t = S.of(context);
     return Card(
       elevation: 1,
       shadowColor: scheme.shadow.withOpacity(0.1),
