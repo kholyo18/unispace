@@ -1659,6 +1659,101 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
     );
   }
 
+  void _openAcademicShortcut(BuildContext context, SettingsData settings) {
+    final faculties = getDemoFaculties(context);
+    final targetFaculty = settings.academicFacultyName.isNotEmpty
+        ? settings.academicFacultyName
+        : settings.academicFacultyId;
+    final targetDepartment = settings.academicDepartmentName.isNotEmpty
+        ? settings.academicDepartmentName
+        : settings.academicDepartmentId;
+    final targetSpecialty = settings.academicSpecialtyName.isNotEmpty
+        ? settings.academicSpecialtyName
+        : settings.academicSpecialtyId;
+    final targetLevel = settings.academicLevel;
+
+    ProgramFaculty? matchedFaculty;
+    ProgramMajor? matchedMajor;
+    ProgramTrack? matchedTrack;
+
+    for (final faculty in faculties) {
+      if (targetFaculty.isNotEmpty && faculty.name != targetFaculty) {
+        continue;
+      }
+      matchedFaculty = faculty;
+      for (final major in faculty.majors) {
+        if (targetDepartment.isNotEmpty && major.name != targetDepartment) {
+          continue;
+        }
+        matchedMajor = major;
+        for (final track in major.tracks) {
+          final matchesSpecialty = track.name == targetSpecialty ||
+              (settings.academicSpecialtyId.isNotEmpty &&
+                  track.name == settings.academicSpecialtyId);
+          final matchesLevel =
+              targetLevel.isEmpty || track.level == targetLevel;
+          if (matchesSpecialty && matchesLevel) {
+            matchedTrack = track;
+            break;
+          }
+        }
+        if (matchedTrack != null) {
+          break;
+        }
+      }
+      if (matchedTrack != null) {
+        break;
+      }
+    }
+
+    if (matchedTrack != null &&
+        matchedMajor != null &&
+        matchedFaculty != null) {
+      final specs = createSemesterSpecsForTrack(matchedTrack);
+      final sem1 = _pickSemester(specs, 'S1');
+      final sem2 = _pickSemester(specs, 'S2');
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StudiesTableScreen(
+            facultyName: matchedFaculty.name,
+            programName: '${matchedMajor.name} • ${matchedTrack.name}',
+            semester1Modules: sem1,
+            semester2Modules: sem2,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (matchedMajor != null && matchedFaculty != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MajorTracksScreen(
+            major: matchedMajor,
+            faculty: matchedFaculty,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (matchedFaculty != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FacultyMajorsScreen(faculty: matchedFaculty),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -1776,6 +1871,110 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                     ),
                   ),
                 ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: ValueListenableBuilder<SettingsData>(
+                valueListenable: AppSettings.instance.notifier,
+                builder: (context, settings, _) {
+                  final specialtyId =
+                      settings.academicSpecialtyId.trim();
+                  if (!settings.hasAcademicShortcut ||
+                      specialtyId.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  final theme = Theme.of(context);
+                  final facultyName = (settings.academicFacultyName.isNotEmpty
+                          ? settings.academicFacultyName
+                          : settings.academicFacultyId)
+                      .trim();
+                  final specialtyName =
+                      (settings.academicSpecialtyName.isNotEmpty
+                              ? settings.academicSpecialtyName
+                              : specialtyId)
+                          .trim();
+                  final level = settings.academicLevel.trim();
+                  final displayLevel = level.isNotEmpty ? level : '—';
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant
+                              .withOpacity(0.4),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                theme.colorScheme.shadow.withOpacity(0.08),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            S.of(context).academicShortcutTitle,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          if (facultyName.isNotEmpty)
+                            Text(
+                              facultyName,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          const SizedBox(height: 4),
+                          Text(
+                            S.of(context).academicShortcutDetails(
+                              specialtyName,
+                              displayLevel,
+                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              OutlinedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const AcademicSettingsScreen(),
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  S.of(context).academicShortcutEdit,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    _openAcademicShortcut(context, settings),
+                                child: Text(
+                                  S.of(context).academicShortcutGo,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
             if (quickFaculty != null) ...[

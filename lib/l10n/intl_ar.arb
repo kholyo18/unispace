@@ -384,6 +384,17 @@
   "academicMajorLabel": "التخصص",
   "academicLevelLabel": "المستوى",
   "academicSettingsSaved": "تم حفظ الإعدادات الأكاديمية.",
+  "academicShortcutTitle": "اختصارك الأكاديمي",
+  "academicShortcutDetails": "التخصص: {specialty} | المستوى: {level}",
+  "@academicShortcutDetails": {
+    "placeholders": {
+      "specialty": {},
+      "level": {}
+    }
+  },
+  "academicShortcutGo": "انتقال",
+  "academicShortcutEdit": "تعديل",
+  "academicShortcutNotFound": "لم نعثر على هذا التخصص. يرجى تحديث الإعدادات الأكاديمية.",
   "saveChanges": "حفظ التغييرات",
   "downloadsTitle": "التنزيلات",
   "downloadsDescription": "اعرض الملفات التي تم تنزيلها ونظّف التخزين المؤقت.",
