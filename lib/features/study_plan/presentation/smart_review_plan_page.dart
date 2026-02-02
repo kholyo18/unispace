@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:unispace/generated/l10n.dart';
+import '../../../generated/l10n.dart';
 
 import '../../exams/data/models/exam_model.dart';
 import '../../exams/data/storage/exam_storage.dart';
