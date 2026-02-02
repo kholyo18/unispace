@@ -609,7 +609,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
     );
   }
 
-  Widget _buildAutocompleteField<T>({
+  Widget _buildAutocompleteField<T extends Object>({
     required TextEditingController controller,
     required FocusNode focusNode,
     required String labelText,
