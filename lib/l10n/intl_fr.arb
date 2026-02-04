@@ -506,5 +506,24 @@
   "emailHidden": "E-mail masqué",
   "aboutAppSummary": "Plateforme pour calculer la moyenne universitaire, échanger avec les étudiants et prendre des notes.",
   "commonCore1": "Tronc commun",
-  "academicclass": "Section"
+  "academicclass": "Section",
+  "verificationEmailSent": "E-mail de vérification envoyé.",
+  "verifyEmailToContinue": "Veuillez vérifier votre e-mail pour continuer.",
+  "verifyEmailHelper": "Ouvrez l'e-mail de vérification et cliquez sur le lien, puis appuyez sur vérifier maintenant.",
+  "verifyEmailTitle": "Vérifier l'e-mail",
+  "checkNow": "Vérifier maintenant",
+  "resendVerificationEmail": "Renvoyer l'e-mail de vérification",
+  "resendVerificationCooldown": "Renvoyer dans {seconds}s",
+  "@resendVerificationCooldown": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "wrongPasswordError": "Mot de passe incorrect.",
+  "emailAlreadyInUseError": "Cet e-mail est déjà utilisé.",
+  "networkError": "Erreur réseau. Veuillez réessayer.",
+  "weakPasswordError": "Le mot de passe est trop faible.",
+  "emailAuthDisabledError": "La connexion par e-mail est désactivée.",
+  "userDisabledError": "Ce compte est désactivé.",
+  "genericAuthError": "Une erreur est survenue. Veuillez réessayer."
 }
