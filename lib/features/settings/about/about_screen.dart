@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../generated/l10n.dart';
 import '../../../ui/contact/contact_us_sheet.dart';
+import '../privacy/privacy_policy_screen.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -105,7 +106,7 @@ class AboutScreen extends StatelessWidget {
   void _showPrivacyPolicy(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const _PrivacyPolicyScreen(),
+        builder: (_) => const PrivacyPolicyScreen(),
       ),
     );
   }
@@ -226,33 +227,6 @@ class _ActionTile extends StatelessWidget {
       title: Text(label),
       trailing: const Icon(Icons.chevron_left),
       contentPadding: EdgeInsets.zero,
-    );
-  }
-}
-
-class _PrivacyPolicyScreen extends StatelessWidget {
-  const _PrivacyPolicyScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(s.privacyPolicyTitle),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            s.privacyPolicyBody,
-            textAlign: TextAlign.start,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  height: 1.7,
-                ),
-          ),
-        ),
-      ),
     );
   }
 }
