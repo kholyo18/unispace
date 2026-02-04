@@ -31,6 +31,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 // Local
 import 'package:shared_preferences/shared_preferences.dart';
+import 'features/auth/verify_email_screen.dart';
 
 // PDF / Printing
 import 'package:pdf/pdf.dart';
@@ -982,6 +983,13 @@ class AuthGate extends StatelessWidget {
               body: Center(child: CircularProgressIndicator()));
         }
         if (!snap.hasData) return const SignInScreen();
+        final user = snap.data!;
+        final isPasswordUser =
+            user.providerData.any((info) => info.providerId == 'password');
+        if (isPasswordUser && !user.emailVerified) {
+          FirebaseAuth.instance.signOut();
+          return const SignInScreen();
+        }
         return const HomeShell();
       },
     );
@@ -1001,25 +1009,28 @@ class _SignInScreenState extends State<SignInScreen> {
   bool googleLoading = false;
 
   String _mapAuthError(FirebaseAuthException error) {
+    final localizations = S.of(context);
     switch (error.code) {
       case 'invalid-email':
-        return 'البريد الإلكتروني غير صالح.';
+        return localizations.invalidEmailError;
       case 'user-disabled':
-        return 'تم تعطيل الحساب.';
+        return localizations.userDisabledError;
       case 'user-not-found':
-        return 'لا يوجد حساب بهذا البريد.';
+        return localizations.userNotFoundError;
       case 'wrong-password':
-        return 'كلمة المرور غير صحيحة.';
+        return localizations.wrongPasswordError;
       case 'email-already-in-use':
-        return 'البريد الإلكتروني مستخدم بالفعل.';
+        return localizations.emailAlreadyInUseError;
       case 'weak-password':
-        return 'كلمة المرور ضعيفة. يجب أن تكون 6 أحرف على الأقل.';
+        return localizations.weakPasswordError;
       case 'operation-not-allowed':
-        return 'تم تعطيل التسجيل بالبريد الإلكتروني.';
+        return localizations.emailAuthDisabledError;
       case 'network-request-failed':
-        return 'فشل الاتصال بالشبكة.';
+        return localizations.networkError;
+      case 'too-many-requests':
+        return localizations.tooManyRequestsError;
       default:
-        return error.message ?? 'حدث خطأ غير متوقع.';
+        return error.message ?? localizations.genericAuthError;
     }
   }
 
@@ -1075,10 +1086,20 @@ class _SignInScreenState extends State<SignInScreen> {
     }
     setState(() => loading = true);
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: trimmedEmail,
         password: trimmedPassword,
       );
+      final user = credential.user;
+      if (user != null) {
+        final isPasswordUser =
+            user.providerData.any((info) => info.providerId == 'password');
+        if (isPasswordUser && !user.emailVerified) {
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
+          await _showUnverifiedDialog(trimmedEmail, trimmedPassword);
+        }
+      }
     } on FirebaseAuthException catch (e, stackTrace) {
       debugPrint('Login failed: ${e.code} ${e.message}');
       debugPrintStack(stackTrace: stackTrace);
@@ -1089,6 +1110,73 @@ class _SignInScreenState extends State<SignInScreen> {
       _showAuthSnack('حدث خطأ أثناء تسجيل الدخول.');
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _showUnverifiedDialog(
+    String email,
+    String password,
+  ) async {
+    final localizations = S.of(context);
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(localizations.verifyEmailTitle),
+          content: Text(localizations.verifyEmailToContinue),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(localizations.cancel),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                await _resendVerificationEmail(email, password);
+              },
+              child: Text(localizations.resendVerificationEmail),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => VerifyEmailScreen(
+                      email: email,
+                      password: password,
+                    ),
+                  ),
+                );
+              },
+              child: Text(localizations.checkNow),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _resendVerificationEmail(
+    String email,
+    String password,
+  ) async {
+    try {
+      final credential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+      final user = credential.user;
+      if (user == null) {
+        _showAuthSnack(S.of(context).genericAuthError);
+        return;
+      }
+      await user.sendEmailVerification();
+      await FirebaseAuth.instance.signOut();
+      _showAuthSnack(S.of(context).verificationEmailSent);
+    } on FirebaseAuthException catch (e) {
+      _showAuthSnack(_mapAuthError(e));
+    } catch (e, stackTrace) {
+      debugPrint('Resend verification failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _showAuthSnack(S.of(context).genericAuthError);
     }
   }
 

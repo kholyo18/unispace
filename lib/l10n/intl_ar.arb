@@ -504,6 +504,24 @@
   "emailHidden": "البريد مخفي",
   "aboutAppSummary": "منصة لحساب المعدل الجامعي والتواصل مع الطلبة وتدوين الملاحظات.",
   "commonCore1": "جذع مشترك",
-  "academicclass": "القسم"
-
+  "academicclass": "القسم",
+  "verificationEmailSent": "تم إرسال رسالة التحقق.",
+  "verifyEmailToContinue": "يرجى تأكيد بريدك الإلكتروني للمتابعة.",
+  "verifyEmailHelper": "افتح رسالة التحقق واضغط على الرابط، ثم اضغط تحقق الآن.",
+  "verifyEmailTitle": "تأكيد البريد الإلكتروني",
+  "checkNow": "تحقق الآن",
+  "resendVerificationEmail": "إعادة إرسال رسالة التحقق",
+  "resendVerificationCooldown": "إعادة الإرسال بعد {seconds}ث",
+  "@resendVerificationCooldown": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "wrongPasswordError": "كلمة المرور غير صحيحة.",
+  "emailAlreadyInUseError": "البريد الإلكتروني مستخدم بالفعل.",
+  "networkError": "مشكلة في الشبكة. حاول مرة أخرى.",
+  "weakPasswordError": "كلمة المرور ضعيفة.",
+  "emailAuthDisabledError": "تم تعطيل تسجيل الدخول بالبريد الإلكتروني.",
+  "userDisabledError": "هذا الحساب معطل.",
+  "genericAuthError": "حدث خطأ غير متوقع. حاول مرة أخرى."
 }

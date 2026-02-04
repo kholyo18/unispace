@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../generated/l10n.dart';
 import 'signup_service.dart';
 import 'widgets/otp_input.dart';
 
@@ -33,11 +33,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
   String? _usernameStatus;
   Timer? _usernameDebounce;
 
-  String? _sessionId;
   Timer? _cooldownTimer;
   int _cooldownRemaining = 0;
-  DateTime? _otpExpiresAt;
-  String _otpCode = '';
 
   static final _usernameRegex = RegExp(r'^[a-zA-Z0-9_]{3,20}$');
 
@@ -98,7 +95,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
         if (!mounted) return;
         setState(() {
           _usernameAvailable = null;
-          _usernameStatus = e.message;
+          _usernameStatus = _mapSignupError(e.code);
         });
       } finally {
         if (mounted) {
@@ -112,7 +109,21 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
   Future<void> _continueFromStep1() async {
     if (!_step1Key.currentState!.validate()) return;
-    _setStep(1);
+    setState(() => _loading = true);
+    try {
+      await _service.startSignup(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      if (!mounted) return;
+      _startCooldown(60);
+      _showSnack(S.of(context).verificationEmailSent);
+      _setStep(1);
+    } on SignupServiceException catch (e) {
+      _showSnack(_mapSignupError(e.code));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _continueFromStep2() async {
@@ -121,27 +132,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       _showSnack('يرجى اختيار اسم مستخدم متاح.');
       return;
     }
-
-    setState(() => _loading = true);
-    try {
-      final result = await _service.startSignup(
-        email: _emailController.text.trim(),
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        username: _usernameController.text.trim(),
-      );
-      if (!mounted) return;
-      _sessionId = result.sessionId;
-      _startCooldown(result.cooldownSeconds);
-      _otpExpiresAt = DateTime.now().add(
-        Duration(seconds: result.expiresInSeconds),
-      );
-      _setStep(2);
-    } on SignupServiceException catch (e) {
-      _showSnack(e.message);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _startCooldown(int seconds) {
@@ -163,48 +155,62 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     });
   }
 
-  Future<void> _resendOtp() async {
-    final sessionId = _sessionId;
-    if (sessionId == null) return;
+  Future<void> _resendVerification() async {
     setState(() => _loading = true);
     try {
-      await _service.resendOtp(sessionId);
+      await _service.resendEmailVerification();
       if (!mounted) return;
       _startCooldown(60);
-      _showSnack('تم إرسال رمز جديد إلى بريدك الإلكتروني.');
+      _showSnack(S.of(context).verificationEmailSent);
     } on SignupServiceException catch (e) {
-      _showSnack(e.message);
+      _showSnack(_mapSignupError(e.code));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _verifyOtp() async {
-    final sessionId = _sessionId;
-    if (sessionId == null) {
-      _showSnack('يرجى بدء التسجيل من جديد.');
-      return;
-    }
-    if (_otpCode.length != 6) {
-      _showSnack('أدخل رمز التحقق كاملًا.');
-      return;
-    }
+  Future<void> _checkVerification() async {
     setState(() => _loading = true);
     try {
-      final result = await _service.verifyOtpAndCreateAccount(
-        sessionId: sessionId,
-        otp: _otpCode,
-        password: _passwordController.text.trim(),
-      );
-      await _service.signInWithCustomToken(result.customToken);
+      final verified = await _service.checkEmailVerified();
       if (!mounted) return;
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      if (verified) {
+        _setStep(2);
+      } else {
+        _showSnack(S.of(context).verifyEmailToContinue);
+      }
     } on SignupServiceException catch (e) {
-      _showSnack(e.message);
-    } on FirebaseAuthException {
-      _showSnack('تعذر تسجيل الدخول بعد التحقق. حاول مرة أخرى.');
+      _showSnack(_mapSignupError(e.code));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _mapSignupError(String code) {
+    final localizations = S.of(context);
+    switch (code) {
+      case 'email-already-in-use':
+        return localizations.emailAlreadyInUseError;
+      case 'invalid-email':
+        return localizations.invalidEmailError;
+      case 'weak-password':
+        return localizations.weakPasswordError;
+      case 'operation-not-allowed':
+        return localizations.emailAuthDisabledError;
+      case 'user-disabled':
+        return localizations.userDisabledError;
+      case 'user-not-found':
+        return localizations.userNotFoundError;
+      case 'wrong-password':
+        return localizations.wrongPasswordError;
+      case 'too-many-requests':
+        return localizations.tooManyRequestsError;
+      case 'network-request-failed':
+        return localizations.networkError;
+      case 'missing-user':
+        return localizations.verifyEmailToContinue;
+      default:
+        return localizations.genericAuthError;
     }
   }
 
@@ -258,9 +264,9 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       case 0:
         return _buildStep1();
       case 1:
-        return _buildStep2();
-      case 2:
         return _buildStep3();
+      case 2:
+        return _buildStep2();
       default:
         return const SizedBox.shrink();
     }
@@ -483,58 +489,53 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
   }
 
   Widget _buildStep3() {
-    final expiresAt = _otpExpiresAt;
-    final expiresInText = expiresAt == null
-        ? ''
-        : 'الرمز صالح حتى ${
-            TimeOfDay.fromDateTime(expiresAt).format(context)
-          }';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'تأكيد البريد الإلكتروني',
+          S.of(context).verifyEmailTitle,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),
         Text(
-          'أدخل رمز التحقق المرسل إلى بريدك الإلكتروني.',
+          S.of(context).verifyEmailToContinue,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
-        if (expiresInText.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            expiresInText,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+        Text(
+          S.of(context).verifyEmailHelper,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
         OtpInput(
           enabled: !_loading,
-          onChanged: (value) => _otpCode = value,
+          onChanged: (_) {},
         ),
         const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _loading ? null : _verifyOtp,
+            onPressed: _loading ? null : _checkVerification,
             child: _loading
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('تأكيد'),
+                : Text(S.of(context).checkNow),
           ),
         ),
         const SizedBox(height: 12),
         Center(
           child: TextButton(
-            onPressed: _loading || _cooldownRemaining > 0 ? null : _resendOtp,
+            onPressed:
+                _loading || _cooldownRemaining > 0 ? null : _resendVerification,
             child: Text(
               _cooldownRemaining > 0
-                  ? 'إعادة إرسال بعد ${_cooldownRemaining}s'
-                  : 'إعادة إرسال',
+                  ? S.of(context).resendVerificationCooldown(
+                        _cooldownRemaining,
+                      )
+                  : S.of(context).resendVerificationEmail,
             ),
           ),
         ),

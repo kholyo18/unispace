@@ -507,5 +507,24 @@
   "emailHidden": "Email hidden",
   "aboutAppSummary": "A platform to calculate GPA, connect with students, and take notes.",
   "commonCore1": "Common Core",
-  "academicclass": "class"
+  "academicclass": "class",
+  "verificationEmailSent": "Verification email sent.",
+  "verifyEmailToContinue": "Please verify your email to continue.",
+  "verifyEmailHelper": "Open the verification email and click the link, then tap check now.",
+  "verifyEmailTitle": "Verify email",
+  "checkNow": "Check now",
+  "resendVerificationEmail": "Resend verification email",
+  "resendVerificationCooldown": "Resend in {seconds}s",
+  "@resendVerificationCooldown": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "wrongPasswordError": "Wrong password.",
+  "emailAlreadyInUseError": "Email is already in use.",
+  "networkError": "Network error. Please try again.",
+  "weakPasswordError": "Password is too weak.",
+  "emailAuthDisabledError": "Email/password sign-in is disabled.",
+  "userDisabledError": "This account is disabled.",
+  "genericAuthError": "Something went wrong. Please try again."
 }

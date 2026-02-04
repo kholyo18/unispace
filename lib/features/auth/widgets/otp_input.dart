@@ -72,35 +72,51 @@ class _OtpInputState extends State<OtpInput> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(widget.length, (index) {
-          return SizedBox(
-            width: 46,
-            child: TextField(
-              controller: _controllers[index],
-              focusNode: _focusNodes[index],
-              enabled: widget.enabled,
-              textAlign: TextAlign.center,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(1),
-              ],
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-              onChanged: (value) => _handleChanged(value, index),
-              decoration: InputDecoration(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-              ),
-            ),
-          );
-        }),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        final maxWidth = constraints.maxWidth;
+        final totalSpacing = spacing * (widget.length - 1);
+        final rawWidth = (maxWidth - totalSpacing) / widget.length;
+        final boxWidth = rawWidth.clamp(36.0, 52.0);
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(widget.length, (index) {
+              return Padding(
+                padding: EdgeInsetsDirectional.only(
+                  end: index == widget.length - 1 ? 0 : spacing,
+                ),
+                child: SizedBox(
+                  width: boxWidth,
+                  child: TextField(
+                    controller: _controllers[index],
+                    focusNode: _focusNodes[index],
+                    enabled: widget.enabled,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(1),
+                    ],
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    onChanged: (value) => _handleChanged(value, index),
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+      },
     );
   }
 }
