@@ -177,7 +177,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       if (verified) {
         _setStep(2);
       } else {
-        _showSnack('مازال ما تأكدش البريد، رجع للبريد وحاول مجددًا.');
+        _showSnack(S.of(context).emailNotVerifiedYet);
       }
     } on SignupServiceException catch (e) {
       _showSnack(_mapSignupError(e.code));
