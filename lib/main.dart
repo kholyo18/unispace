@@ -52,6 +52,7 @@ import 'ui/settings/drawer_screens.dart';
 import 'ui/settings/email_verification_service.dart';
 import 'ui/settings/user_profile_service.dart';
 import 'features/auth/signup_flow.dart';
+import 'features/settings/about/about_screen.dart';
 import 'features/exams/presentation/pages/exams_calendar_page.dart';
 import 'features/study_plan/presentation/smart_review_plan_page.dart';
 import './moduls3.dart';
@@ -653,16 +654,14 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                   context,
                   icon: Icons.info_outline,
                   title: S.of(context).aboutApp,
-                  onTap: () => showAboutDialog(
-                    context: context,
-                    applicationName: 'UniSpace',
-                    applicationVersion: '1.0.0',
-                    applicationIcon: const CircleAvatar(
-                      backgroundColor: kUniSpaceBlue,
-                      child: Icon(Icons.school, color: Colors.teal),
-                    ),
-                    children: [Text(S.of(context).aboutAppSummary)],
-                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AboutScreen(),
+                      ),
+                    );
+                  },
                 ),
                 _drawerItem(
                   context,
