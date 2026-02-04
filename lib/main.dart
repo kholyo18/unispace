@@ -53,6 +53,7 @@ import 'ui/settings/email_verification_service.dart';
 import 'ui/settings/user_profile_service.dart';
 import 'features/auth/signup_flow.dart';
 import 'features/settings/about/about_screen.dart';
+import 'features/settings/privacy/privacy_policy_screen.dart';
 import 'features/exams/presentation/pages/exams_calendar_page.dart';
 import 'features/study_plan/presentation/smart_review_plan_page.dart';
 import './moduls3.dart';
@@ -668,11 +669,10 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                   icon: Icons.privacy_tip_outlined,
                   title: S.of(context).privacyPolicy,
                   onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: Text(S.of(context).privacyPolicy),
-                        content: Text(S.of(context).aboutAppDetails),
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen(),
                       ),
                     );
                   },
