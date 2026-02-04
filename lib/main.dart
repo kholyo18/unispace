@@ -1101,7 +1101,7 @@ class _SignInScreenState extends State<SignInScreen> {
         debugPrint('Google sign-in canceled by user.');
         _showAuthSnack(
           _mapGoogleAuthError(
-            const PlatformException(code: 'sign_in_canceled'),
+            PlatformException(code: 'sign_in_canceled'),
           ),
         );
         return;
