@@ -103,18 +103,9 @@ class AboutScreen extends StatelessWidget {
   }
 
   void _showPrivacyPolicy(BuildContext context) {
-    final s = S.of(context);
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(s.privacyPolicy),
-        content: Text(s.aboutAppDetails),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(s.close),
-          ),
-        ],
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const _PrivacyPolicyScreen(),
       ),
     );
   }
@@ -235,6 +226,33 @@ class _ActionTile extends StatelessWidget {
       title: Text(label),
       trailing: const Icon(Icons.chevron_left),
       contentPadding: EdgeInsets.zero,
+    );
+  }
+}
+
+class _PrivacyPolicyScreen extends StatelessWidget {
+  const _PrivacyPolicyScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(s.privacyPolicyTitle),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            s.privacyPolicyBody,
+            textAlign: TextAlign.start,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  height: 1.7,
+                ),
+          ),
+        ),
+      ),
     );
   }
 }
