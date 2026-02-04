@@ -206,6 +206,7 @@ class AppEndDrawer extends StatefulWidget {
 }
 
 class _AppEndDrawerState extends State<AppEndDrawer> {
+  static const bool _showPrivacyAndContactInDrawer = false;
   bool _sendingOtp = false;
   int _otpCooldownSeconds = 0;
   Timer? _otpTimer;
@@ -643,14 +644,15 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                 //   title: S.of(context).shareApp,
                 //   onTap: () => Share.share(AppLinks.shareMessage),
                 // ),
-                _drawerItem(
-                  context,
-                  icon: Icons.email_outlined,
-                  title: S.of(context).contactUs,
-                  onTap: () {
-                    _showContactDialog(context);
-                  },
-                ),
+                if (_showPrivacyAndContactInDrawer)
+                  _drawerItem(
+                    context,
+                    icon: Icons.email_outlined,
+                    title: S.of(context).contactUs,
+                    onTap: () {
+                      _showContactDialog(context);
+                    },
+                  ),
                 _drawerItem(
                   context,
                   icon: Icons.info_outline,
@@ -664,19 +666,20 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     );
                   },
                 ),
-                _drawerItem(
-                  context,
-                  icon: Icons.privacy_tip_outlined,
-                  title: S.of(context).privacyPolicy,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const PrivacyPolicyScreen(),
-                      ),
-                    );
-                  },
-                ),
+                if (_showPrivacyAndContactInDrawer)
+                  _drawerItem(
+                    context,
+                    icon: Icons.privacy_tip_outlined,
+                    title: S.of(context).privacyPolicy,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PrivacyPolicyScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 const SizedBox(height: 8),
                 const Divider(height: 24),
                 if (user != null)
