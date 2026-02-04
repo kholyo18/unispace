@@ -1031,14 +1031,35 @@ class _SignInScreenState extends State<SignInScreen> {
 
   String _mapGoogleAuthError(Object error) {
     if (error is FirebaseAuthException) {
-      if (error.code == 'network-request-failed') {
-        return 'تحقق من اتصال الإنترنت ثم أعد المحاولة.';
+      switch (error.code) {
+        case 'network-request-failed':
+          return 'تحقق من اتصال الإنترنت ثم أعد المحاولة.';
+        case 'invalid-credential':
+          return 'بيانات الاعتماد غير صالحة. تحقق من إعدادات تسجيل الدخول.';
+        case 'user-disabled':
+          return 'تم تعطيل الحساب.';
+        default:
+          return error.message ??
+              'حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.';
       }
-      return 'حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.';
     }
     if (error is PlatformException) {
+      final details = [
+        error.message,
+        error.details?.toString(),
+      ].where((value) => value != null && value!.trim().isNotEmpty).join(' ');
+      final detailsLower = details.toLowerCase();
+      if (error.code == 'sign_in_canceled') {
+        return 'تم إلغاء تسجيل الدخول عبر Google.';
+      }
       if (error.code == 'network_error') {
         return 'تحقق من اتصال الإنترنت ثم أعد المحاولة.';
+      }
+      if (error.code == 'api_exception' ||
+          detailsLower.contains('apiexception: 10') ||
+          detailsLower.contains('apiexception:10') ||
+          detailsLower.contains('12500')) {
+        return 'تعذر إكمال تسجيل الدخول. تأكد من إعدادات Firebase/Google (SHA-1، الحزمة، OAuth) ثم أعد المحاولة.';
       }
       return 'حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.';
     }
@@ -1076,7 +1097,15 @@ class _SignInScreenState extends State<SignInScreen> {
     try {
       // تأكد من إضافة SHA-1/SHA-256 في Firebase لكل من debug/release عند الحاجة.
       final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return;
+      if (googleUser == null) {
+        debugPrint('Google sign-in canceled by user.');
+        _showAuthSnack(
+          _mapGoogleAuthError(
+            const PlatformException(code: 'sign_in_canceled'),
+          ),
+        );
+        return;
+      }
       final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
@@ -1084,11 +1113,15 @@ class _SignInScreenState extends State<SignInScreen> {
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
     } on FirebaseAuthException catch (e, stackTrace) {
-      debugPrint('Google sign-in failed: ${e.code} ${e.message}');
+      debugPrint(
+        'Google sign-in failed (FirebaseAuthException): code=${e.code}, message=${e.message}',
+      );
       debugPrintStack(stackTrace: stackTrace);
       _showAuthSnack(_mapGoogleAuthError(e));
     } on PlatformException catch (e, stackTrace) {
-      debugPrint('Google sign-in platform error: ${e.code} ${e.message}');
+      debugPrint(
+        'Google sign-in platform error: code=${e.code}, message=${e.message}, details=${e.details}',
+      );
       debugPrintStack(stackTrace: stackTrace);
       _showAuthSnack(_mapGoogleAuthError(e));
     } catch (e, stackTrace) {
