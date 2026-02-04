@@ -1470,6 +1470,21 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: loading || googleLoading ? null : _login,
+                        icon: const Icon(Icons.login),
+                        label: Text(S.of(context).login),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: loading || googleLoading ? null : _register,
+                        icon: const Icon(Icons.person_add_alt),
+                        label: Text(S.of(context).register),
+                      ),
+                    ]),
+                const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -1514,21 +1529,6 @@ class _SignInScreenState extends State<SignInScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: loading || googleLoading ? null : _login,
-                        icon: const Icon(Icons.login),
-                        label: Text(S.of(context).login),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: loading || googleLoading ? null : _register,
-                        icon: const Icon(Icons.person_add_alt),
-                        label: Text(S.of(context).register),
-                      ),
-                    ]),
               ]),
             ),
           ),
