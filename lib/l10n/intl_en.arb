@@ -509,6 +509,7 @@
   "commonCore1": "Common Core",
   "academicclass": "class",
   "verificationEmailSent": "Verification email sent.",
+  "emailNotVerifiedYet": "Email is not verified yet. Please open your email, click the verification link, then try again.",
   "verifyEmailToContinue": "Please verify your email to continue.",
   "verifyEmailHelper": "Open the verification email and click the link, then tap check now.",
   "verifyEmailTitle": "Verify email",
