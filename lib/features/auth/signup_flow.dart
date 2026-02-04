@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../generated/l10n.dart';
 import 'signup_service.dart';
-import 'widgets/otp_input.dart';
 
 class SignUpFlowScreen extends StatefulWidget {
   const SignUpFlowScreen({super.key});
@@ -177,12 +177,20 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       if (verified) {
         _setStep(2);
       } else {
-        _showSnack(S.of(context).verifyEmailToContinue);
+        _showSnack('مازال ما تأكدش البريد، رجع للبريد وحاول مجددًا.');
       }
     } on SignupServiceException catch (e) {
       _showSnack(_mapSignupError(e.code));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openEmailApp() async {
+    final emailUri = Uri(scheme: 'mailto');
+    if (!await launchUrl(emailUri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      _showSnack('تعذر فتح تطبيق البريد.');
     }
   }
 
@@ -506,12 +514,14 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
           S.of(context).verifyEmailHelper,
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 16),
-        OtpInput(
-          enabled: !_loading,
-          onChanged: (_) {},
-        ),
         const SizedBox(height: 20),
+        Center(
+          child: TextButton(
+            onPressed: _loading ? null : _openEmailApp,
+            child: const Text('فتح البريد'),
+          ),
+        ),
+        const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
