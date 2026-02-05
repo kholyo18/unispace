@@ -2104,7 +2104,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                                   );
                                 },
                                 child: Text(
-                                  S.of(context).academicShortcutAddAction,
+                                  S.of(context).academicShortcutEmptyAction,
                                 ),
                               ),
                             ),
@@ -2149,7 +2149,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              S.of(context).academicShortcutDeleteLabel,
+                              S.of(context).academicShortcutDeleteTitle,
                               style:
                                   theme.textTheme.bodyMedium?.copyWith(
                                 color: theme.colorScheme.onError,
@@ -2186,7 +2186,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                                           Navigator.pop(dialogContext, true),
                                       child: Text(
                                         S.of(dialogContext)
-                                            .academicShortcutDeleteAction,
+                                            .academicShortcutDeleteConfirm,
                                       ),
                                     ),
                                   ],
