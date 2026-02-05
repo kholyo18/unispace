@@ -2050,12 +2050,69 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
               child: ValueListenableBuilder<SettingsData>(
                 valueListenable: AppSettings.instance.notifier,
                 builder: (context, settings, _) {
+                  final theme = Theme.of(context);
                   final specialtyId =
                       settings.academicSpecialtyId.trim();
                   if (!settings.hasAcademicShortcut) {
-                    return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant
+                                .withOpacity(0.4),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: theme.colorScheme.shadow
+                                  .withOpacity(0.08),
+                              blurRadius: 16,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              S.of(context).academicShortcutTitle,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              S.of(context).academicShortcutEmptyTitle,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const AcademicSettingsScreen(),
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  S.of(context).academicShortcutAddAction,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
                   }
-                  final theme = Theme.of(context);
                   final facultyName = (settings.academicFacultyName.isNotEmpty
                           ? settings.academicFacultyName
                           : settings.academicFacultyId)
@@ -2071,80 +2128,165 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                   final displayLevel = level.isNotEmpty ? level : '—';
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant
-                              .withOpacity(0.4),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                theme.colorScheme.shadow.withOpacity(0.08),
-                            blurRadius: 16,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                    child: Dismissible(
+                      key: ValueKey<String>(
+                        'academic-shortcut-${settings.academicSpecialtyId}-${settings.academicLevel}',
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            S.of(context).academicShortcutTitle,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+                      direction: DismissDirection.startToEnd,
+                      background: Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.error,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        alignment: AlignmentDirectional.centerStart,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.delete,
+                              color: theme.colorScheme.onError,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              S.of(context).academicShortcutDeleteLabel,
+                              style:
+                                  theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onError,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      confirmDismiss: (_) async {
+                        return await showDialog<bool>(
+                              context: context,
+                              builder: (dialogContext) {
+                                return AlertDialog(
+                                  title: Text(
+                                    S.of(dialogContext)
+                                        .academicShortcutDeleteConfirmTitle,
+                                  ),
+                                  content: Text(
+                                    S.of(dialogContext)
+                                        .academicShortcutDeleteConfirmBody,
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, false),
+                                      child: Text(
+                                        S.of(dialogContext)
+                                            .academicShortcutDeleteCancel,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, true),
+                                      child: Text(
+                                        S.of(dialogContext)
+                                            .academicShortcutDeleteAction,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ) ??
+                            false;
+                      },
+                      onDismissed: (_) async {
+                        await AppSettings.instance.clearAcademicShortcut();
+                        if (!context.mounted) {
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              S.of(context)
+                                  .academicShortcutDeleteSuccess,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          if (facultyName.isNotEmpty)
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant
+                                .withOpacity(0.4),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  theme.colorScheme.shadow.withOpacity(0.08),
+                              blurRadius: 16,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              facultyName,
-                              style: theme.textTheme.bodyMedium?.copyWith(
+                              S.of(context).academicShortcutTitle,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            if (facultyName.isNotEmpty)
+                              Text(
+                                facultyName,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color:
+                                      theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            const SizedBox(height: 4),
+                            Text(
+                              S.of(context).academicShortcutDetails(
+                                displaySpecialty,
+                                displayLevel,
+                              ),
+                              style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
-                          const SizedBox(height: 4),
-                          Text(
-                            S.of(context).academicShortcutDetails(
-                              displaySpecialty,
-                              displayLevel,
-                            ),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              OutlinedButton(
-                                onPressed: () {
-                                  Navigator.push(
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const AcademicSettingsScreen(),
+                                      ),
+                                    );
+                                  },
+                                  child: Text(
+                                    S.of(context).academicShortcutEdit,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: () => _openAcademicShortcut(
                                     context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const AcademicSettingsScreen(),
-                                    ),
-                                  );
-                                },
-                                child: Text(
-                                  S.of(context).academicShortcutEdit,
+                                    settings,
+                                  ),
+                                  child: Text(
+                                    S.of(context).academicShortcutGo,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: () =>
-                                    _openAcademicShortcut(context, settings),
-                                child: Text(
-                                  S.of(context).academicShortcutGo,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );

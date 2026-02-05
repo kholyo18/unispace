@@ -266,6 +266,21 @@ class AppSettings {
     );
   }
 
+  Future<void> clearAcademicShortcut() async {
+    await _update(
+      notifier.value.copyWith(
+        hasAcademicShortcut: false,
+        academicFacultyId: '',
+        academicDepartmentId: '',
+        academicSpecialtyId: '',
+        academicLevel: '',
+        academicFacultyName: '',
+        academicDepartmentName: '',
+        academicSpecialtyName: '',
+      ),
+    );
+  }
+
   Future<void> _update(SettingsData data) async {
     notifier.value = data;
     _prefs ??= await SharedPreferences.getInstance();
