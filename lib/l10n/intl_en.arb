@@ -405,7 +405,7 @@
   "academicShortcutDeleteCancel": "Cancel",
   "academicShortcutDeleteConfirm": "Delete",
   "academicShortcutDeleteSuccess": "Shortcut deleted successfully.",
-  "academicShortcutEmptyTitle": "No academic shortcut has been set yet.",
+  "academicShortcutEmptyTitle": "No academic shortcut set yet.",
   "academicShortcutEmptyAction": "Add shortcut",
   "academicShortcutNotFound": "We couldn't find that specialty. Please update your academic settings.",
   "saveChanges": "Save changes",

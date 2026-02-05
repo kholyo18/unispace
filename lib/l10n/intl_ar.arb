@@ -402,7 +402,7 @@
   "academicShortcutDeleteCancel": "إلغاء",
   "academicShortcutDeleteConfirm": "حذف",
   "academicShortcutDeleteSuccess": "تم حذف الاختصار بنجاح.",
-  "academicShortcutEmptyTitle": "لم يتم إعداد اختصار أكاديمي بعد",
+  "academicShortcutEmptyTitle": "لم يتم إعداد اختصار أكاديمي بعد.",
   "academicShortcutEmptyAction": "إضافة اختصار",
   "academicShortcutNotFound": "لم نعثر على هذا التخصص. يرجى تحديث الإعدادات الأكاديمية.",
   "saveChanges": "حفظ التغييرات",
