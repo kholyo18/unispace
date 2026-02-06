@@ -1676,8 +1676,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         subtitle: Text(
                           currentSession == null
                               ? S.of(context).activeSessionNow
-                              : '${currentSession.alias}
-${_relativeSince(currentSession.lastSeenAt, context)}',
+                              : '${currentSession.alias}\n${_relativeSince(currentSession.lastSeenAt, context)}',
                           textDirection: TextDirection.rtl,
                         ),
                         isThreeLine: true,
