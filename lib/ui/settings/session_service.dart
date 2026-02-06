@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SessionService {
   SessionService._();
@@ -12,8 +15,11 @@ class SessionService {
   static final SessionService instance = SessionService._();
 
   static const _deviceIdKey = 'auth_device_id';
+  static const _sessionIdKeyPrefix = 'auth_current_session_id_';
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
+  StreamSubscription<User?>? _authSubscription;
+  Timer? _heartbeatTimer;
 
   Future<String> getOrCreateDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -27,32 +33,51 @@ class SessionService {
   }
 
   Future<String> getOrCreateSessionId(String uid) async {
-    final deviceId = await getOrCreateDeviceId();
-    return '${uid}_$deviceId';
+    final current = await getCurrentSessionId(uid);
+    if (current != null && current.isNotEmpty) {
+      return current;
+    }
+    final generated = _generateUuidV4();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_sessionIdKeyPrefix$uid', generated);
+    return generated;
   }
 
-  Future<void> initSession(String uid) async {
+  Future<String?> getCurrentSessionId(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = prefs.getString('$_sessionIdKeyPrefix$uid');
+    if (current == null || current.isEmpty) {
+      return null;
+    }
+    return current;
+  }
+
+  Future<void> clearCurrentSessionId(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_sessionIdKeyPrefix$uid');
+  }
+
+  Future<void> initSession(String uid, {bool forceNew = false}) async {
     final deviceId = await getOrCreateDeviceId();
-    final sessionId = await getOrCreateSessionId(uid);
+    final sessionId = forceNew ? _generateUuidV4() : await getOrCreateSessionId(uid);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_sessionIdKeyPrefix$uid', sessionId);
     final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
     final payload = await _buildSessionPayload(sessionId: sessionId, deviceId: deviceId);
-    final existing = await docRef.get();
-    if (existing.exists) {
-      payload.remove('createdAt');
-    }
-    await docRef.set(
-      payload,
-      SetOptions(merge: true),
-    );
+    await docRef.set(payload, SetOptions(merge: true));
     await markCurrentSession(uid, sessionId);
+    _startHeartbeat();
+    _ensureAuthListener();
   }
 
   Future<void> updateLastSeen(String uid) async {
-    final sessionId = await getOrCreateSessionId(uid);
+    final sessionId = await getCurrentSessionId(uid);
+    if (sessionId == null) return;
     final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
     await docRef.set({
       'sessionId': sessionId,
       'isActive': true,
+      'endedAt': null,
       'revokedAt': null,
       'lastSeenAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -60,7 +85,8 @@ class SessionService {
   }
 
   Future<bool> isCurrentSessionRevoked(String uid) async {
-    final sessionId = await getOrCreateSessionId(uid);
+    final sessionId = await getCurrentSessionId(uid);
+    if (sessionId == null) return false;
     final snapshot = await _firestore
         .collection('users')
         .doc(uid)
@@ -85,6 +111,7 @@ class SessionService {
         .collection('users')
         .doc(uid)
         .collection('sessions')
+        .where('isActive', isEqualTo: true)
         .orderBy('lastSeenAt', descending: true)
         .snapshots();
   }
@@ -92,6 +119,7 @@ class SessionService {
   Future<void> revokeSession({required String uid, required String sessionId}) {
     return _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId).set({
       'isActive': false,
+      'endedAt': FieldValue.serverTimestamp(),
       'revokedAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -104,6 +132,7 @@ class SessionService {
       if (doc.id == currentSessionId) continue;
       batch.set(doc.reference, {
         'isActive': false,
+        'endedAt': FieldValue.serverTimestamp(),
         'revokedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }
@@ -111,8 +140,48 @@ class SessionService {
   }
 
   Future<void> revokeCurrentSession(String uid) async {
-    final sessionId = await getOrCreateSessionId(uid);
+    final sessionId = await getCurrentSessionId(uid);
+    if (sessionId == null) return;
     await revokeSession(uid: uid, sessionId: sessionId);
+    await clearCurrentSessionId(uid);
+    _stopHeartbeat();
+  }
+
+  void _ensureAuthListener() {
+    _authSubscription ??= FirebaseAuth.instance.authStateChanges().listen((user) async {
+      if (user != null) return;
+      _stopHeartbeat();
+    });
+  }
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 45), (_) async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        _stopHeartbeat();
+        return;
+      }
+      await updateLastSeen(user.uid);
+    });
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  String _generateUuidV4() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-'
+        '${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-'
+        '${hex.substring(16, 20)}-'
+        '${hex.substring(20)}';
   }
 
   Future<Map<String, dynamic>> _buildSessionPayload({
@@ -130,6 +199,7 @@ class SessionService {
       'osVersion': metadata.osVersion,
       'createdAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
+      'endedAt': null,
       'isActive': true,
       'revokedAt': null,
     };

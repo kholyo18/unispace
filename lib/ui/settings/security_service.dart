@@ -22,7 +22,8 @@ class SecurityService {
     if (user == null) {
       throw StateError('No signed in user');
     }
-    final currentSessionId = await SessionService.instance.getOrCreateSessionId(user.uid);
+    final currentSessionId = await SessionService.instance.getCurrentSessionId(user.uid) ??
+        await SessionService.instance.getOrCreateSessionId(user.uid);
     await SessionService.instance.revokeAllOtherSessions(
       uid: user.uid,
       currentSessionId: currentSessionId,
