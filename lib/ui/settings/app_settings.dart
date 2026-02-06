@@ -52,6 +52,7 @@ class SettingsData {
     required this.profileVisibility,
     required this.fontScale,
     required this.hasAcademicShortcut,
+    required this.hasCreatedAcademicShortcut,
     required this.academicFacultyId,
     required this.academicDepartmentId,
     required this.academicSpecialtyId,
@@ -69,6 +70,7 @@ class SettingsData {
   final ProfileVisibility profileVisibility;
   final FontScaleOption fontScale;
   final bool hasAcademicShortcut;
+  final bool hasCreatedAcademicShortcut;
   final String academicFacultyId;
   final String academicDepartmentId;
   final String academicSpecialtyId;
@@ -86,6 +88,7 @@ class SettingsData {
         profileVisibility: ProfileVisibility.public,
         fontScale: FontScaleOption.medium,
         hasAcademicShortcut: false,
+        hasCreatedAcademicShortcut: false,
         academicFacultyId: '',
         academicDepartmentId: '',
         academicSpecialtyId: '',
@@ -104,6 +107,7 @@ class SettingsData {
     ProfileVisibility? profileVisibility,
     FontScaleOption? fontScale,
     bool? hasAcademicShortcut,
+    bool? hasCreatedAcademicShortcut,
     String? academicFacultyId,
     String? academicDepartmentId,
     String? academicSpecialtyId,
@@ -123,6 +127,8 @@ class SettingsData {
       profileVisibility: profileVisibility ?? this.profileVisibility,
       fontScale: fontScale ?? this.fontScale,
       hasAcademicShortcut: hasAcademicShortcut ?? this.hasAcademicShortcut,
+      hasCreatedAcademicShortcut:
+          hasCreatedAcademicShortcut ?? this.hasCreatedAcademicShortcut,
       academicFacultyId: academicFacultyId ?? this.academicFacultyId,
       academicDepartmentId:
           academicDepartmentId ?? this.academicDepartmentId,
@@ -151,6 +157,8 @@ class AppSettings {
   static const _kProfileVisibility = 'settings_profile_visibility';
   static const _kFontScale = 'settings_font_scale';
   static const _kAcademicHasShortcut = 'settings_academic_has_shortcut';
+  static const _kAcademicHasCreatedShortcut =
+      'settings_academic_has_created_shortcut';
   static const _kAcademicFacultyId = 'settings_academic_faculty_id';
   static const _kAcademicDepartmentId = 'settings_academic_department_id';
   static const _kAcademicSpecialtyId = 'settings_academic_specialty_id';
@@ -180,6 +188,8 @@ class AppSettings {
     final fontScaleRaw = prefs.getString(_kFontScale);
     final hasAcademicShortcut =
         prefs.getBool(_kAcademicHasShortcut) ?? false;
+    final hasCreatedAcademicShortcut =
+        prefs.getBool(_kAcademicHasCreatedShortcut) ?? hasAcademicShortcut;
     final academicFacultyId = prefs.getString(_kAcademicFacultyId) ?? '';
     final academicDepartmentId =
         prefs.getString(_kAcademicDepartmentId) ?? '';
@@ -204,6 +214,7 @@ class AppSettings {
           : ProfileVisibility.public,
       fontScale: FontScaleOptionX.fromStorageKey(fontScaleRaw),
       hasAcademicShortcut: hasAcademicShortcut,
+      hasCreatedAcademicShortcut: hasCreatedAcademicShortcut,
       academicFacultyId: academicFacultyId,
       academicDepartmentId: academicDepartmentId,
       academicSpecialtyId: academicSpecialtyId,
@@ -255,6 +266,8 @@ class AppSettings {
     await _update(
       notifier.value.copyWith(
         hasAcademicShortcut: hasAcademicShortcut,
+        hasCreatedAcademicShortcut:
+            hasAcademicShortcut || notifier.value.hasCreatedAcademicShortcut,
         academicFacultyId: facultyId,
         academicDepartmentId: departmentId,
         academicSpecialtyId: specialtyId,
@@ -270,6 +283,7 @@ class AppSettings {
     await _update(
       notifier.value.copyWith(
         hasAcademicShortcut: false,
+        hasCreatedAcademicShortcut: true,
         academicFacultyId: '',
         academicDepartmentId: '',
         academicSpecialtyId: '',
@@ -299,6 +313,10 @@ class AppSettings {
     );
     await prefs.setString(_kFontScale, data.fontScale.storageKey);
     await prefs.setBool(_kAcademicHasShortcut, data.hasAcademicShortcut);
+    await prefs.setBool(
+      _kAcademicHasCreatedShortcut,
+      data.hasCreatedAcademicShortcut,
+    );
     await prefs.setString(_kAcademicFacultyId, data.academicFacultyId);
     await prefs.setString(_kAcademicDepartmentId, data.academicDepartmentId);
     await prefs.setString(_kAcademicSpecialtyId, data.academicSpecialtyId);
