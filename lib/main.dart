@@ -1100,7 +1100,7 @@ class _SignInScreenState extends State<SignInScreen> {
       );
       final user = credential.user;
       if (user != null) {
-        await SessionService.instance.initSession(user.uid, forceNew: true);
+        await SessionService.instance.initSession(user.uid);
       }
       if (user != null) {
         final isPasswordUser =
@@ -1215,7 +1215,7 @@ class _SignInScreenState extends State<SignInScreen> {
       final authResult = await FirebaseAuth.instance.signInWithCredential(credential);
       final user = authResult.user;
       if (user != null) {
-        await SessionService.instance.initSession(user.uid, forceNew: true);
+        await SessionService.instance.initSession(user.uid);
       }
     } on FirebaseAuthException catch (e, stackTrace) {
       debugPrint(

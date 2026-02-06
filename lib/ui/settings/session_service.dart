@@ -14,26 +14,27 @@ class SessionService {
 
   static final SessionService instance = SessionService._();
 
-  static const _deviceIdKey = 'auth_device_id';
+  static const _installationIdKey = 'auth_installation_id';
   static const _sessionIdKeyPrefix = 'auth_current_session_id_';
   static const _lastUidKey = 'auth_last_session_uid';
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
   StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sessionSubscription;
   Timer? _heartbeatTimer;
   String? _lastKnownUid;
   DateTime? _lastHeartbeatAt;
   static const Duration _heartbeatInterval = Duration(seconds: 90);
   static const Duration _heartbeatThrottle = Duration(seconds: 60);
 
-  Future<String> getOrCreateDeviceId() async {
+  Future<String> getOrCreateInstallationId() async {
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString(_deviceIdKey);
+    final cached = prefs.getString(_installationIdKey);
     if (cached != null && cached.isNotEmpty) {
       return cached;
     }
-    final generated = DateTime.now().microsecondsSinceEpoch.toString();
-    await prefs.setString(_deviceIdKey, generated);
+    final generated = _generateUuidV4();
+    await prefs.setString(_installationIdKey, generated);
     return generated;
   }
 
@@ -76,6 +77,8 @@ class SessionService {
       await updateHeartbeat(user: user, sessionId: currentSessionId, force: true);
       await markCurrentSession(uid, currentSessionId);
     }
+    await cleanupSessions(uid: uid);
+    await _attachSessionRevocationListener(user.uid);
     _startHeartbeat();
     _ensureAuthListener();
   }
@@ -98,7 +101,7 @@ class SessionService {
   }
 
   Future<String> createSession({required User user, required DeviceInfo info}) async {
-    final deviceId = await getOrCreateDeviceId();
+    final installationId = await getOrCreateInstallationId();
     final sessionId = _generateUuidV4();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('$_sessionIdKeyPrefix${user.uid}', sessionId);
@@ -106,7 +109,11 @@ class SessionService {
     _lastKnownUid = user.uid;
 
     final docRef = _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId);
-    final payload = await _buildSessionPayload(sessionId: sessionId, deviceId: deviceId, info: info);
+    final payload = await _buildSessionPayload(
+      sessionId: sessionId,
+      installationId: installationId,
+      info: info,
+    );
     await docRef.set(payload, SetOptions(merge: true));
     await markCurrentSession(user.uid, sessionId);
     return sessionId;
@@ -129,6 +136,7 @@ class SessionService {
       'isActive': true,
       'endedAt': null,
       'revokedAt': null,
+      'forceLogout': false,
       'lastActiveAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -143,7 +151,7 @@ class SessionService {
         .where('isActive', isEqualTo: true)
         .orderBy('lastActiveAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map(SessionModel.fromFirestore).toList());
+        .map((snapshot) => _dedupeSessions(snapshot.docs.map(SessionModel.fromFirestore).toList()));
   }
 
   Stream<List<SessionModel>> watchAllSessions({required User user}) {
@@ -153,7 +161,7 @@ class SessionService {
         .collection('sessions')
         .orderBy('lastActiveAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map(SessionModel.fromFirestore).toList());
+        .map((snapshot) => _dedupeSessions(snapshot.docs.map(SessionModel.fromFirestore).toList()));
   }
 
   Future<void> revokeSession({required User user, required String sessionId}) {
@@ -161,6 +169,7 @@ class SessionService {
       'isActive': false,
       'endedAt': FieldValue.serverTimestamp(),
       'revokedAt': FieldValue.serverTimestamp(),
+      'forceLogout': true,
       'lastActiveAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -179,7 +188,8 @@ class SessionService {
     if (data == null) return false;
     final isActive = data['isActive'] as bool? ?? true;
     final revokedAt = data['revokedAt'];
-    return !isActive || revokedAt != null;
+    final forceLogout = data['forceLogout'] as bool? ?? false;
+    return !isActive || revokedAt != null || forceLogout;
   }
 
   Future<void> markCurrentSession(String uid, String sessionId) {
@@ -218,6 +228,7 @@ class SessionService {
         'isActive': false,
         'endedAt': FieldValue.serverTimestamp(),
         'revokedAt': FieldValue.serverTimestamp(),
+        'forceLogout': true,
         'lastActiveAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }
@@ -232,6 +243,8 @@ class SessionService {
     await revokeSession(user: user, sessionId: sessionId);
     debugPrint('[SessionService] revokeCurrentSession uid=$uid sessionId=$sessionId');
     _stopHeartbeat();
+    _sessionSubscription?.cancel();
+    _sessionSubscription = null;
   }
 
   void _ensureAuthListener() {
@@ -239,10 +252,13 @@ class SessionService {
       if (user != null) {
         _lastKnownUid = user.uid;
         _startHeartbeat();
+        await _attachSessionRevocationListener(user.uid);
         return;
       }
       await _markLastKnownSessionInactive();
       _stopHeartbeat();
+      _sessionSubscription?.cancel();
+      _sessionSubscription = null;
     });
   }
 
@@ -257,6 +273,34 @@ class SessionService {
       final sessionId = await getCurrentSessionId(user.uid);
       if (sessionId == null) return;
       await updateHeartbeat(user: user, sessionId: sessionId);
+    });
+  }
+
+  Future<void> _attachSessionRevocationListener(String uid) async {
+    final sessionId = await getCurrentSessionId(uid);
+    if (sessionId == null || sessionId.isEmpty) return;
+    await _sessionSubscription?.cancel();
+    _sessionSubscription = _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('sessions')
+        .doc(sessionId)
+        .snapshots()
+        .listen((snapshot) async {
+      final data = snapshot.data();
+      if (data == null) return;
+      final revoked = data['revokedAt'] != null;
+      final isActive = data['isActive'] as bool? ?? true;
+      final forceLogout = data['forceLogout'] as bool? ?? false;
+      if (!revoked && isActive && !forceLogout) return;
+      _stopHeartbeat();
+      await _sessionSubscription?.cancel();
+      _sessionSubscription = null;
+      await clearCurrentSessionId(uid);
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null && currentUser.uid == uid) {
+        await FirebaseAuth.instance.signOut();
+      }
     });
   }
 
@@ -286,6 +330,75 @@ class SessionService {
     _lastKnownUid = null;
   }
 
+  Future<void> cleanupSessions({required String uid}) async {
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('sessions')
+        .orderBy('createdAt', descending: true)
+        .get();
+    if (snapshot.docs.isEmpty) return;
+
+    final currentSessionId = await getCurrentSessionId(uid);
+    final latestByInstallation = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    final keepIds = <String>{};
+    for (final doc in snapshot.docs) {
+      final installationId = (doc.data()['installationId'] as String?)?.trim();
+      if (installationId == null || installationId.isEmpty) {
+        keepIds.add(doc.id);
+        continue;
+      }
+      latestByInstallation.putIfAbsent(installationId, () => doc);
+    }
+    keepIds.addAll(latestByInstallation.values.map((doc) => doc.id));
+    keepIds.addAll(snapshot.docs.take(5).map((doc) => doc.id));
+    if (currentSessionId != null) {
+      keepIds.add(currentSessionId);
+    }
+
+    final batch = _firestore.batch();
+    var hasChanges = false;
+    for (final doc in snapshot.docs) {
+      if (keepIds.contains(doc.id)) continue;
+      hasChanges = true;
+      batch.set(doc.reference, {
+        'isActive': false,
+        'endedAt': FieldValue.serverTimestamp(),
+        'revokedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    if (hasChanges) {
+      await batch.commit();
+    }
+  }
+
+  List<SessionModel> _dedupeSessions(List<SessionModel> sessions) {
+    final byDocId = <String, SessionModel>{};
+    for (final session in sessions) {
+      byDocId[session.id] = session;
+    }
+    final sorted = byDocId.values.toList()
+      ..sort((a, b) {
+        final aTs = a.lastActiveAt ?? a.createdAt;
+        final bTs = b.lastActiveAt ?? b.createdAt;
+        if (aTs == null && bTs == null) return 0;
+        if (aTs == null) return 1;
+        if (bTs == null) return -1;
+        return bTs.compareTo(aTs);
+      });
+    final byInstallation = <String, SessionModel>{};
+    final fallback = <SessionModel>[];
+    for (final session in sorted) {
+      final installationId = session.installationId.trim();
+      if (installationId.isEmpty) {
+        fallback.add(session);
+        continue;
+      }
+      byInstallation.putIfAbsent(installationId, () => session);
+    }
+    return [...byInstallation.values, ...fallback];
+  }
+
   String _generateUuidV4() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
@@ -301,13 +414,14 @@ class SessionService {
 
   Future<Map<String, dynamic>> _buildSessionPayload({
     required String sessionId,
-    required String deviceId,
+    required String installationId,
     required DeviceInfo info,
   }) async {
     final packageInfo = await PackageInfo.fromPlatform();
     return {
       'sessionId': sessionId,
-      'deviceId': deviceId,
+      'installationId': installationId,
+      'deviceId': installationId,
       'deviceModel': info.model,
       'deviceName': info.model,
       'platform': info.platform,
@@ -319,40 +433,51 @@ class SessionService {
       'endedAt': null,
       'isActive': true,
       'revokedAt': null,
+      'forceLogout': false,
     };
   }
 
   Future<_DeviceMetadata> _readDeviceMetadata() async {
-    if (kIsWeb) {
-      return const _DeviceMetadata(
-        deviceModel: 'web browser',
-        platform: 'web',
-        osVersion: 'web',
-      );
-    }
-    if (Platform.isAndroid) {
-      final info = await _deviceInfo.androidInfo;
-      final model = info.model.trim().isEmpty ? 'android' : info.model.trim();
+    try {
+      if (kIsWeb) {
+        return const _DeviceMetadata(
+          deviceModel: 'web browser',
+          platform: 'web',
+          osVersion: 'web',
+        );
+      }
+      if (Platform.isAndroid) {
+        final info = await _deviceInfo.androidInfo;
+        final brand = info.brand.trim();
+        final model = info.model.trim();
+        final value = [brand, model].where((item) => item.isNotEmpty).join(' ').trim();
+        return _DeviceMetadata(
+          deviceModel: value.isEmpty ? 'android device' : value,
+          platform: 'android',
+          osVersion: info.version.release,
+        );
+      }
+      if (Platform.isIOS) {
+        final info = await _deviceInfo.iosInfo;
+        final model = info.name.trim().isNotEmpty ? info.name.trim() : info.utsname.machine.trim();
+        return _DeviceMetadata(
+          deviceModel: model.isEmpty ? 'ios device' : model,
+          platform: 'ios',
+          osVersion: info.systemVersion,
+        );
+      }
       return _DeviceMetadata(
-        deviceModel: 'android $model',
-        platform: 'android',
-        osVersion: info.version.release,
+        deviceModel: Platform.operatingSystem,
+        platform: Platform.operatingSystem,
+        osVersion: Platform.operatingSystemVersion,
       );
-    }
-    if (Platform.isIOS) {
-      final info = await _deviceInfo.iosInfo;
-      final model = info.utsname.machine.trim().isEmpty ? 'ios' : info.utsname.machine.trim();
+    } catch (_) {
       return _DeviceMetadata(
-        deviceModel: 'ios $model',
-        platform: 'ios',
-        osVersion: info.systemVersion,
+        deviceModel: 'unknown',
+        platform: kIsWeb ? 'web' : Platform.operatingSystem,
+        osVersion: 'unknown',
       );
     }
-    return _DeviceMetadata(
-      deviceModel: Platform.operatingSystem,
-      platform: Platform.operatingSystem,
-      osVersion: Platform.operatingSystemVersion,
-    );
   }
 }
 
@@ -389,6 +514,7 @@ class SessionModel {
     required this.lastActiveAt,
     required this.createdAt,
     required this.revokedAt,
+    required this.installationId,
   });
 
   factory SessionModel.fromFirestore(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
@@ -401,6 +527,7 @@ class SessionModel {
       lastActiveAt: data['lastActiveAt'] as Timestamp? ?? data['lastSeenAt'] as Timestamp?,
       createdAt: data['createdAt'] as Timestamp?,
       revokedAt: data['revokedAt'] as Timestamp?,
+      installationId: (data['installationId'] as String?) ?? (data['deviceId'] as String?) ?? '',
     );
   }
 
@@ -411,4 +538,5 @@ class SessionModel {
   final Timestamp? lastActiveAt;
   final Timestamp? createdAt;
   final Timestamp? revokedAt;
+  final String installationId;
 }

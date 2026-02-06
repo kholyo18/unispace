@@ -1451,10 +1451,12 @@ class ManageDevicesScreen extends StatefulWidget {
 
 class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   static const bool _debugPanelEnabledByDefault = false;
+  static const int _debugPanelTapThreshold = 5;
   String? _localSessionId;
   String? _sessionError;
   int _sessionCount = 0;
   bool _debugPanelEnabled = _debugPanelEnabledByDefault;
+  int _debugTitleTapCount = 0;
 
   @override
   void initState() {
@@ -1527,8 +1529,14 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: GestureDetector(
-          onLongPress: !kReleaseMode
-              ? () => setState(() => _debugPanelEnabled = !_debugPanelEnabled)
+          onLongPress: kDebugMode
+              ? () {
+                  _debugTitleTapCount += 1;
+                  if (_debugTitleTapCount >= _debugPanelTapThreshold) {
+                    setState(() => _debugPanelEnabled = !_debugPanelEnabled);
+                    _debugTitleTapCount = 0;
+                  }
+                }
               : null,
           child: Text(S.of(context).manageDevicesTitle),
         ),
@@ -1574,7 +1582,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           S.of(context).manageDevicesDescription,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
-                        if (!kReleaseMode && _debugPanelEnabled) ...[
+                        if (kDebugMode && _debugPanelEnabled) ...[
                           const SizedBox(height: 12),
                           Card(
                             child: Padding(
