@@ -1579,6 +1579,11 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, Wi
   Future<void> _touchCurrentSession() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    final revoked = await SessionService.instance.isCurrentSessionRevoked(user.uid);
+    if (revoked) {
+      await FirebaseAuth.instance.signOut();
+      return;
+    }
     await SessionService.instance.updateLastSeen(user.uid);
   }
 

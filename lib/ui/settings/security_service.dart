@@ -22,11 +22,12 @@ class SecurityService {
     if (user == null) {
       throw StateError('No signed in user');
     }
-    final currentSessionId = await SessionService.instance.getOrCreateSessionId();
-    await SessionService.instance.deleteAllOtherSessions(
+    final currentSessionId = await SessionService.instance.getOrCreateSessionId(user.uid);
+    await SessionService.instance.revokeAllOtherSessions(
       uid: user.uid,
       currentSessionId: currentSessionId,
     );
+    await SessionService.instance.revokeCurrentSession(user.uid);
     await FirebaseAuth.instance.signOut();
     return const LogoutAllResult(
       signedOut: true,
