@@ -22,6 +22,9 @@ class SessionService {
   StreamSubscription<User?>? _authSubscription;
   Timer? _heartbeatTimer;
   String? _lastKnownUid;
+  DateTime? _lastHeartbeatAt;
+  static const Duration _heartbeatInterval = Duration(seconds: 90);
+  static const Duration _heartbeatThrottle = Duration(seconds: 60);
 
   Future<String> getOrCreateDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -60,34 +63,107 @@ class SessionService {
   }
 
   Future<void> initSession(String uid, {bool forceNew = false}) async {
-    final deviceId = await getOrCreateDeviceId();
-    final sessionId = forceNew ? _generateUuidV4() : await getOrCreateSessionId(uid);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_sessionIdKeyPrefix$uid', sessionId);
-    await prefs.setString(_lastUidKey, uid);
-    _lastKnownUid = uid;
-    final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
-    final payload = await _buildSessionPayload(sessionId: sessionId, deviceId: deviceId);
-    debugPrint('[SessionService] initSession uid=$uid sessionId=$sessionId path=${docRef.path}');
-    await docRef.set(payload, SetOptions(merge: true));
-    await markCurrentSession(uid, sessionId);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid != uid) return;
+    if (forceNew) {
+      await clearCurrentSessionId(uid);
+    }
+    final currentSessionId = await getCurrentSessionId(uid);
+    if (currentSessionId == null || currentSessionId.isEmpty) {
+      final info = await readCurrentDeviceInfo();
+      await createSession(user: user, info: info);
+    } else {
+      await updateHeartbeat(user: user, sessionId: currentSessionId, force: true);
+      await markCurrentSession(uid, currentSessionId);
+    }
     _startHeartbeat();
     _ensureAuthListener();
   }
 
   Future<void> updateLastSeen(String uid) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid != uid) return;
     final sessionId = await getCurrentSessionId(uid);
     if (sessionId == null) return;
-    final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
-    debugPrint('[SessionService] heartbeat uid=$uid sessionId=$sessionId path=${docRef.path}');
+    await updateHeartbeat(user: user, sessionId: sessionId);
+  }
+
+  Future<DeviceInfo> readCurrentDeviceInfo() async {
+    final metadata = await _readDeviceMetadata();
+    return DeviceInfo(
+      platform: metadata.platform,
+      model: metadata.deviceModel,
+      osVersion: metadata.osVersion,
+    );
+  }
+
+  Future<String> createSession({required User user, required DeviceInfo info}) async {
+    final deviceId = await getOrCreateDeviceId();
+    final sessionId = _generateUuidV4();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_sessionIdKeyPrefix${user.uid}', sessionId);
+    await prefs.setString(_lastUidKey, user.uid);
+    _lastKnownUid = user.uid;
+
+    final docRef = _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId);
+    final payload = await _buildSessionPayload(sessionId: sessionId, deviceId: deviceId, info: info);
+    await docRef.set(payload, SetOptions(merge: true));
+    await markCurrentSession(user.uid, sessionId);
+    return sessionId;
+  }
+
+  Future<void> updateHeartbeat({
+    required User user,
+    required String sessionId,
+    bool force = false,
+  }) async {
+    final now = DateTime.now();
+    if (!force && _lastHeartbeatAt != null && now.difference(_lastHeartbeatAt!) < _heartbeatThrottle) {
+      return;
+    }
+    _lastHeartbeatAt = now;
+
+    final docRef = _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId);
     await docRef.set({
       'sessionId': sessionId,
       'isActive': true,
       'endedAt': null,
       'revokedAt': null,
+      'lastActiveAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-    await markCurrentSession(uid, sessionId);
+    await markCurrentSession(user.uid, sessionId);
+  }
+
+  Stream<List<SessionModel>> watchActiveSessions({required User user}) {
+    return _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('sessions')
+        .where('isActive', isEqualTo: true)
+        .orderBy('lastActiveAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(SessionModel.fromFirestore).toList());
+  }
+
+  Stream<List<SessionModel>> watchAllSessions({required User user}) {
+    return _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('sessions')
+        .orderBy('lastActiveAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(SessionModel.fromFirestore).toList());
+  }
+
+  Future<void> revokeSession({required User user, required String sessionId}) {
+    return _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId).set({
+      'isActive': false,
+      'endedAt': FieldValue.serverTimestamp(),
+      'revokedAt': FieldValue.serverTimestamp(),
+      'lastActiveAt': FieldValue.serverTimestamp(),
+      'lastSeenAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<bool> isCurrentSessionRevoked(String uid) async {
@@ -133,15 +209,6 @@ class SessionService {
         .snapshots();
   }
 
-  Future<void> revokeSession({required String uid, required String sessionId}) {
-    return _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId).set({
-      'isActive': false,
-      'endedAt': FieldValue.serverTimestamp(),
-      'revokedAt': FieldValue.serverTimestamp(),
-      'lastSeenAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
   Future<void> revokeAllOtherSessions({required String uid, required String currentSessionId}) async {
     final snapshot = await _firestore.collection('users').doc(uid).collection('sessions').get();
     final batch = _firestore.batch();
@@ -151,6 +218,7 @@ class SessionService {
         'isActive': false,
         'endedAt': FieldValue.serverTimestamp(),
         'revokedAt': FieldValue.serverTimestamp(),
+        'lastActiveAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }
     await batch.commit();
@@ -159,7 +227,9 @@ class SessionService {
   Future<void> revokeCurrentSession(String uid) async {
     final sessionId = await getCurrentSessionId(uid);
     if (sessionId == null) return;
-    await revokeSession(uid: uid, sessionId: sessionId);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid != uid) return;
+    await revokeSession(user: user, sessionId: sessionId);
     debugPrint('[SessionService] revokeCurrentSession uid=$uid sessionId=$sessionId');
     _stopHeartbeat();
   }
@@ -178,13 +248,15 @@ class SessionService {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 45), (_) async {
+    _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) async {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         _stopHeartbeat();
         return;
       }
-      await updateLastSeen(user.uid);
+      final sessionId = await getCurrentSessionId(user.uid);
+      if (sessionId == null) return;
+      await updateHeartbeat(user: user, sessionId: sessionId);
     });
   }
 
@@ -205,6 +277,8 @@ class SessionService {
       'sessionId': sessionId,
       'isActive': false,
       'endedAt': FieldValue.serverTimestamp(),
+      'revokedAt': FieldValue.serverTimestamp(),
+      'lastActiveAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     await clearCurrentSessionId(uid);
@@ -228,18 +302,19 @@ class SessionService {
   Future<Map<String, dynamic>> _buildSessionPayload({
     required String sessionId,
     required String deviceId,
+    required DeviceInfo info,
   }) async {
     final packageInfo = await PackageInfo.fromPlatform();
-    final metadata = await _readDeviceMetadata();
     return {
       'sessionId': sessionId,
       'deviceId': deviceId,
-      'deviceModel': metadata.deviceModel,
-      'deviceName': metadata.deviceModel,
-      'platform': metadata.platform,
+      'deviceModel': info.model,
+      'deviceName': info.model,
+      'platform': info.platform,
       'appVersion': '${packageInfo.version}+${packageInfo.buildNumber}',
-      'osVersion': metadata.osVersion,
+      'osVersion': info.osVersion,
       'createdAt': FieldValue.serverTimestamp(),
+      'lastActiveAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
       'endedAt': null,
       'isActive': true,
@@ -291,4 +366,49 @@ class _DeviceMetadata {
   final String deviceModel;
   final String platform;
   final String osVersion;
+}
+
+class DeviceInfo {
+  const DeviceInfo({
+    required this.platform,
+    required this.model,
+    required this.osVersion,
+  });
+
+  final String platform;
+  final String model;
+  final String osVersion;
+}
+
+class SessionModel {
+  const SessionModel({
+    required this.id,
+    required this.deviceModel,
+    required this.platform,
+    required this.isActive,
+    required this.lastActiveAt,
+    required this.createdAt,
+    required this.revokedAt,
+  });
+
+  factory SessionModel.fromFirestore(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    return SessionModel(
+      id: doc.id,
+      deviceModel: (data['deviceModel'] as String?) ?? (data['deviceName'] as String?) ?? 'unknown',
+      platform: (data['platform'] as String?) ?? 'unknown',
+      isActive: data['isActive'] as bool? ?? false,
+      lastActiveAt: data['lastActiveAt'] as Timestamp? ?? data['lastSeenAt'] as Timestamp?,
+      createdAt: data['createdAt'] as Timestamp?,
+      revokedAt: data['revokedAt'] as Timestamp?,
+    );
+  }
+
+  final String id;
+  final String deviceModel;
+  final String platform;
+  final bool isActive;
+  final Timestamp? lastActiveAt;
+  final Timestamp? createdAt;
+  final Timestamp? revokedAt;
 }
