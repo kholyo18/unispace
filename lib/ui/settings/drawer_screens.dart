@@ -1450,9 +1450,11 @@ class ManageDevicesScreen extends StatefulWidget {
 }
 
 class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
+  static const bool _debugPanelEnabledByDefault = false;
   String? _localSessionId;
   String? _sessionError;
   int _sessionCount = 0;
+  bool _debugPanelEnabled = _debugPanelEnabledByDefault;
 
   @override
   void initState() {
@@ -1478,15 +1480,9 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
         .format(timestamp.toDate());
   }
 
-  bool _isActiveSession(Map<String, dynamic> data) {
-    return data['isActive'] as bool? ?? false;
-  }
-
-  String _sessionPath(String uid) => 'users/$uid/sessions';
-
-  Future<void> _logoutSession(String uid, String sessionId) async {
+  Future<void> _logoutSession(User user, String sessionId) async {
     try {
-      await SessionService.instance.revokeSession(uid: uid, sessionId: sessionId);
+      await SessionService.instance.revokeSession(user: user, sessionId: sessionId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(S.of(context).sessionSignedOutSuccess)),
@@ -1522,128 +1518,149 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final activeSessionsStream = user == null
+        ? const Stream<List<SessionModel>>.empty()
+        : SessionService.instance.watchActiveSessions(user: user);
+    final allSessionsStream = user == null
+        ? const Stream<List<SessionModel>>.empty()
+        : SessionService.instance.watchAllSessions(user: user);
     return Scaffold(
       appBar: AppBar(
-        title: Text(S.of(context).manageDevicesTitle),
+        title: GestureDetector(
+          onLongPress: !kReleaseMode
+              ? () => setState(() => _debugPanelEnabled = !_debugPanelEnabled)
+              : null,
+          child: Text(S.of(context).manageDevicesTitle),
+        ),
       ),
       body: user == null
           ? Center(child: Text(S.of(context).signInRequired))
-          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: SessionService.instance.sessionsStream(user.uid),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  _sessionError = snapshot.error.toString();
+          : StreamBuilder<List<SessionModel>>(
+              stream: activeSessionsStream,
+              builder: (context, activeSnapshot) {
+                if (activeSnapshot.hasError) {
+                  _sessionError = activeSnapshot.error.toString();
                 }
-                if (snapshot.connectionState == ConnectionState.waiting || _localSessionId == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final sessionDocs = snapshot.data?.docs ?? const [];
-                _sessionCount = sessionDocs.length;
-                final activeDocs = sessionDocs.where((doc) => _isActiveSession(doc.data())).toList();
-                final docsToDisplay = activeDocs.isEmpty ? sessionDocs : activeDocs;
-                final currentId = _localSessionId!;
-                final currentIndex = docsToDisplay.indexWhere((doc) => doc.id == currentId);
-                final QueryDocumentSnapshot<Map<String, dynamic>>? currentDoc =
-                    currentIndex >= 0 ? docsToDisplay[currentIndex] : null;
-                final otherDocs = docsToDisplay.where((doc) => doc.id != currentId).toList();
+                final activeSessions = activeSnapshot.data ?? const <SessionModel>[];
+                final activeLoading = activeSnapshot.connectionState == ConnectionState.waiting;
 
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      S.of(context).manageDevicesDescription,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Debug Panel (temporary)', style: Theme.of(context).textTheme.titleSmall),
-                            const SizedBox(height: 8),
-                            Text('projectId: ${Firebase.app().options.projectId}'),
-                            Text('uid: ${user.uid}'),
-                            Text('email: ${user.email ?? 'no-email'}'),
-                            Text('path: ${_sessionPath(user.uid)}'),
-                            Text('resultCount: $_sessionCount'),
-                            Text('error: ${_sessionError ?? 'none'}'),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.phone_android),
-                        title: Row(
-                          children: [
-                            Expanded(child: Text(S.of(context).currentDeviceTitle)),
-                            Chip(label: Text(S.of(context).currentDeviceTitle)),
-                          ],
-                        ),
-                        subtitle: Text(
-                          currentDoc == null
-                              ? S.of(context).activeSessionNow
-                              : '${(currentDoc.data()['deviceModel'] as String? ?? currentDoc.data()['deviceName'] as String? ?? S.of(context).sessionUnknownDevice)} / ${(currentDoc.data()['platform'] as String? ?? 'unknown')}\n${_formatTimestamp(currentDoc.data()['lastSeenAt'] as Timestamp?, context)}',
-                        ),
-                        isThreeLine: true,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
+                return StreamBuilder<List<SessionModel>>(
+                  stream: allSessionsStream,
+                  builder: (context, allSnapshot) {
+                    if (allSnapshot.hasError) {
+                      _sessionError = allSnapshot.error.toString();
+                    }
+                    if ((activeLoading && allSnapshot.connectionState == ConnectionState.waiting) ||
+                        _localSessionId == null) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final allSessions = allSnapshot.data ?? const <SessionModel>[];
+                    final showingFallback = activeSessions.isEmpty && allSessions.isNotEmpty;
+                    final sessionsToDisplay = showingFallback ? allSessions : activeSessions;
+                    _sessionCount = sessionsToDisplay.length;
+
+                    final currentId = _localSessionId!;
+                    final SessionModel? currentSession = sessionsToDisplay.cast<SessionModel?>().firstWhere(
+                          (session) => session?.id == currentId,
+                          orElse: () => null,
+                        );
+                    final otherSessions = sessionsToDisplay.where((session) => session.id != currentId).toList();
+
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
                       children: [
-                        Expanded(
-                          child: Text(
-                            S.of(context).activeSessionsTitle,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
+                        Text(
+                          S.of(context).manageDevicesDescription,
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
-                        TextButton(
-                          onPressed: () => _logoutAllOther(user.uid),
-                          child: Text(S.of(context).logoutAllOtherDevices),
-                        ),
-                      ],
-                    ),
-                    if (activeDocs.isEmpty && sessionDocs.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, bottom: 8),
-                        child: Text(
-                          'No active sessions found, showing all sessions as fallback.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      )
-                    else
-                      const SizedBox(height: 8),
-                    if (otherDocs.isEmpty)
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.devices_other),
-                          title: Text(S.of(context).activeSessionsEmpty),
-                        ),
-                      )
-                    else
-                      ...otherDocs.map(
-                        (doc) {
-                          final data = doc.data();
-                          final deviceName = data['deviceModel'] as String? ?? data['deviceName'] as String? ?? S.of(context).sessionUnknownDevice;
-                          final platform = data['platform'] as String? ?? 'unknown';
-                          final lastSeen = data['lastSeenAt'] as Timestamp?;
-                          return Card(
-                            child: ListTile(
-                              leading: const Icon(Icons.devices_other),
-                              title: Text('$deviceName / $platform'),
-                              subtitle: Text(_formatTimestamp(lastSeen, context)),
-                              trailing: TextButton(
-                                onPressed: () => _logoutSession(user.uid, doc.id),
-                                child: Text(S.of(context).signOut),
+                        if (!kReleaseMode && _debugPanelEnabled) ...[
+                          const SizedBox(height: 12),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Debug Panel', style: Theme.of(context).textTheme.titleSmall),
+                                  const SizedBox(height: 8),
+                                  Text('path: users/${user.uid}/sessions'),
+                                  Text('resultCount: $_sessionCount'),
+                                  Text('error: ${_sessionError ?? 'none'}'),
+                                ],
                               ),
                             ),
-                          );
-                        },
-                      ),
-                  ],
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.phone_android),
+                            title: Row(
+                              children: [
+                                Expanded(child: Text(S.of(context).currentDeviceTitle)),
+                                Chip(label: Text(S.of(context).currentDeviceTitle)),
+                              ],
+                            ),
+                            subtitle: Text(
+                              currentSession == null
+                                  ? S.of(context).activeSessionNow
+                                  : '${currentSession.deviceModel} / ${currentSession.platform}\n${_formatTimestamp(currentSession.lastActiveAt, context)}',
+                            ),
+                            isThreeLine: true,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                S.of(context).activeSessionsTitle,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => _logoutAllOther(user.uid),
+                              child: Text(S.of(context).logoutAllOtherDevices),
+                            ),
+                          ],
+                        ),
+                        if (showingFallback)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, bottom: 8),
+                            child: Text(
+                              S.of(context).activeSessionsHint,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 8),
+                        if (otherSessions.isEmpty)
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.devices_other),
+                              title: Text(S.of(context).activeSessionsEmpty),
+                            ),
+                          )
+                        else
+                          ...otherSessions.map(
+                            (session) {
+                              return Card(
+                                child: ListTile(
+                                  leading: const Icon(Icons.devices_other),
+                                  title: Text('${session.deviceModel} / ${session.platform}'),
+                                  subtitle: Text(_formatTimestamp(session.lastActiveAt, context)),
+                                  trailing: TextButton(
+                                    onPressed: () => _logoutSession(user, session.id),
+                                    child: Text(S.of(context).signOut),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                      ],
+                    );
+                  },
                 );
               },
             ),
