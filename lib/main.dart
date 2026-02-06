@@ -1900,6 +1900,10 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
           builder: (_) => StudiesTableScreen(
             facultyName: selectedFaculty.name,
             programName: '${selectedMajor.name} • ${selectedTrack.name}',
+            collegeId: selectedFaculty.name,
+            departmentId: selectedMajor.name,
+            specialtyId: selectedTrack.name,
+            level: selectedTrack.level,
             semester1Modules: sem1,
             semester2Modules: sem2,
           ),
@@ -10425,6 +10429,10 @@ class MajorTracksScreen extends StatelessWidget {
                                 builder: (_) => StudiesTableScreen(
                                   facultyName: track.name,
                                   programName: '${major.name} • ${track.name}',
+                                  collegeId: faculty.name,
+                                  departmentId: major.name,
+                                  specialtyId: track.name,
+                                  level: track.level,
                                   semester1Modules: sem1,
                                   semester2Modules: sem2,
                                 ),
@@ -10455,6 +10463,10 @@ class MajorTracksScreen extends StatelessWidget {
 class StudiesTableScreen extends StatefulWidget {
   final String facultyName;
   final String programName;
+  final String collegeId;
+  final String departmentId;
+  final String specialtyId;
+  final String level;
   final SemesterSpec semester1Modules;
   final SemesterSpec semester2Modules;
 
@@ -10462,6 +10474,10 @@ class StudiesTableScreen extends StatefulWidget {
     super.key,
     required this.facultyName,
     required this.programName,
+    required this.collegeId,
+    required this.departmentId,
+    required this.specialtyId,
+    required this.level,
     required this.semester1Modules,
     required this.semester2Modules,
   });
@@ -10496,7 +10512,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   late final TabController _tabController;
   late SemesterModel _semester1;
   late SemesterModel _semester2;
-  final GradesLocalStore _gradesStore = GradesLocalStore();
+  late final GradesLocalStore _gradesStore;
   final Set<String> _loadedModuleStates = {};
 
   int currentIndex = 0; // ← هذا يمثل index الحالي
@@ -10504,6 +10520,14 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   @override
   void initState() {
     super.initState();
+    _gradesStore = GradesLocalStore(
+      scope: GradesStorageScope(
+        collegeId: widget.collegeId,
+        departmentId: widget.departmentId,
+        specialtyId: widget.specialtyId,
+        level: widget.level,
+      ),
+    );
     _tabController = TabController(length: 2, vsync: this);
     _initSemesters();
     Future.microtask(() async {
@@ -10537,6 +10561,11 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
       onChanged: () => setState(() {}),
     );
   }
+  // Regression checklist (manual):
+  // 1) Edit grades/coef/cred/weights in Department A + Specialty X, then Save.
+  // 2) Open Department B + Specialty Y (same level/semester/module names) => values must remain unchanged.
+  // 3) Return to Department A + Specialty X => edited values must persist.
+  // 4) First load with old global data migrates once into scoped storage, then reads scoped keys only.
   /// ==================== حفظ بيانات الفصل الحالي باستخدام SharedPreferences ====================
   Future<void> saveCurrentSemesterNotes() async {
     debugPrint('SAVE_CLICKED');
@@ -10781,9 +10810,49 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   }
 }
 
+class GradesStorageScope {
+  const GradesStorageScope({
+    required this.collegeId,
+    required this.departmentId,
+    required this.specialtyId,
+    required this.level,
+  });
+
+  final String collegeId;
+  final String departmentId;
+  final String specialtyId;
+  final String level;
+
+  String _sanitize(String value) {
+    final normalized = value.trim().toLowerCase();
+    final cleaned = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return cleaned.replaceAll(RegExp(r'^_+|_+$'), '');
+  }
+
+  String get storageKey {
+    final college = _sanitize(collegeId);
+    final department = _sanitize(departmentId);
+    final specialty = _sanitize(specialtyId);
+    final lvl = _sanitize(level);
+    return [
+      if (college.isNotEmpty) college else 'unknown_college',
+      if (department.isNotEmpty) department else 'unknown_department',
+      if (specialty.isNotEmpty) specialty else 'unknown_specialty',
+      if (lvl.isNotEmpty) lvl else 'unknown_level',
+    ].join('__');
+  }
+}
+
 class GradesLocalStore {
-  static const String _storageKey = 'unispace_grades_v1';
+  static const String _globalStorageKey = 'unispace_grades_v1';
   static const String _modulesStoragePrefix = 'modules_';
+  static const String _scopedStoragePrefix = 'unispace_grades_v2_';
+
+  GradesLocalStore({required this.scope});
+
+  final GradesStorageScope scope;
+
+  String get _storageKey => '$_scopedStoragePrefix${scope.storageKey}';
 
   String _normalizeSemesterKey(String semester) {
     return semester.trim().toUpperCase();
@@ -10794,14 +10863,32 @@ class GradesLocalStore {
     return '$normalizedSemester|$moduleId';
   }
 
-  String _modulesKey(String semester) {
+  String _legacyModulesKey(String semester) {
     final normalizedSemester = _normalizeSemesterKey(semester).toLowerCase();
     return '$_modulesStoragePrefix$normalizedSemester';
+  }
+
+  String _modulesKey(String semester) {
+    final normalizedSemester = _normalizeSemesterKey(semester).toLowerCase();
+    return '$_modulesStoragePrefix${scope.storageKey}_$normalizedSemester';
   }
 
   Future<Map<String, dynamic>> _loadAll() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
+    if (raw == null || raw.isEmpty) {
+      return <String, dynamic>{};
+    }
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> _loadLegacyGlobalAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_globalStorageKey);
     if (raw == null || raw.isEmpty) {
       return <String, dynamic>{};
     }
@@ -10823,10 +10910,75 @@ class GradesLocalStore {
     }
   }
 
+
+  Future<void> _migrateLegacyGradeEntryIfNeeded(
+    String semester,
+    String moduleId,
+  ) async {
+    final scoped = await _loadAll();
+    final key = _entryKey(semester, moduleId);
+    if (scoped.containsKey(key)) {
+      return;
+    }
+    final legacy = await _loadLegacyGlobalAll();
+    final legacyEntry = legacy[key];
+    if (legacyEntry == null) {
+      return;
+    }
+    scoped[key] = legacyEntry;
+    await _saveAll(scoped);
+  }
+
+  Future<void> _migrateLegacyModulesIfNeeded(String semester) async {
+    final prefs = await SharedPreferences.getInstance();
+    final scopedKey = _modulesKey(semester);
+    final scopedRaw = prefs.getString(scopedKey);
+    if (scopedRaw != null && scopedRaw.isNotEmpty) {
+      return;
+    }
+
+    final legacyKey = _legacyModulesKey(semester);
+    final legacyRaw = prefs.getString(legacyKey);
+    if (legacyRaw != null && legacyRaw.isNotEmpty) {
+      await prefs.setString(scopedKey, legacyRaw);
+      return;
+    }
+
+    final legacyGlobal = await _loadLegacyGlobalAll();
+    final normalizedSemester = _normalizeSemesterKey(semester);
+    final migratedPayload = <Map<String, dynamic>>[];
+    for (final entry in legacyGlobal.entries) {
+      final key = entry.key;
+      if (!key.startsWith('$normalizedSemester|')) continue;
+      final data = entry.value;
+      if (data is! Map) continue;
+      final moduleId = key.substring('$normalizedSemester|'.length);
+      if (moduleId.isEmpty) continue;
+      migratedPayload.add({
+        'moduleId': moduleId,
+        'moduleName': null,
+        'semester': semester,
+        'coef': data['coef'],
+        'cred': data['cred'],
+        'td': data['td'],
+        'tp': data['tp'],
+        'exam': data['exam'],
+        'moy': data['moy'],
+        'wTD': data['wTD'],
+        'wEX': data['wEX'],
+        'wTP': data['wTP'],
+      });
+    }
+    if (migratedPayload.isNotEmpty) {
+      await prefs.setString(scopedKey, jsonEncode(migratedPayload));
+    }
+  }
+
   Future<Map<String, double?>?> loadGrade(
       String semester,
       String moduleId,
       ) async {
+    await _migrateLegacyGradeEntryIfNeeded(semester, moduleId);
     final all = await _loadAll();
     final entry = all[_entryKey(semester, moduleId)];
     if (entry is! Map) {
@@ -10920,6 +11072,7 @@ class GradesLocalStore {
 
     final Map<String, Map<String, dynamic>> states = {};
     final prefs = await SharedPreferences.getInstance();
+    await _migrateLegacyModulesIfNeeded(semester);
     final modulesKey = _modulesKey(semester);
     final raw = prefs.getString(modulesKey);
     debugPrint('LOAD_MODULES_RAW key=$modulesKey raw=$raw');
@@ -10955,40 +11108,6 @@ class GradesLocalStore {
         debugPrint('LOAD_MODULES_ERROR key=$modulesKey error=$error');
         debugPrint('LOAD_MODULES_STACK $stackTrace');
       }
-    }
-
-    final legacy = await _loadAll();
-    for (final entry in legacy.entries) {
-      if (entry.key is! String) continue;
-      final key = entry.key as String;
-      final normalizedSemester = _normalizeSemesterKey(semester);
-      if (!key.startsWith('$normalizedSemester|')) continue;
-      final moduleId = key.substring('$normalizedSemester|'.length);
-      if (moduleId.isEmpty) continue;
-      final legacyEntry = entry.value;
-      if (legacyEntry is! Map) continue;
-      final state = states.putIfAbsent(moduleId, () {
-        return {
-          'moduleId': moduleId,
-          'moduleName': null,
-          'semester': semester,
-        };
-      });
-      void mergeIfNull(String field, dynamic value) {
-        if (state[field] == null && value != null) {
-          state[field] = value;
-        }
-      }
-
-      mergeIfNull('td', toDouble(legacyEntry['td']));
-      mergeIfNull('tp', toDouble(legacyEntry['tp']));
-      mergeIfNull('exam', toDouble(legacyEntry['exam']));
-      mergeIfNull('moy', toDouble(legacyEntry['moy']));
-      mergeIfNull('coef', toDouble(legacyEntry['coef']));
-      mergeIfNull('cred', toDouble(legacyEntry['cred']));
-      mergeIfNull('wTD', toDouble(legacyEntry['wTD']));
-      mergeIfNull('wEX', toDouble(legacyEntry['wEX']));
-      mergeIfNull('wTP', toDouble(legacyEntry['wTP']));
     }
 
     return states;
