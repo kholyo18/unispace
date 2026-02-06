@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as m;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -1549,7 +1550,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           child: Text(
                             session.alias,
                             style: Theme.of(context).textTheme.titleMedium,
-                            textDirection: TextDirection.rtl,
+                            textDirection: m.TextDirection.rtl,
                           ),
                         ),
                       ],
@@ -1557,7 +1558,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: aliasController,
-                      textDirection: TextDirection.rtl,
+                      textDirection: m.TextDirection.rtl,
                       decoration: const InputDecoration(labelText: 'اسم الجهاز'),
                     ),
                     const SizedBox(height: 8),
@@ -1664,7 +1665,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Text(S.of(context).manageDevicesDescription, textDirection: TextDirection.rtl),
+                    Text(S.of(context).manageDevicesDescription, textDirection: m.TextDirection.rtl),
                     const SizedBox(height: 12),
                     Card(
                       child: ListTile(
@@ -1672,12 +1673,12 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                             ? null
                             : () => _showSessionDetails(user: user, session: currentSession, isCurrent: true),
                         leading: Icon(Icons.circle, color: (currentSession?.isOnline ?? false) ? Colors.green : Colors.grey, size: 12),
-                        title: Text(S.of(context).currentDeviceTitle, textDirection: TextDirection.rtl),
+                        title: Text(S.of(context).currentDeviceTitle, textDirection: m.TextDirection.rtl),
                         subtitle: Text(
                           currentSession == null
                               ? S.of(context).activeSessionNow
                               : '${currentSession.alias}\n${_relativeSince(currentSession.lastSeenAt, context)}',
-                          textDirection: TextDirection.rtl,
+                          textDirection: m.TextDirection.rtl,
                         ),
                         isThreeLine: true,
                       ),
@@ -1689,7 +1690,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           child: Text(
                             S.of(context).activeSessionsTitle,
                             style: Theme.of(context).textTheme.titleMedium,
-                            textDirection: TextDirection.rtl,
+                            textDirection: m.TextDirection.rtl,
                           ),
                         ),
                         TextButton(onPressed: () => _logoutAllOther(user.uid), child: Text(S.of(context).logoutAllOtherDevices)),
@@ -1700,7 +1701,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                       Card(
                         child: ListTile(
                           leading: const Icon(Icons.devices_other),
-                          title: Text(S.of(context).activeSessionsEmpty, textDirection: TextDirection.rtl),
+                          title: Text(S.of(context).activeSessionsEmpty, textDirection: m.TextDirection.rtl),
                         ),
                       )
                     else
@@ -1709,8 +1710,8 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           child: ListTile(
                             onTap: () => _showSessionDetails(user: user, session: session, isCurrent: false),
                             leading: Icon(Icons.circle, color: session.isOnline ? Colors.green : Colors.grey, size: 10),
-                            title: Text(session.alias, textDirection: TextDirection.rtl),
-                            subtitle: Text(_relativeSince(session.lastSeenAt, context), textDirection: TextDirection.rtl),
+                            title: Text(session.alias, textDirection: m.TextDirection.rtl),
+                            subtitle: Text(_relativeSince(session.lastSeenAt, context), textDirection: m.TextDirection.rtl),
                             trailing: TextButton(
                               onPressed: () => _logoutSession(user, session.id),
                               child: Text(S.of(context).signOut),
