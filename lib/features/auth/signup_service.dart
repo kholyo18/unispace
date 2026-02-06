@@ -39,7 +39,7 @@ class SignupService {
       if (user == null) {
         throw SignupServiceException('missing-user');
       }
-      await SessionService.instance.initSession(user.uid, forceNew: true);
+      await SessionService.instance.initSession(user.uid);
       await user.sendEmailVerification();
     } on FirebaseAuthException catch (e) {
       throw SignupServiceException(e.code);
