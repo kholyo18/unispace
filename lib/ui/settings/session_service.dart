@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -12,44 +11,64 @@ class SessionService {
 
   static final SessionService instance = SessionService._();
 
-  static const _sessionIdKey = 'auth_session_id';
+  static const _deviceIdKey = 'auth_device_id';
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
 
-  Future<String> getOrCreateSessionId() async {
+  Future<String> getOrCreateDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString(_sessionIdKey);
+    final cached = prefs.getString(_deviceIdKey);
     if (cached != null && cached.isNotEmpty) {
       return cached;
     }
-    final random = Random.secure();
-    final bytes = List<int>.generate(24, (_) => random.nextInt(256));
-    final generated = bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
-    await prefs.setString(_sessionIdKey, generated);
+    final generated = DateTime.now().microsecondsSinceEpoch.toString();
+    await prefs.setString(_deviceIdKey, generated);
     return generated;
   }
 
+  Future<String> getOrCreateSessionId(String uid) async {
+    final deviceId = await getOrCreateDeviceId();
+    return '${uid}_$deviceId';
+  }
+
   Future<void> initSession(String uid) async {
-    final sessionId = await getOrCreateSessionId();
+    final deviceId = await getOrCreateDeviceId();
+    final sessionId = await getOrCreateSessionId(uid);
     final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
-    final payload = await _buildSessionPayload(sessionId: sessionId);
+    final payload = await _buildSessionPayload(sessionId: sessionId, deviceId: deviceId);
     final existing = await docRef.get();
-    if (existing.exists) {
-      await docRef.set(payload..remove('createdAt'), SetOptions(merge: true));
-    } else {
-      await docRef.set(payload, SetOptions(merge: true));
-    }
+    await docRef.set(
+      existing.exists ? payload..remove('createdAt') : payload,
+      SetOptions(merge: true),
+    );
     await markCurrentSession(uid, sessionId);
   }
 
   Future<void> updateLastSeen(String uid) async {
-    final sessionId = await getOrCreateSessionId();
+    final sessionId = await getOrCreateSessionId(uid);
     final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
     await docRef.set({
       'sessionId': sessionId,
+      'isActive': true,
+      'revokedAt': null,
       'lastSeenAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     await markCurrentSession(uid, sessionId);
+  }
+
+  Future<bool> isCurrentSessionRevoked(String uid) async {
+    final sessionId = await getOrCreateSessionId(uid);
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('sessions')
+        .doc(sessionId)
+        .get();
+    final data = snapshot.data();
+    if (data == null) return false;
+    final isActive = data['isActive'] as bool? ?? true;
+    final revokedAt = data['revokedAt'];
+    return !isActive || revokedAt != null;
   }
 
   Future<void> markCurrentSession(String uid, String sessionId) {
@@ -67,32 +86,49 @@ class SessionService {
         .snapshots();
   }
 
-  Future<void> deleteSession({required String uid, required String sessionId}) {
-    return _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId).delete();
+  Future<void> revokeSession({required String uid, required String sessionId}) {
+    return _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId).set({
+      'isActive': false,
+      'revokedAt': FieldValue.serverTimestamp(),
+      'lastSeenAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
-  Future<void> deleteAllOtherSessions({required String uid, required String currentSessionId}) async {
+  Future<void> revokeAllOtherSessions({required String uid, required String currentSessionId}) async {
     final snapshot = await _firestore.collection('users').doc(uid).collection('sessions').get();
     final batch = _firestore.batch();
     for (final doc in snapshot.docs) {
       if (doc.id == currentSessionId) continue;
-      batch.delete(doc.reference);
+      batch.set(doc.reference, {
+        'isActive': false,
+        'revokedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     }
     await batch.commit();
   }
 
-  Future<Map<String, dynamic>> _buildSessionPayload({required String sessionId}) async {
+  Future<void> revokeCurrentSession(String uid) async {
+    final sessionId = await getOrCreateSessionId(uid);
+    await revokeSession(uid: uid, sessionId: sessionId);
+  }
+
+  Future<Map<String, dynamic>> _buildSessionPayload({
+    required String sessionId,
+    required String deviceId,
+  }) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final metadata = await _readDeviceMetadata();
     return {
       'sessionId': sessionId,
+      'deviceId': deviceId,
       'deviceName': metadata.deviceName,
       'platform': metadata.platform,
       'appVersion': '${packageInfo.version}+${packageInfo.buildNumber}',
-      'deviceModel': metadata.deviceModel,
       'osVersion': metadata.osVersion,
       'createdAt': FieldValue.serverTimestamp(),
       'lastSeenAt': FieldValue.serverTimestamp(),
+      'isActive': true,
+      'revokedAt': null,
     };
   }
 
@@ -101,7 +137,6 @@ class SessionService {
       return const _DeviceMetadata(
         deviceName: 'web browser',
         platform: 'web',
-        deviceModel: 'web',
         osVersion: 'web',
       );
     }
@@ -111,7 +146,6 @@ class SessionService {
       return _DeviceMetadata(
         deviceName: 'android $model',
         platform: 'android',
-        deviceModel: model,
         osVersion: info.version.release,
       );
     }
@@ -121,14 +155,12 @@ class SessionService {
       return _DeviceMetadata(
         deviceName: 'ios $model',
         platform: 'ios',
-        deviceModel: model,
         osVersion: info.systemVersion,
       );
     }
     return _DeviceMetadata(
       deviceName: Platform.operatingSystem,
       platform: Platform.operatingSystem,
-      deviceModel: Platform.operatingSystem,
       osVersion: Platform.operatingSystemVersion,
     );
   }
@@ -138,12 +170,10 @@ class _DeviceMetadata {
   const _DeviceMetadata({
     required this.deviceName,
     required this.platform,
-    required this.deviceModel,
     required this.osVersion,
   });
 
   final String deviceName;
   final String platform;
-  final String deviceModel;
   final String osVersion;
 }

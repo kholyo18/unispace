@@ -1455,7 +1455,9 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   }
 
   Future<void> _loadSessionId() async {
-    final id = await SessionService.instance.getOrCreateSessionId();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final id = await SessionService.instance.getOrCreateSessionId(user.uid);
     if (!mounted) return;
     setState(() => _localSessionId = id);
   }
@@ -1469,9 +1471,17 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
         .format(timestamp.toDate());
   }
 
+  bool _isActiveSession(Map<String, dynamic> data) {
+    final isActive = data['isActive'] as bool? ?? false;
+    final lastSeen = data['lastSeenAt'] as Timestamp?;
+    if (!isActive || lastSeen == null) return false;
+    final now = DateTime.now();
+    return now.difference(lastSeen.toDate()) <= const Duration(days: 7);
+  }
+
   Future<void> _logoutSession(String uid, String sessionId) async {
     try {
-      await SessionService.instance.deleteSession(uid: uid, sessionId: sessionId);
+      await SessionService.instance.revokeSession(uid: uid, sessionId: sessionId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(S.of(context).sessionSignedOutSuccess)),
@@ -1488,7 +1498,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     final current = _localSessionId;
     if (current == null) return;
     try {
-      await SessionService.instance.deleteAllOtherSessions(
+      await SessionService.instance.revokeAllOtherSessions(
         uid: uid,
         currentSessionId: current,
       );
@@ -1519,11 +1529,13 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                 if (snapshot.connectionState == ConnectionState.waiting || _localSessionId == null) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final sessions = snapshot.data?.docs ?? const [];
+                final sessionDocs = snapshot.data?.docs ?? const [];
+                final activeDocs = sessionDocs.where((doc) => _isActiveSession(doc.data())).toList();
                 final currentId = _localSessionId!;
-                final currentIndex = sessions.indexWhere((doc) => doc.id == currentId);
-                final currentDoc = currentIndex >= 0 ? sessions[currentIndex] : null;
-                final otherDocs = sessions.where((doc) => doc.id != currentId).toList();
+                final currentIndex = activeDocs.indexWhere((doc) => doc.id == currentId);
+                final QueryDocumentSnapshot<Map<String, dynamic>>? currentDoc =
+                    currentIndex >= 0 ? activeDocs[currentIndex] : null;
+                final otherDocs = activeDocs.where((doc) => doc.id != currentId).toList();
 
                 return ListView(
                   padding: const EdgeInsets.all(16),
@@ -1536,7 +1548,12 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     Card(
                       child: ListTile(
                         leading: const Icon(Icons.phone_android),
-                        title: Text(S.of(context).currentDeviceTitle),
+                        title: Row(
+                          children: [
+                            Expanded(child: Text(S.of(context).currentDeviceTitle)),
+                            Chip(label: Text(S.of(context).currentDeviceTitle)),
+                          ],
+                        ),
                         subtitle: Text(
                           currentDoc == null
                               ? S.of(context).activeSessionNow
