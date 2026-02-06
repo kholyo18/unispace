@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../ui/settings/session_service.dart';
+
 class SignupServiceException implements Exception {
   SignupServiceException(this.code);
   final String code;
@@ -37,6 +39,7 @@ class SignupService {
       if (user == null) {
         throw SignupServiceException('missing-user');
       }
+      await SessionService.instance.initSession(user.uid);
       await user.sendEmailVerification();
     } on FirebaseAuthException catch (e) {
       throw SignupServiceException(e.code);

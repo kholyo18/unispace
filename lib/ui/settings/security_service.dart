@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'session_service.dart';
+
 class LogoutAllResult {
   const LogoutAllResult({
     required this.signedOut,
@@ -20,11 +22,15 @@ class SecurityService {
     if (user == null) {
       throw StateError('No signed in user');
     }
-    // TODO: Wire backend session revocation (Cloud Functions / Admin SDK).
+    final currentSessionId = await SessionService.instance.getOrCreateSessionId();
+    await SessionService.instance.deleteAllOtherSessions(
+      uid: user.uid,
+      currentSessionId: currentSessionId,
+    );
     await FirebaseAuth.instance.signOut();
     return const LogoutAllResult(
       signedOut: true,
-      backendSupported: false,
+      backendSupported: true,
     );
   }
 }
