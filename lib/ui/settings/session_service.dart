@@ -37,8 +37,11 @@ class SessionService {
     final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
     final payload = await _buildSessionPayload(sessionId: sessionId, deviceId: deviceId);
     final existing = await docRef.get();
+    if (existing.exists) {
+      payload.remove('createdAt');
+    }
     await docRef.set(
-      existing.exists ? payload..remove('createdAt') : payload,
+      payload,
       SetOptions(merge: true),
     );
     await markCurrentSession(uid, sessionId);
