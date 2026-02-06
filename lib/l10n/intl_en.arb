@@ -545,5 +545,11 @@
   "weakPasswordError": "Password is too weak.",
   "emailAuthDisabledError": "Email/password sign-in is disabled.",
   "userDisabledError": "This account is disabled.",
-  "genericAuthError": "Something went wrong. Please try again."
+  "genericAuthError": "Something went wrong. Please try again.",
+  "activeSessionNow": "Just now",
+  "sessionSignedOutSuccess": "Session signed out successfully.",
+  "sessionSignOutFailed": "Unable to sign out this session.",
+  "otherSessionsSignedOutSuccess": "Signed out from other devices.",
+  "logoutAllOtherDevices": "Log out other devices",
+  "sessionUnknownDevice": "Unknown device"
 }

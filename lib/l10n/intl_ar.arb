@@ -542,5 +542,11 @@
   "weakPasswordError": "كلمة المرور ضعيفة.",
   "emailAuthDisabledError": "تم تعطيل تسجيل الدخول بالبريد الإلكتروني.",
   "userDisabledError": "هذا الحساب معطل.",
-  "genericAuthError": "حدث خطأ غير متوقع. حاول مرة أخرى."
+  "genericAuthError": "حدث خطأ غير متوقع. حاول مرة أخرى.",
+  "activeSessionNow": "الآن",
+  "sessionSignedOutSuccess": "تم تسجيل خروج الجلسة بنجاح.",
+  "sessionSignOutFailed": "تعذر تسجيل خروج هذه الجلسة.",
+  "otherSessionsSignedOutSuccess": "تم تسجيل الخروج من الأجهزة الأخرى.",
+  "logoutAllOtherDevices": "تسجيل خروج الأجهزة الأخرى",
+  "sessionUnknownDevice": "جهاز غير معروف"
 }

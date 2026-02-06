@@ -51,6 +51,7 @@ import 'ui/settings/app_settings.dart';
 import 'ui/settings/drawer_screens.dart';
 import 'ui/settings/email_verification_service.dart';
 import 'ui/settings/user_profile_service.dart';
+import 'ui/settings/session_service.dart';
 import 'features/auth/signup_flow.dart';
 import 'features/settings/about/about_screen.dart';
 import 'features/settings/privacy/privacy_policy_screen.dart';
@@ -443,19 +444,19 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                 //     );
                 //   },
                 // ),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.security_outlined,
-                //   title: S.of(context).securityCenterTitle,
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (_) => const SecurityCenterScreen(),
-                //       ),
-                //     );
-                //   },
-                // ),
+                _drawerItem(
+                  context,
+                  icon: Icons.security_outlined,
+                  title: S.of(context).securityCenterTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SecurityCenterScreen(),
+                      ),
+                    );
+                  },
+                ),
                 // _drawerItem(
                 //   context,
                 //   icon: Icons.privacy_tip_outlined,
@@ -1094,6 +1095,9 @@ class _SignInScreenState extends State<SignInScreen> {
       );
       final user = credential.user;
       if (user != null) {
+        await SessionService.instance.initSession(user.uid);
+      }
+      if (user != null) {
         final isPasswordUser =
             user.providerData.any((info) => info.providerId == 'password');
         if (isPasswordUser && !user.emailVerified) {
@@ -1201,7 +1205,11 @@ class _SignInScreenState extends State<SignInScreen> {
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      final authResult = await FirebaseAuth.instance.signInWithCredential(credential);
+      final user = authResult.user;
+      if (user != null) {
+        await SessionService.instance.initSession(user.uid);
+      }
     } on FirebaseAuthException catch (e, stackTrace) {
       debugPrint(
         'Google sign-in failed (FirebaseAuthException): code=${e.code}, message=${e.message}',
@@ -1549,7 +1557,7 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
+class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, WidgetsBindingObserver {
   // 0 = Home(الكليات), 1 = Community, 2 = Notes
   int _current = 0;
   late final PageController _page;
@@ -1557,11 +1565,33 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _page = PageController(initialPage: 0);
+    _initializeCurrentSession();
+  }
+
+  Future<void> _initializeCurrentSession() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await SessionService.instance.initSession(user.uid);
+  }
+
+  Future<void> _touchCurrentSession() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await SessionService.instance.updateLastSeen(user.uid);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _touchCurrentSession();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _page.dispose();
     super.dispose();
   }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +15,7 @@ import '../../features/downloads/download_item.dart';
 import '../../features/downloads/downloads_repository.dart';
 import 'favorites_service.dart';
 import 'security_service.dart';
+import 'session_service.dart';
 import 'user_profile_service.dart';
 
 class NotificationsSettingsScreen extends StatelessWidget {
@@ -1436,12 +1438,70 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 }
 
-class ManageDevicesScreen extends StatelessWidget {
+class ManageDevicesScreen extends StatefulWidget {
   const ManageDevicesScreen({super.key});
 
-  String _deviceSummary() {
-    if (kIsWeb) return 'Web';
-    return '${Platform.operatingSystem} ${Platform.operatingSystemVersion}';
+  @override
+  State<ManageDevicesScreen> createState() => _ManageDevicesScreenState();
+}
+
+class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
+  String? _localSessionId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionId();
+  }
+
+  Future<void> _loadSessionId() async {
+    final id = await SessionService.instance.getOrCreateSessionId();
+    if (!mounted) return;
+    setState(() => _localSessionId = id);
+  }
+
+  String _formatTimestamp(Timestamp? timestamp, BuildContext context) {
+    if (timestamp == null) {
+      return S.of(context).activeSessionNow;
+    }
+    return DateFormat.yMMMd(Localizations.localeOf(context).toLanguageTag())
+        .add_jm()
+        .format(timestamp.toDate());
+  }
+
+  Future<void> _logoutSession(String uid, String sessionId) async {
+    try {
+      await SessionService.instance.deleteSession(uid: uid, sessionId: sessionId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).sessionSignedOutSuccess)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).sessionSignOutFailed)),
+      );
+    }
+  }
+
+  Future<void> _logoutAllOther(String uid) async {
+    final current = _localSessionId;
+    if (current == null) return;
+    try {
+      await SessionService.instance.deleteAllOtherSessions(
+        uid: uid,
+        currentSessionId: current,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).otherSessionsSignedOutSuccess)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).sessionSignOutFailed)),
+      );
+    }
   }
 
   @override
@@ -1451,38 +1511,87 @@ class ManageDevicesScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(S.of(context).manageDevicesTitle),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            S.of(context).manageDevicesDescription,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.phone_android),
-              title: Text(S.of(context).currentDeviceTitle),
-              subtitle: Text(_deviceSummary()),
+      body: user == null
+          ? Center(child: Text(S.of(context).signInRequired))
+          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: SessionService.instance.sessionsStream(user.uid),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting || _localSessionId == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final sessions = snapshot.data?.docs ?? const [];
+                final currentId = _localSessionId!;
+                final currentIndex = sessions.indexWhere((doc) => doc.id == currentId);
+                final currentDoc = currentIndex >= 0 ? sessions[currentIndex] : null;
+                final otherDocs = sessions.where((doc) => doc.id != currentId).toList();
+
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      S.of(context).manageDevicesDescription,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.phone_android),
+                        title: Text(S.of(context).currentDeviceTitle),
+                        subtitle: Text(
+                          currentDoc == null
+                              ? S.of(context).activeSessionNow
+                              : '${(currentDoc.data()['deviceName'] as String? ?? S.of(context).sessionUnknownDevice)}
+${_formatTimestamp(currentDoc.data()['lastSeenAt'] as Timestamp?, context)}',
+                        ),
+                        isThreeLine: true,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            S.of(context).activeSessionsTitle,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _logoutAllOther(user.uid),
+                          child: Text(S.of(context).logoutAllOtherDevices),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (otherDocs.isEmpty)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.devices_other),
+                          title: Text(S.of(context).activeSessionsEmpty),
+                        ),
+                      )
+                    else
+                      ...otherDocs.map(
+                        (doc) {
+                          final data = doc.data();
+                          final deviceName = data['deviceName'] as String? ?? S.of(context).sessionUnknownDevice;
+                          final lastSeen = data['lastSeenAt'] as Timestamp?;
+                          return Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.devices_other),
+                              title: Text(deviceName),
+                              subtitle: Text(_formatTimestamp(lastSeen, context)),
+                              trailing: TextButton(
+                                onPressed: () => _logoutSession(user.uid, doc.id),
+                                child: Text(S.of(context).signOut),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                );
+              },
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            S.of(context).activeSessionsTitle,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.devices_other),
-              title: Text(user == null
-                  ? S.of(context).signInRequired
-                  : S.of(context).activeSessionsEmpty),
-              subtitle: Text(S.of(context).activeSessionsHint),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
