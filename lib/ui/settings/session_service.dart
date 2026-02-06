@@ -16,10 +16,12 @@ class SessionService {
 
   static const _deviceIdKey = 'auth_device_id';
   static const _sessionIdKeyPrefix = 'auth_current_session_id_';
+  static const _lastUidKey = 'auth_last_session_uid';
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
   StreamSubscription<User?>? _authSubscription;
   Timer? _heartbeatTimer;
+  String? _lastKnownUid;
 
   Future<String> getOrCreateDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -62,8 +64,11 @@ class SessionService {
     final sessionId = forceNew ? _generateUuidV4() : await getOrCreateSessionId(uid);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('$_sessionIdKeyPrefix$uid', sessionId);
+    await prefs.setString(_lastUidKey, uid);
+    _lastKnownUid = uid;
     final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
     final payload = await _buildSessionPayload(sessionId: sessionId, deviceId: deviceId);
+    debugPrint('[SessionService] initSession uid=$uid sessionId=$sessionId path=${docRef.path}');
     await docRef.set(payload, SetOptions(merge: true));
     await markCurrentSession(uid, sessionId);
     _startHeartbeat();
@@ -74,6 +79,7 @@ class SessionService {
     final sessionId = await getCurrentSessionId(uid);
     if (sessionId == null) return;
     final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
+    debugPrint('[SessionService] heartbeat uid=$uid sessionId=$sessionId path=${docRef.path}');
     await docRef.set({
       'sessionId': sessionId,
       'isActive': true,
@@ -107,6 +113,17 @@ class SessionService {
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> sessionsStream(String uid) {
+    debugPrint('[SessionService] sessionsStream path=users/$uid/sessions orderBy=lastSeenAt desc');
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('sessions')
+        .orderBy('lastSeenAt', descending: true)
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> activeSessionsStream(String uid) {
+    debugPrint('[SessionService] activeSessionsStream path=users/$uid/sessions isActive=true orderBy=lastSeenAt desc');
     return _firestore
         .collection('users')
         .doc(uid)
@@ -143,13 +160,18 @@ class SessionService {
     final sessionId = await getCurrentSessionId(uid);
     if (sessionId == null) return;
     await revokeSession(uid: uid, sessionId: sessionId);
-    await clearCurrentSessionId(uid);
+    debugPrint('[SessionService] revokeCurrentSession uid=$uid sessionId=$sessionId');
     _stopHeartbeat();
   }
 
   void _ensureAuthListener() {
     _authSubscription ??= FirebaseAuth.instance.authStateChanges().listen((user) async {
-      if (user != null) return;
+      if (user != null) {
+        _lastKnownUid = user.uid;
+        _startHeartbeat();
+        return;
+      }
+      await _markLastKnownSessionInactive();
       _stopHeartbeat();
     });
   }
@@ -169,6 +191,25 @@ class SessionService {
   void _stopHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+  }
+
+  Future<void> _markLastKnownSessionInactive() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = _lastKnownUid ?? prefs.getString(_lastUidKey);
+    if (uid == null || uid.isEmpty) return;
+    final sessionId = await getCurrentSessionId(uid);
+    if (sessionId == null || sessionId.isEmpty) return;
+    final docRef = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId);
+    debugPrint('[SessionService] markInactive uid=$uid sessionId=$sessionId path=${docRef.path}');
+    await docRef.set({
+      'sessionId': sessionId,
+      'isActive': false,
+      'endedAt': FieldValue.serverTimestamp(),
+      'lastSeenAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    await clearCurrentSessionId(uid);
+    await prefs.remove(_lastUidKey);
+    _lastKnownUid = null;
   }
 
   String _generateUuidV4() {
@@ -193,7 +234,8 @@ class SessionService {
     return {
       'sessionId': sessionId,
       'deviceId': deviceId,
-      'deviceName': metadata.deviceName,
+      'deviceModel': metadata.deviceModel,
+      'deviceName': metadata.deviceModel,
       'platform': metadata.platform,
       'appVersion': '${packageInfo.version}+${packageInfo.buildNumber}',
       'osVersion': metadata.osVersion,
@@ -208,7 +250,7 @@ class SessionService {
   Future<_DeviceMetadata> _readDeviceMetadata() async {
     if (kIsWeb) {
       return const _DeviceMetadata(
-        deviceName: 'web browser',
+        deviceModel: 'web browser',
         platform: 'web',
         osVersion: 'web',
       );
@@ -217,7 +259,7 @@ class SessionService {
       final info = await _deviceInfo.androidInfo;
       final model = info.model.trim().isEmpty ? 'android' : info.model.trim();
       return _DeviceMetadata(
-        deviceName: 'android $model',
+        deviceModel: 'android $model',
         platform: 'android',
         osVersion: info.version.release,
       );
@@ -226,13 +268,13 @@ class SessionService {
       final info = await _deviceInfo.iosInfo;
       final model = info.utsname.machine.trim().isEmpty ? 'ios' : info.utsname.machine.trim();
       return _DeviceMetadata(
-        deviceName: 'ios $model',
+        deviceModel: 'ios $model',
         platform: 'ios',
         osVersion: info.systemVersion,
       );
     }
     return _DeviceMetadata(
-      deviceName: Platform.operatingSystem,
+      deviceModel: Platform.operatingSystem,
       platform: Platform.operatingSystem,
       osVersion: Platform.operatingSystemVersion,
     );
@@ -241,12 +283,12 @@ class SessionService {
 
 class _DeviceMetadata {
   const _DeviceMetadata({
-    required this.deviceName,
+    required this.deviceModel,
     required this.platform,
     required this.osVersion,
   });
 
-  final String deviceName;
+  final String deviceModel;
   final String platform;
   final String osVersion;
 }
