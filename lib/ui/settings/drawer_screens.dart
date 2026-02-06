@@ -1451,6 +1451,8 @@ class ManageDevicesScreen extends StatefulWidget {
 
 class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   String? _localSessionId;
+  String? _sessionError;
+  int _sessionCount = 0;
 
   @override
   void initState() {
@@ -1479,6 +1481,8 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   bool _isActiveSession(Map<String, dynamic> data) {
     return data['isActive'] as bool? ?? false;
   }
+
+  String _sessionPath(String uid) => 'users/$uid/sessions';
 
   Future<void> _logoutSession(String uid, String sessionId) async {
     try {
@@ -1527,16 +1531,21 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: SessionService.instance.sessionsStream(user.uid),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  _sessionError = snapshot.error.toString();
+                }
                 if (snapshot.connectionState == ConnectionState.waiting || _localSessionId == null) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final sessionDocs = snapshot.data?.docs ?? const [];
+                _sessionCount = sessionDocs.length;
                 final activeDocs = sessionDocs.where((doc) => _isActiveSession(doc.data())).toList();
+                final docsToDisplay = activeDocs.isEmpty ? sessionDocs : activeDocs;
                 final currentId = _localSessionId!;
-                final currentIndex = activeDocs.indexWhere((doc) => doc.id == currentId);
+                final currentIndex = docsToDisplay.indexWhere((doc) => doc.id == currentId);
                 final QueryDocumentSnapshot<Map<String, dynamic>>? currentDoc =
-                    currentIndex >= 0 ? activeDocs[currentIndex] : null;
-                final otherDocs = activeDocs.where((doc) => doc.id != currentId).toList();
+                    currentIndex >= 0 ? docsToDisplay[currentIndex] : null;
+                final otherDocs = docsToDisplay.where((doc) => doc.id != currentId).toList();
 
                 return ListView(
                   padding: const EdgeInsets.all(16),
@@ -1544,6 +1553,25 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     Text(
                       S.of(context).manageDevicesDescription,
                       style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Debug Panel (temporary)', style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 8),
+                            Text('projectId: ${Firebase.app().options.projectId}'),
+                            Text('uid: ${user.uid}'),
+                            Text('email: ${user.email ?? 'no-email'}'),
+                            Text('path: ${_sessionPath(user.uid)}'),
+                            Text('resultCount: $_sessionCount'),
+                            Text('error: ${_sessionError ?? 'none'}'),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Card(
@@ -1558,7 +1586,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         subtitle: Text(
                           currentDoc == null
                               ? S.of(context).activeSessionNow
-                              : '${(currentDoc.data()['deviceName'] as String? ?? S.of(context).sessionUnknownDevice)}\n${_formatTimestamp(currentDoc.data()['lastSeenAt'] as Timestamp?, context)}',
+                              : '${(currentDoc.data()['deviceModel'] as String? ?? currentDoc.data()['deviceName'] as String? ?? S.of(context).sessionUnknownDevice)} / ${(currentDoc.data()['platform'] as String? ?? 'unknown')}\n${_formatTimestamp(currentDoc.data()['lastSeenAt'] as Timestamp?, context)}',
                         ),
                         isThreeLine: true,
                       ),
@@ -1578,7 +1606,16 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    if (activeDocs.isEmpty && sessionDocs.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 8),
+                        child: Text(
+                          'No active sessions found, showing all sessions as fallback.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 8),
                     if (otherDocs.isEmpty)
                       Card(
                         child: ListTile(
@@ -1590,12 +1627,13 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                       ...otherDocs.map(
                         (doc) {
                           final data = doc.data();
-                          final deviceName = data['deviceName'] as String? ?? S.of(context).sessionUnknownDevice;
+                          final deviceName = data['deviceModel'] as String? ?? data['deviceName'] as String? ?? S.of(context).sessionUnknownDevice;
+                          final platform = data['platform'] as String? ?? 'unknown';
                           final lastSeen = data['lastSeenAt'] as Timestamp?;
                           return Card(
                             child: ListTile(
                               leading: const Icon(Icons.devices_other),
-                              title: Text(deviceName),
+                              title: Text('$deviceName / $platform'),
                               subtitle: Text(_formatTimestamp(lastSeen, context)),
                               trailing: TextButton(
                                 onPressed: () => _logoutSession(user.uid, doc.id),
