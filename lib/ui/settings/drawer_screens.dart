@@ -1686,7 +1686,11 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(S.of(context).activeSessionsTitle, style: Theme.of(context).textTheme.titleMedium, textDirection: TextDirection.rtl),
+                          child: Text(
+                            S.of(context).activeSessionsTitle,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            textDirection: TextDirection.rtl,
+                          ),
                         ),
                         TextButton(onPressed: () => _logoutAllOther(user.uid), child: Text(S.of(context).logoutAllOtherDevices)),
                       ],
