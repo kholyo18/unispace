@@ -24,11 +24,8 @@ class SecurityService {
     }
     final currentSessionId = await SessionService.instance.getCurrentSessionId(user.uid) ??
         await SessionService.instance.getOrCreateSessionId(user.uid);
-    await SessionService.instance.revokeAllOtherSessions(
-      uid: user.uid,
-      currentSessionId: currentSessionId,
-    );
-    await SessionService.instance.revokeCurrentSession(user.uid);
+    await SessionService.instance.revokeAllSessions(user.uid);
+    await SessionService.instance.revokeSession(user: user, sessionId: currentSessionId);
     await FirebaseAuth.instance.signOut();
     return const LogoutAllResult(
       signedOut: true,

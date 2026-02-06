@@ -15,13 +15,61 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, update, delete: if request.auth != null
-        && request.auth.uid == userId;
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
       allow create: if false;
 
       match /sessions/{sessionId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && isValidSessionDoc(userId, sessionId);
+        allow delete: if false;
       }
+    }
+
+    function isValidSessionDoc(userId, sessionId) {
+      return request.resource.data.keys().hasOnly([
+            'sessionId',
+            'deviceId',
+            'alias',
+            'platform',
+            'model',
+            'manufacturer',
+            'osVersion',
+            'appVersion',
+            'buildNumber',
+            'locale',
+            'createdAt',
+            'lastSeenAt',
+            'isTrusted',
+            'isRevoked',
+            'revokedAt',
+            'revokeReason',
+            'updatedAt',
+            'networkType'
+          ])
+          && request.resource.data.sessionId is string
+          && request.resource.data.sessionId == sessionId
+          && request.resource.data.deviceId is string
+          && request.resource.data.deviceId.size() >= 8
+          && request.resource.data.alias is string
+          && request.resource.data.alias.size() >= 1
+          && request.resource.data.alias.size() <= 100
+          && request.resource.data.platform is string
+          && request.resource.data.model is string
+          && request.resource.data.osVersion is string
+          && request.resource.data.appVersion is string
+          && request.resource.data.buildNumber is string
+          && request.resource.data.isTrusted is bool
+          && request.resource.data.isRevoked is bool
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.lastSeenAt is timestamp
+          && request.resource.data.updatedAt is timestamp
+          && (request.resource.data.manufacturer == null || request.resource.data.manufacturer is string)
+          && (request.resource.data.locale == null || request.resource.data.locale is string)
+          && (request.resource.data.revokedAt == null || request.resource.data.revokedAt is timestamp)
+          && (request.resource.data.revokeReason == null || request.resource.data.revokeReason is string)
+          && (request.resource.data.networkType == null || request.resource.data.networkType is string);
     }
 
     function isValidSupportMessage() {
@@ -68,14 +116,10 @@ service cloud.firestore {
           && request.resource.data.deviceInfo.deviceId is string
           && request.resource.data.deviceInfo.deviceId.size() >= 8
           && request.resource.data.deviceInfo.osVersion is string
-          && (request.resource.data.uid == null
-              || request.resource.data.uid is string)
-          && (request.resource.data.email == null
-              || request.resource.data.email is string)
-          && (request.resource.data.phone == null
-              || request.resource.data.phone is string)
-          && (request.resource.data.displayName == null
-              || request.resource.data.displayName is string);
+          && (request.resource.data.uid == null || request.resource.data.uid is string)
+          && (request.resource.data.email == null || request.resource.data.email is string)
+          && (request.resource.data.phone == null || request.resource.data.phone is string)
+          && (request.resource.data.displayName == null || request.resource.data.displayName is string);
     }
   }
 }
