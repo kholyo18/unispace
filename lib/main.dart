@@ -691,6 +691,10 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     iconColor: Colors.redAccent,
                     textColor: Colors.redAccent,
                     onTap: () async {
+                      final currentUser = FirebaseAuth.instance.currentUser;
+                      if (currentUser != null) {
+                        await SessionService.instance.revokeCurrentSession(currentUser.uid);
+                      }
                       await FirebaseAuth.instance.signOut();
                       if (!context.mounted) return;
                       Navigator.of(context).pushAndRemoveUntil(
@@ -990,6 +994,7 @@ class AuthGate extends StatelessWidget {
         final isPasswordUser =
             user.providerData.any((info) => info.providerId == 'password');
         if (isPasswordUser && !user.emailVerified) {
+          SessionService.instance.revokeCurrentSession(user.uid);
           FirebaseAuth.instance.signOut();
           return const SignInScreen();
         }
@@ -1095,12 +1100,13 @@ class _SignInScreenState extends State<SignInScreen> {
       );
       final user = credential.user;
       if (user != null) {
-        await SessionService.instance.initSession(user.uid);
+        await SessionService.instance.initSession(user.uid, forceNew: true);
       }
       if (user != null) {
         final isPasswordUser =
             user.providerData.any((info) => info.providerId == 'password');
         if (isPasswordUser && !user.emailVerified) {
+          await SessionService.instance.revokeCurrentSession(user.uid);
           await FirebaseAuth.instance.signOut();
           if (!mounted) return;
           await _showUnverifiedDialog(trimmedEmail, trimmedPassword);
@@ -1175,6 +1181,7 @@ class _SignInScreenState extends State<SignInScreen> {
         return;
       }
       await user.sendEmailVerification();
+      await SessionService.instance.revokeCurrentSession(user.uid);
       await FirebaseAuth.instance.signOut();
       _showAuthSnack(S.of(context).verificationEmailSent);
     } on FirebaseAuthException catch (e) {
@@ -1208,7 +1215,7 @@ class _SignInScreenState extends State<SignInScreen> {
       final authResult = await FirebaseAuth.instance.signInWithCredential(credential);
       final user = authResult.user;
       if (user != null) {
-        await SessionService.instance.initSession(user.uid);
+        await SessionService.instance.initSession(user.uid, forceNew: true);
       }
     } on FirebaseAuthException catch (e, stackTrace) {
       debugPrint(

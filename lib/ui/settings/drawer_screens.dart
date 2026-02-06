@@ -215,6 +215,10 @@ class _SecurityCenterScreenState extends State<SecurityCenterScreen> {
                   subtitle: Text(_currentDeviceLabel()),
                   trailing: TextButton(
                     onPressed: () async {
+                      final currentUser = FirebaseAuth.instance.currentUser;
+                      if (currentUser != null) {
+                        await SessionService.instance.revokeCurrentSession(currentUser.uid);
+                      }
                       await FirebaseAuth.instance.signOut();
                     },
                     child: Text(S.of(context).signOut),
@@ -1457,7 +1461,8 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   Future<void> _loadSessionId() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final id = await SessionService.instance.getOrCreateSessionId(user.uid);
+    final id = await SessionService.instance.getCurrentSessionId(user.uid) ??
+        await SessionService.instance.getOrCreateSessionId(user.uid);
     if (!mounted) return;
     setState(() => _localSessionId = id);
   }
@@ -1472,11 +1477,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   }
 
   bool _isActiveSession(Map<String, dynamic> data) {
-    final isActive = data['isActive'] as bool? ?? false;
-    final lastSeen = data['lastSeenAt'] as Timestamp?;
-    if (!isActive || lastSeen == null) return false;
-    final now = DateTime.now();
-    return now.difference(lastSeen.toDate()) <= const Duration(days: 7);
+    return data['isActive'] as bool? ?? false;
   }
 
   Future<void> _logoutSession(String uid, String sessionId) async {
