@@ -1540,8 +1540,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         subtitle: Text(
                           currentDoc == null
                               ? S.of(context).activeSessionNow
-                              : '${(currentDoc.data()['deviceName'] as String? ?? S.of(context).sessionUnknownDevice)}
-${_formatTimestamp(currentDoc.data()['lastSeenAt'] as Timestamp?, context)}',
+                              : '${(currentDoc.data()['deviceName'] as String? ?? S.of(context).sessionUnknownDevice)}\n${_formatTimestamp(currentDoc.data()['lastSeenAt'] as Timestamp?, context)}',
                         ),
                         isThreeLine: true,
                       ),
