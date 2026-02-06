@@ -2096,6 +2096,9 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                   final specialtyId =
                       settings.academicSpecialtyId.trim();
                   if (!settings.hasAcademicShortcut) {
+                    if (settings.hasCreatedAcademicShortcut) {
+                      return const SizedBox.shrink();
+                    }
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Container(
