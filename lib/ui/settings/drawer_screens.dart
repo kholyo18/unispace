@@ -1450,13 +1450,7 @@ class ManageDevicesScreen extends StatefulWidget {
 }
 
 class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
-  static const bool _debugPanelEnabledByDefault = false;
-  static const int _debugPanelTapThreshold = 5;
   String? _localSessionId;
-  String? _sessionError;
-  int _sessionCount = 0;
-  bool _debugPanelEnabled = _debugPanelEnabledByDefault;
-  int _debugTitleTapCount = 0;
 
   @override
   void initState() {
@@ -1473,12 +1467,19 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     setState(() => _localSessionId = id);
   }
 
+  String _relativeSince(Timestamp? timestamp, BuildContext context) {
+    if (timestamp == null) return S.of(context).activeSessionNow;
+    final diff = DateTime.now().difference(timestamp.toDate());
+    if (diff.inMinutes < 1) return S.of(context).activeSessionNow;
+    if (diff.inHours < 1) return 'منذ ${diff.inMinutes} د';
+    if (diff.inDays < 1) return 'منذ ${diff.inHours} س';
+    return 'منذ ${diff.inDays} ي';
+  }
+
   String _formatTimestamp(Timestamp? timestamp, BuildContext context) {
-    if (timestamp == null) {
-      return S.of(context).activeSessionNow;
-    }
-    return DateFormat.yMMMd(Localizations.localeOf(context).toLanguageTag())
-        .add_jm()
+    if (timestamp == null) return S.of(context).activeSessionNow;
+    return DateFormat.yMMMMd(Localizations.localeOf(context).toLanguageTag())
+        .add_Hm()
         .format(timestamp.toDate());
   }
 
@@ -1501,10 +1502,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     final current = _localSessionId;
     if (current == null) return;
     try {
-      await SessionService.instance.revokeAllOtherSessions(
-        uid: uid,
-        currentSessionId: current,
-      );
+      await SessionService.instance.revokeAllOtherSessions(uid: uid, currentSessionId: current);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(S.of(context).otherSessionsSignedOutSuccess)),
@@ -1517,158 +1515,207 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     }
   }
 
+  Future<void> _showSessionDetails({
+    required User user,
+    required SessionModel session,
+    required bool isCurrent,
+  }) async {
+    final aliasController = TextEditingController(text: session.alias);
+    bool trusted = session.isTrusted;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.circle, size: 10, color: session.isOnline ? Colors.green : Colors.grey),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            session.alias,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            textDirection: TextDirection.rtl,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: aliasController,
+                      textDirection: TextDirection.rtl,
+                      decoration: const InputDecoration(labelText: 'اسم الجهاز'),
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile.adaptive(
+                      value: trusted,
+                      onChanged: (value) async {
+                        setSheetState(() => trusted = value);
+                        await SessionService.instance.setSessionTrusted(
+                          uid: user.uid,
+                          sessionId: session.id,
+                          trusted: value,
+                        );
+                      },
+                      title: const Text('جهاز موثوق'),
+                    ),
+                    const Divider(),
+                    Text('الموديل: ${session.model}'),
+                    Text('المنصة: ${session.platform} ${session.osVersion}'),
+                    Text('الإصدار: ${session.appVersion} (${session.buildNumber})'),
+                    Text('تاريخ الدخول: ${_formatTimestamp(session.createdAt, context)}'),
+                    Text('آخر نشاط: ${_formatTimestamp(session.lastSeenAt, context)} (${_relativeSince(session.lastSeenAt, context)})'),
+                    if ((session.locale ?? '').isNotEmpty) Text('اللغة: ${session.locale}'),
+                    if ((session.networkType ?? '').isNotEmpty) Text('الشبكة: ${session.networkType}'),
+                    const SizedBox(height: 12),
+                    FilledButton.tonal(
+                      onPressed: () async {
+                        await SessionService.instance.updateSessionAlias(
+                          uid: user.uid,
+                          sessionId: session.id,
+                          alias: aliasController.text,
+                        );
+                        if (!mounted) return;
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('حفظ التغييرات'),
+                    ),
+                    const SizedBox(height: 8),
+                    if (!isCurrent)
+                      FilledButton(
+                        onPressed: () async {
+                          await _logoutSession(user, session.id);
+                          if (!mounted) return;
+                          Navigator.of(context).pop();
+                        },
+                        child: Text(S.of(context).signOut),
+                      ),
+                    const SizedBox(height: 12),
+                    Text('منطقة الخطر', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.red)),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () => _logoutAllOther(user.uid),
+                      child: Text(S.of(context).logoutAllOtherDevices),
+                    ),
+                    OutlinedButton(
+                      onPressed: () async {
+                        await SecurityService.instance.logoutAllDevices();
+                      },
+                      child: Text(S.of(context).logoutAllDevices),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final activeSessionsStream = user == null
-        ? const Stream<List<SessionModel>>.empty()
-        : SessionService.instance.watchActiveSessions(user: user);
     final allSessionsStream = user == null
         ? const Stream<List<SessionModel>>.empty()
         : SessionService.instance.watchAllSessions(user: user);
     return Scaffold(
-      appBar: AppBar(
-        title: GestureDetector(
-          onLongPress: kDebugMode
-              ? () {
-                  _debugTitleTapCount += 1;
-                  if (_debugTitleTapCount >= _debugPanelTapThreshold) {
-                    setState(() => _debugPanelEnabled = !_debugPanelEnabled);
-                    _debugTitleTapCount = 0;
-                  }
-                }
-              : null,
-          child: Text(S.of(context).manageDevicesTitle),
-        ),
-      ),
+      appBar: AppBar(title: Text(S.of(context).manageDevicesTitle)),
       body: user == null
           ? Center(child: Text(S.of(context).signInRequired))
           : StreamBuilder<List<SessionModel>>(
-              stream: activeSessionsStream,
-              builder: (context, activeSnapshot) {
-                if (activeSnapshot.hasError) {
-                  _sessionError = activeSnapshot.error.toString();
+              stream: allSessionsStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting || _localSessionId == null) {
+                  return const Center(child: CircularProgressIndicator());
                 }
-                final activeSessions = activeSnapshot.data ?? const <SessionModel>[];
-                final activeLoading = activeSnapshot.connectionState == ConnectionState.waiting;
+                final sessions = (snapshot.data ?? const <SessionModel>[]).where((s) => !s.isRevoked).toList()
+                  ..sort((a, b) {
+                    if (a.isOnline != b.isOnline) return a.isOnline ? -1 : 1;
+                    final aTs = a.lastSeenAt ?? a.createdAt;
+                    final bTs = b.lastSeenAt ?? b.createdAt;
+                    if (aTs == null && bTs == null) return 0;
+                    if (aTs == null) return 1;
+                    if (bTs == null) return -1;
+                    return bTs.compareTo(aTs);
+                  });
 
-                return StreamBuilder<List<SessionModel>>(
-                  stream: allSessionsStream,
-                  builder: (context, allSnapshot) {
-                    if (allSnapshot.hasError) {
-                      _sessionError = allSnapshot.error.toString();
-                    }
-                    if ((activeLoading && allSnapshot.connectionState == ConnectionState.waiting) ||
-                        _localSessionId == null) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final allSessions = allSnapshot.data ?? const <SessionModel>[];
-                    final showingFallback = activeSessions.isEmpty && allSessions.isNotEmpty;
-                    final sessionsToDisplay = showingFallback ? allSessions : activeSessions;
-                    _sessionCount = sessionsToDisplay.length;
-
-                    final currentId = _localSessionId!;
-                    final SessionModel? currentSession = sessionsToDisplay.cast<SessionModel?>().firstWhere(
-                          (session) => session?.id == currentId,
-                          orElse: () => null,
-                        );
-                    final otherSessions = sessionsToDisplay.where((session) => session.id != currentId).toList();
-
-                    return ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        Text(
-                          S.of(context).manageDevicesDescription,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        if (kDebugMode && _debugPanelEnabled) ...[
-                          const SizedBox(height: 12),
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Debug Panel', style: Theme.of(context).textTheme.titleSmall),
-                                  const SizedBox(height: 8),
-                                  Text('path: users/${user.uid}/sessions'),
-                                  Text('resultCount: $_sessionCount'),
-                                  Text('error: ${_sessionError ?? 'none'}'),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.phone_android),
-                            title: Row(
-                              children: [
-                                Expanded(child: Text(S.of(context).currentDeviceTitle)),
-                                Chip(label: Text(S.of(context).currentDeviceTitle)),
-                              ],
-                            ),
-                            subtitle: Text(
-                              currentSession == null
-                                  ? S.of(context).activeSessionNow
-                                  : '${currentSession.deviceModel} / ${currentSession.platform}\n${_formatTimestamp(currentSession.lastActiveAt, context)}',
-                            ),
-                            isThreeLine: true,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                S.of(context).activeSessionsTitle,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => _logoutAllOther(user.uid),
-                              child: Text(S.of(context).logoutAllOtherDevices),
-                            ),
-                          ],
-                        ),
-                        if (showingFallback)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4, bottom: 8),
-                            child: Text(
-                              S.of(context).activeSessionsHint,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          )
-                        else
-                          const SizedBox(height: 8),
-                        if (otherSessions.isEmpty)
-                          Card(
-                            child: ListTile(
-                              leading: const Icon(Icons.devices_other),
-                              title: Text(S.of(context).activeSessionsEmpty),
-                            ),
-                          )
-                        else
-                          ...otherSessions.map(
-                            (session) {
-                              return Card(
-                                child: ListTile(
-                                  leading: const Icon(Icons.devices_other),
-                                  title: Text('${session.deviceModel} / ${session.platform}'),
-                                  subtitle: Text(_formatTimestamp(session.lastActiveAt, context)),
-                                  trailing: TextButton(
-                                    onPressed: () => _logoutSession(user, session.id),
-                                    child: Text(S.of(context).signOut),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                      ],
+                final currentId = _localSessionId!;
+                final currentSession = sessions.cast<SessionModel?>().firstWhere(
+                      (s) => s?.id == currentId,
+                      orElse: () => null,
                     );
-                  },
+                final otherSessions = sessions.where((s) => s.id != currentId).toList();
+
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(S.of(context).manageDevicesDescription, textDirection: TextDirection.rtl),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        onTap: currentSession == null
+                            ? null
+                            : () => _showSessionDetails(user: user, session: currentSession, isCurrent: true),
+                        leading: Icon(Icons.circle, color: (currentSession?.isOnline ?? false) ? Colors.green : Colors.grey, size: 12),
+                        title: Text(S.of(context).currentDeviceTitle, textDirection: TextDirection.rtl),
+                        subtitle: Text(
+                          currentSession == null
+                              ? S.of(context).activeSessionNow
+                              : '${currentSession.alias}
+${_relativeSince(currentSession.lastSeenAt, context)}',
+                          textDirection: TextDirection.rtl,
+                        ),
+                        isThreeLine: true,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(S.of(context).activeSessionsTitle, style: Theme.of(context).textTheme.titleMedium, textDirection: TextDirection.rtl),
+                        ),
+                        TextButton(onPressed: () => _logoutAllOther(user.uid), child: Text(S.of(context).logoutAllOtherDevices)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (otherSessions.isEmpty)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.devices_other),
+                          title: Text(S.of(context).activeSessionsEmpty, textDirection: TextDirection.rtl),
+                        ),
+                      )
+                    else
+                      ...otherSessions.map((session) {
+                        return Card(
+                          child: ListTile(
+                            onTap: () => _showSessionDetails(user: user, session: session, isCurrent: false),
+                            leading: Icon(Icons.circle, color: session.isOnline ? Colors.green : Colors.grey, size: 10),
+                            title: Text(session.alias, textDirection: TextDirection.rtl),
+                            subtitle: Text(_relativeSince(session.lastSeenAt, context), textDirection: TextDirection.rtl),
+                            trailing: TextButton(
+                              onPressed: () => _logoutSession(user, session.id),
+                              child: Text(S.of(context).signOut),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
                 );
               },
             ),
