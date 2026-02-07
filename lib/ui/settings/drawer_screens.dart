@@ -100,6 +100,25 @@ class SecurityCenterScreen extends StatefulWidget {
 }
 
 class _SecurityCenterScreenState extends State<SecurityCenterScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(S.of(context).securityCenterTitle),
+      ),
+      body: const SecurityCenterContent(),
+    );
+  }
+}
+
+class SecurityCenterContent extends StatefulWidget {
+  const SecurityCenterContent({super.key});
+
+  @override
+  State<SecurityCenterContent> createState() => _SecurityCenterContentState();
+}
+
+class _SecurityCenterContentState extends State<SecurityCenterContent> {
   Future<void> _logoutAllDevices(BuildContext context) async {
     final s = S.of(context);
     final user = FirebaseAuth.instance.currentUser;
@@ -154,11 +173,7 @@ class _SecurityCenterScreenState extends State<SecurityCenterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(S.of(context).securityCenterTitle),
-      ),
-      body: ValueListenableBuilder<UserProfileData>(
+    return ValueListenableBuilder<UserProfileData>(
         valueListenable: UserProfileService.instance.notifier,
         builder: (context, profile, _) {
           return ListView(
@@ -235,7 +250,6 @@ class _SecurityCenterScreenState extends State<SecurityCenterScreen> {
             ],
           );
         },
-      ),
     );
   }
 }

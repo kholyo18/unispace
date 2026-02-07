@@ -49,6 +49,7 @@ import 'ui/widgets/widgets.dart';
 import 'ui/faculty_search_page.dart';
 import 'ui/settings/app_settings.dart';
 import 'ui/settings/drawer_screens.dart';
+import 'ui/settings/security_privacy_screen.dart';
 import 'ui/settings/email_verification_service.dart';
 import 'ui/settings/user_profile_service.dart';
 import 'ui/settings/session_service.dart';
@@ -447,12 +448,12 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                 _drawerItem(
                   context,
                   icon: Icons.security_outlined,
-                  title: S.of(context).securityCenterTitle,
+                  title: 'الأمان و الخصوصية',
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const SecurityCenterScreen(),
+                        builder: (_) => const SecurityPrivacyScreen(),
                       ),
                     );
                   },
