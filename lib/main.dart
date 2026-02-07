@@ -209,9 +209,24 @@ class AppEndDrawer extends StatefulWidget {
 
 class _AppEndDrawerState extends State<AppEndDrawer> {
   static const bool _showPrivacyAndContactInDrawer = false;
+  static const _privacyHideMenuKey = 'privacy_hide_menu_item';
   bool _sendingOtp = false;
   int _otpCooldownSeconds = 0;
   Timer? _otpTimer;
+  bool _hidePrivacyEntry = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrivacyDrawerVisibility();
+  }
+
+  Future<void> _loadPrivacyDrawerVisibility() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hidden = prefs.getBool(_privacyHideMenuKey) ?? false;
+    if (!mounted) return;
+    setState(() => _hidePrivacyEntry = hidden);
+  }
 
   Future<void> _sendOtp(User user) async {
     if (_sendingOtp) return;
@@ -445,19 +460,20 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                 //     );
                 //   },
                 // ),
-                _drawerItem(
-                  context,
-                  icon: Icons.security_outlined,
-                  title: 'الأمان و الخصوصية',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SecurityPrivacyScreen(),
-                      ),
-                    );
-                  },
-                ),
+                if (!_hidePrivacyEntry)
+                  _drawerItem(
+                    context,
+                    icon: Icons.security_outlined,
+                    title: 'الأمان و الخصوصية',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SecurityPrivacyScreen(),
+                        ),
+                      ).then((_) => _loadPrivacyDrawerVisibility());
+                    },
+                  ),
                 // _drawerItem(
                 //   context,
                 //   icon: Icons.privacy_tip_outlined,

@@ -22,6 +22,8 @@ dependencies:
   # واجهة التطبيق
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.3.2
+  local_auth: ^2.3.0
+  crypto: ^3.0.6
   device_info_plus: ^11.1.0
   package_info_plus: ^8.1.0
 
