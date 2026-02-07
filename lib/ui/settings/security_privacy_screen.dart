@@ -1,13 +1,18 @@
 import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'drawer_screens.dart';
 
 enum _SecurityPrivacySegment { security, privacy }
+
+enum _PrivacyPreset { strict, balanced, open, custom }
 
 class SecurityPrivacyScreen extends StatefulWidget {
   const SecurityPrivacyScreen({super.key});
@@ -107,7 +112,14 @@ class _PrivacyTabState extends State<_PrivacyTab> {
   static const _hideActivityKey = 'privacy_hide_activity_status';
   static const _allowSearchByEmailKey = 'privacy_allow_search_by_email';
   static const _deactivatedKey = 'privacy_account_deactivated';
+  static const _deactivatedUntilKey = 'privacy_account_deactivated_until';
   static const _activityLogKey = 'privacy_activity_log';
+  static const _presetKey = 'privacy_preset';
+  static const _lockEnabledKey = 'privacy_lock_enabled';
+  static const _pinHashKey = 'privacy_lock_pin_hash';
+  static const _hideMenuKey = 'privacy_hide_menu_item';
+
+  final LocalAuthentication _localAuth = LocalAuthentication();
 
   bool _hideEmail = false;
   bool _showFullName = true;
@@ -115,6 +127,12 @@ class _PrivacyTabState extends State<_PrivacyTab> {
   bool _hideActivityStatus = true;
   bool _allowSearchByEmail = false;
   bool _accountDeactivated = false;
+  bool _privacyLockEnabled = false;
+  bool _privacyUnlocked = true;
+  bool _hideMenuEntry = false;
+  DateTime? _deactivatedUntil;
+  _PrivacyPreset _preset = _PrivacyPreset.balanced;
+  List<String> _activity = const [];
 
   bool _emailLoading = false;
   bool _passwordLoading = false;
@@ -131,6 +149,7 @@ class _PrivacyTabState extends State<_PrivacyTab> {
 
   Future<void> _loadPrivacyPrefs() async {
     final prefs = await SharedPreferences.getInstance();
+    final untilMs = prefs.getInt(_deactivatedUntilKey);
     if (!mounted) return;
     setState(() {
       _hideEmail = prefs.getBool(_hideEmailKey) ?? false;
@@ -139,27 +158,198 @@ class _PrivacyTabState extends State<_PrivacyTab> {
       _hideActivityStatus = prefs.getBool(_hideActivityKey) ?? true;
       _allowSearchByEmail = prefs.getBool(_allowSearchByEmailKey) ?? false;
       _accountDeactivated = prefs.getBool(_deactivatedKey) ?? false;
+      _hideMenuEntry = prefs.getBool(_hideMenuKey) ?? false;
+      _privacyLockEnabled = prefs.getBool(_lockEnabledKey) ?? false;
+      _privacyUnlocked = !_privacyLockEnabled;
+      _preset = _decodePreset(prefs.getString(_presetKey));
+      _deactivatedUntil = untilMs == null ? null : DateTime.fromMillisecondsSinceEpoch(untilMs);
+      _activity = prefs.getStringList(_activityLogKey) ?? <String>[];
     });
   }
 
-  Future<void> _setPrivacyPref(String key, bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+  _PrivacyPreset _decodePreset(String? value) {
+    return _PrivacyPreset.values.firstWhere(
+      (item) => item.name == value,
+      orElse: () => _PrivacyPreset.custom,
+    );
   }
 
-
-  Future<List<String>> _readActivityLog() async {
+  Future<void> _setBool(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_activityLogKey) ?? <String>[];
+    await prefs.setBool(key, value);
   }
 
   Future<void> _addSensitiveAction(String action) async {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
     final entry = '${now.year}/${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} - $action';
-    final log = prefs.getStringList(_activityLogKey) ?? <String>[];
-    final updated = <String>[entry, ...log].take(5).toList();
+    final updated = <String>[entry, ..._activity].take(25).toList();
     await prefs.setStringList(_activityLogKey, updated);
+    if (mounted) setState(() => _activity = updated);
+  }
+
+  Future<bool> _unlockPrivacy() async {
+    if (!_privacyLockEnabled) return true;
+    try {
+      final canUseBiometric = await _localAuth.canCheckBiometrics && await _localAuth.isDeviceSupported();
+      if (canUseBiometric) {
+        final ok = await _localAuth.authenticate(
+          localizedReason: 'افتح إعدادات الخصوصية',
+          options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
+        );
+        if (ok) {
+          if (mounted) setState(() => _privacyUnlocked = true);
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    final prefs = await SharedPreferences.getInstance();
+    final hash = prefs.getString(_pinHashKey);
+    if (hash == null) return false;
+    final pinController = TextEditingController();
+    final pass = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('أدخل PIN الخصوصية'),
+        content: TextField(
+          controller: pinController,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          decoration: const InputDecoration(labelText: 'PIN'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('تحقق')),
+        ],
+      ),
+    );
+    final valid = pass == true && _pin(pinController.text) == hash;
+    if (valid && mounted) setState(() => _privacyUnlocked = true);
+    return valid;
+  }
+
+  Future<bool> _guardSensitiveEdit() async {
+    if (!_privacyLockEnabled || _privacyUnlocked) return true;
+    final unlocked = await _unlockPrivacy();
+    if (!unlocked) _showMessage('تعذر فتح إعدادات الخصوصية.');
+    return unlocked;
+  }
+
+  String _pin(String value) => sha256.convert(utf8.encode(value)).toString();
+
+  Future<void> _setPrivacyLock(bool value) async {
+    if (value) {
+      final pin = TextEditingController();
+      final confirm = TextEditingController();
+      final shouldEnable = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('تفعيل قفل الخصوصية'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('أدخل PIN احتياطي (4-6 أرقام) في حال عدم توفر البصمة.'),
+              const SizedBox(height: 8),
+              TextField(controller: pin, obscureText: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'PIN')),
+              const SizedBox(height: 8),
+              TextField(controller: confirm, obscureText: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تأكيد PIN')),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('تفعيل')),
+          ],
+        ),
+      );
+      if (shouldEnable != true || pin.text.length < 4 || pin.text != confirm.text) {
+        _showMessage('لم يتم تفعيل القفل. تحقق من PIN.');
+        return;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_pinHashKey, _pin(pin.text));
+      await prefs.setBool(_lockEnabledKey, true);
+      setState(() {
+        _privacyLockEnabled = true;
+        _privacyUnlocked = false;
+      });
+      await _addSensitiveAction('تفعيل قفل الخصوصية');
+      return;
+    }
+    await _setBool(_lockEnabledKey, false);
+    setState(() {
+      _privacyLockEnabled = false;
+      _privacyUnlocked = true;
+    });
+    await _addSensitiveAction('إلغاء قفل الخصوصية');
+  }
+
+  Future<void> _applyPreset(_PrivacyPreset preset) async {
+    if (!await _guardSensitiveEdit()) return;
+    setState(() {
+      switch (preset) {
+        case _PrivacyPreset.strict:
+          _hideEmail = true;
+          _showFullName = false;
+          _confirmSensitiveActions = true;
+          _hideActivityStatus = true;
+          _allowSearchByEmail = false;
+          break;
+        case _PrivacyPreset.balanced:
+          _hideEmail = true;
+          _showFullName = true;
+          _confirmSensitiveActions = true;
+          _hideActivityStatus = true;
+          _allowSearchByEmail = false;
+          break;
+        case _PrivacyPreset.open:
+          _hideEmail = false;
+          _showFullName = true;
+          _confirmSensitiveActions = false;
+          _hideActivityStatus = false;
+          _allowSearchByEmail = true;
+          break;
+        case _PrivacyPreset.custom:
+          break;
+      }
+      _preset = preset;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait([
+      prefs.setBool(_hideEmailKey, _hideEmail),
+      prefs.setBool(_showFullNameKey, _showFullName),
+      prefs.setBool(_confirmSensitiveKey, _confirmSensitiveActions),
+      prefs.setBool(_hideActivityKey, _hideActivityStatus),
+      prefs.setBool(_allowSearchByEmailKey, _allowSearchByEmail),
+      prefs.setString(_presetKey, preset.name),
+    ]);
+    await _addSensitiveAction('تغيير نمط الخصوصية: ${_presetLabel(preset)}');
+  }
+
+  Future<void> _markCustomIfNeeded() async {
+    if (_preset == _PrivacyPreset.custom) return;
+    final current = (_hideEmail, _showFullName, _confirmSensitiveActions, _hideActivityStatus, _allowSearchByEmail);
+    final strict = (true, false, true, true, false);
+    final balanced = (true, true, true, true, false);
+    final open = (false, true, false, false, true);
+    final next = current == strict
+        ? _PrivacyPreset.strict
+        : current == balanced
+            ? _PrivacyPreset.balanced
+            : current == open
+                ? _PrivacyPreset.open
+                : _PrivacyPreset.custom;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_presetKey, next.name);
+    if (mounted) setState(() => _preset = next);
+  }
+
+  Future<void> _toggleSetting(String key, bool value, void Function(bool v) apply) async {
+    if (!await _guardSensitiveEdit()) return;
+    setState(() => apply(value));
+    await _setBool(key, value);
+    await _markCustomIfNeeded();
   }
 
   Future<void> _exportData(User user, String displayName) async {
@@ -175,11 +365,11 @@ class _PrivacyTabState extends State<_PrivacyTab> {
           'hideActivityStatus': _hideActivityStatus,
           'allowSearchByEmail': _allowSearchByEmail,
           'accountDeactivated': _accountDeactivated,
+          'deactivatedUntil': _deactivatedUntil?.toIso8601String(),
         },
         'generatedAt': DateTime.now().toIso8601String(),
       };
       await _addSensitiveAction('تنزيل بيانات الحساب');
-      _showMessage('تم تجهيز نسخة بياناتك بنجاح.');
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -199,12 +389,32 @@ class _PrivacyTabState extends State<_PrivacyTab> {
   }
 
   Future<void> _resetLocalData() async {
-    final confirmed = await _confirmAction(
-      'مسح بيانات التطبيق',
-      'سيتم إعادة تعيين تفضيلات الخصوصية والسجل المحلي فقط. يمكن إعدادها لاحقاً من جديد.',
-      confirmLabel: 'متابعة',
+    bool accepted = false;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('مسح بيانات التطبيق'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('سيتم إعادة تهيئة جميع إعدادات الخصوصية المحلية.'),
+              CheckboxListTile(
+                value: accepted,
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: (value) => setStateDialog(() => accepted = value ?? false),
+                title: const Text('أفهم أن الإعدادات ستُعاد الافتراضية'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+            ElevatedButton(onPressed: accepted ? () => Navigator.of(context).pop(true) : null, child: const Text('متابعة')),
+          ],
+        ),
+      ),
     );
-    if (!confirmed) return;
+    if (proceed != true) return;
 
     setState(() => _resetLoading = true);
     try {
@@ -216,38 +426,44 @@ class _PrivacyTabState extends State<_PrivacyTab> {
         prefs.remove(_hideActivityKey),
         prefs.remove(_allowSearchByEmailKey),
         prefs.remove(_deactivatedKey),
-        prefs.remove(_activityLogKey),
+        prefs.remove(_deactivatedUntilKey),
+        prefs.remove(_presetKey),
       ]);
-      await _loadPrivacyPrefs();
       await _addSensitiveAction('إعادة ضبط بيانات التطبيق');
-      _showMessage('تمت إعادة تعيين بيانات التطبيق المحلية.');
+      await _loadPrivacyPrefs();
+      _showMessage('تمت إعادة تعيين البيانات المحلية.');
     } finally {
       if (mounted) setState(() => _resetLoading = false);
     }
   }
 
   Future<void> _clearCache() async {
-    final confirmed = await _confirmAction(
-      'مسح الكاش',
-      'سيتم مسح البيانات المؤقتة المحلية فقط دون التأثير على معلومات الحساب.',
-      confirmLabel: 'مسح',
-    );
-    if (!confirmed) return;
     setState(() => _clearCacheLoading = true);
     try {
       await _addSensitiveAction('مسح الكاش المحلي');
-      _showMessage('تم مسح الكاش المحلي بنجاح.');
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('تم مسح الكاش المحلي.'),
+          action: SnackBarAction(
+            label: 'تراجع',
+            onPressed: () {
+              messenger.showSnackBar(const SnackBar(content: Text('لا يمكن استعادة الكاش بالكامل، تم إلغاء الإجراء القادم فقط.')));
+            },
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _clearCacheLoading = false);
     }
   }
 
   Future<void> _showActivityLog() async {
-    final log = await _readActivityLog();
-    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) => Directionality(
         textDirection: TextDirection.rtl,
         child: Padding(
@@ -258,17 +474,30 @@ class _PrivacyTabState extends State<_PrivacyTab> {
             children: [
               Text('سجل النشاط الحساس', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
-              if (log.isEmpty)
-                const Text('لا توجد عمليات حساسة مسجلة حتى الآن.')
-              else
-                ...log.map(
-                  (item) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.history, size: 18),
-                    title: Text(item),
-                  ),
-                ),
+              Flexible(
+                child: _activity.isEmpty
+                    ? const Text('لا توجد عمليات حساسة مسجلة حتى الآن.')
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _activity.length,
+                        itemBuilder: (_, index) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.history, size: 18),
+                          title: Text(_activity[index]),
+                        ),
+                      ),
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove(_activityLogKey);
+                  if (mounted) setState(() => _activity = []);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('مسح السجل'),
+              ),
             ],
           ),
         ),
@@ -278,453 +507,163 @@ class _PrivacyTabState extends State<_PrivacyTab> {
 
   Future<void> _toggleDeactivated(bool value) async {
     if (value) {
-      final confirmed = await _confirmAction(
-        'تعطيل الحساب مؤقتًا',
-        'لن يتم حذف بياناتك ويمكنك إعادة التفعيل في أي وقت من نفس الشاشة.',
-        confirmLabel: 'تعطيل مؤقت',
+      final selected = await showModalBottomSheet<Duration>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: Wrap(
+            children: [
+              ListTile(title: const Text('تعطيل مؤقت لمدة 24 ساعة'), onTap: () => Navigator.pop(context, const Duration(hours: 24))),
+              ListTile(title: const Text('تعطيل مؤقت لمدة 72 ساعة'), onTap: () => Navigator.pop(context, const Duration(hours: 72))),
+              ListTile(title: const Text('تعطيل مؤقت لمدة 7 أيام'), onTap: () => Navigator.pop(context, const Duration(days: 7))),
+            ],
+          ),
+        ),
       );
-      if (!confirmed) return;
+      if (selected == null) return;
+      _deactivatedUntil = DateTime.now().add(selected);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_deactivatedUntilKey, _deactivatedUntil!.millisecondsSinceEpoch);
+    } else {
+      _deactivatedUntil = null;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_deactivatedUntilKey);
     }
+
     setState(() => _accountDeactivated = value);
-    await _setPrivacyPref(_deactivatedKey, value);
+    await _setBool(_deactivatedKey, value);
     await _addSensitiveAction(value ? 'تعطيل الحساب مؤقتًا' : 'إعادة تفعيل الحساب');
-    _showMessage(value ? 'تم تعطيل الحساب مؤقتًا.' : 'تمت إعادة تفعيل الحساب.');
-  }
-
-  String _friendlyError(Object error) {
-    if (error is FirebaseAuthException) {
-      switch (error.code) {
-        case 'invalid-email':
-          return 'صيغة البريد الإلكتروني غير صحيحة.';
-        case 'email-already-in-use':
-          return 'هذا البريد مستخدم بالفعل.';
-        case 'requires-recent-login':
-          return 'لحمايتك، يرجى تسجيل الدخول مرة أخرى ثم إعادة المحاولة.';
-        case 'wrong-password':
-        case 'invalid-credential':
-          return 'كلمة المرور الحالية غير صحيحة.';
-        case 'weak-password':
-          return 'كلمة المرور الجديدة ضعيفة. يجب أن تكون 6 أحرف على الأقل.';
-        case 'user-mismatch':
-        case 'user-not-found':
-          return 'تعذر التحقق من الجلسة الحالية. يرجى تسجيل الدخول من جديد.';
-      }
-    }
-    return 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
-  }
-
-  bool _hasPasswordProvider(User user) {
-    return user.providerData.any((provider) => provider.providerId == 'password');
-  }
-
-  String _maskedEmail(String email) {
-    if (!_hideEmail || !email.contains('@')) return email;
-    final parts = email.split('@');
-    if (parts.first.length < 3) return '***@${parts.last}';
-    return '${parts.first.substring(0, 3)}***@${parts.last}';
-  }
-
-  Future<Map<String, dynamic>?> _readUserProfile(String uid) async {
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    return doc.data();
-  }
-
-  String _resolveName(Map<String, dynamic>? data, User? user) {
-    final first = (data?['firstName'] as String?)?.trim();
-    final last = (data?['lastName'] as String?)?.trim();
-    final full = [first, last].where((part) => (part ?? '').isNotEmpty).join(' ').trim();
-    final displayName = (data?['displayName'] as String?)?.trim();
-    final username = (data?['username'] as String?)?.trim();
-    final fallback = user?.displayName?.trim();
-    final best = full.isNotEmpty
-        ? full
-        : (displayName?.isNotEmpty == true
-            ? displayName!
-            : (username?.isNotEmpty == true ? username! : (fallback ?? '')));
-    if (best.isEmpty) return 'غير محدد';
-    if (_showFullName) return best;
-    return best.split(' ').first;
-  }
-
-  Future<void> _showChangeEmailSheet(User user) async {
-    final newEmailController = TextEditingController();
-    final passwordController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        final hasPasswordProvider = _hasPasswordProvider(user);
-        bool loading = false;
-        String? formError;
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: StatefulBuilder(
-            builder: (context, setModalState) => Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('تغيير البريد الإلكتروني', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 6),
-                    Text(
-                      'سيتم إرسال رسالة تحقق إلى البريد الجديد قبل اعتماده.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 14),
-                    TextFormField(
-                      initialValue: user.email ?? 'غير متوفر',
-                      enabled: false,
-                      decoration: const InputDecoration(
-                        labelText: 'البريد الحالي',
-                        prefixIcon: Icon(Icons.mark_email_read_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: newEmailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'البريد الإلكتروني الجديد',
-                        prefixIcon: Icon(Icons.alternate_email),
-                      ),
-                      validator: (value) {
-                        final nextEmail = (value ?? '').trim();
-                        final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                        if (nextEmail.isEmpty) return 'يرجى إدخال البريد الإلكتروني الجديد.';
-                        if (!emailRegex.hasMatch(nextEmail)) return 'يرجى إدخال بريد إلكتروني صالح.';
-                        if (nextEmail == user.email) return 'البريد الجديد مطابق للبريد الحالي.';
-                        return null;
-                      },
-                    ),
-                    if (hasPasswordProvider) ...[
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'كلمة المرور الحالية',
-                          prefixIcon: Icon(Icons.lock_outline),
-                        ),
-                        validator: (value) {
-                          if ((value ?? '').isEmpty) return 'أدخل كلمة المرور الحالية لإتمام العملية.';
-                          return null;
-                        },
-                      ),
-                    ] else ...[
-                      const SizedBox(height: 10),
-                      const Text(
-                        'هذا الحساب لا يستخدم كلمة مرور. يرجى تسجيل الخروج ثم تسجيل الدخول مرة أخرى قبل تغيير البريد.',
-                      ),
-                    ],
-                    if (formError != null) ...[
-                      const SizedBox(height: 10),
-                      Text(formError!, style: const TextStyle(color: Colors.red)),
-                    ],
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: loading
-                          ? null
-                          : () async {
-                              if (!(formKey.currentState?.validate() ?? false)) return;
-                              if (_confirmSensitiveActions) {
-                                final confirmed = await _confirmAction('تأكيد العملية', 'هل تريد تغيير البريد الإلكتروني؟');
-                                if (!confirmed) return;
-                              }
-                              setModalState(() {
-                                loading = true;
-                                formError = null;
-                              });
-                              setState(() => _emailLoading = true);
-                              try {
-                                await user.reload();
-                                final currentUser = FirebaseAuth.instance.currentUser;
-                                if (currentUser == null) {
-                                  setModalState(() => formError = 'يرجى تسجيل الدخول أولاً.');
-                                  return;
-                                }
-                                if (_hasPasswordProvider(currentUser)) {
-                                  final email = currentUser.email;
-                                  if (email == null) {
-                                    setModalState(() => formError = 'تعذر قراءة البريد الحالي.');
-                                    return;
-                                  }
-                                  final credential = EmailAuthProvider.credential(
-                                    email: email,
-                                    password: passwordController.text,
-                                  );
-                                  await currentUser.reauthenticateWithCredential(credential);
-                                } else {
-                                  setModalState(() {
-                                    formError = 'لإكمال التحقق الأمني، سجّل الخروج ثم سجّل الدخول مرة أخرى.';
-                                  });
-                                  return;
-                                }
-
-                                await currentUser.verifyBeforeUpdateEmail(newEmailController.text.trim());
-                                await _addSensitiveAction('طلب تغيير البريد الإلكتروني');
-                                if (mounted) {
-                                  Navigator.of(context).pop();
-                                  _showMessage('تم إرسال رسالة تأكيد إلى بريدك الجديد.');
-                                }
-                              } catch (error) {
-                                setModalState(() => formError = _friendlyError(error));
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _emailLoading = false);
-                                }
-                                setModalState(() => loading = false);
-                              }
-                            },
-                      icon: loading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.check_circle_outline),
-                      label: const Text('تحديث البريد الإلكتروني'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    newEmailController.dispose();
-    passwordController.dispose();
-  }
-
-  Future<void> _showChangePasswordSheet(User user) async {
-    final currentPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        bool loading = false;
-        String? formError;
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: StatefulBuilder(
-            builder: (context, setModalState) => Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('تغيير كلمة السر', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 6),
-                    Text(
-                      'اختر كلمة مرور قوية لا تقل عن 6 أحرف.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 14),
-                    TextFormField(
-                      controller: currentPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'كلمة المرور الحالية',
-                        prefixIcon: Icon(Icons.lock_outline),
-                      ),
-                      validator: (value) => (value ?? '').isEmpty ? 'أدخل كلمة المرور الحالية.' : null,
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: newPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'كلمة المرور الجديدة',
-                        prefixIcon: Icon(Icons.password_outlined),
-                      ),
-                      validator: (value) {
-                        if ((value ?? '').isEmpty) return 'أدخل كلمة المرور الجديدة.';
-                        if ((value ?? '').length < 6) return 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: confirmPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'تأكيد كلمة المرور الجديدة',
-                        prefixIcon: Icon(Icons.verified_user_outlined),
-                      ),
-                      validator: (value) {
-                        if ((value ?? '') != newPasswordController.text) {
-                          return 'تأكيد كلمة المرور غير مطابق.';
-                        }
-                        return null;
-                      },
-                    ),
-                    if (formError != null) ...[
-                      const SizedBox(height: 10),
-                      Text(formError!, style: const TextStyle(color: Colors.red)),
-                    ],
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: loading
-                          ? null
-                          : () async {
-                              if (!(formKey.currentState?.validate() ?? false)) return;
-                              if (_confirmSensitiveActions) {
-                                final confirmed = await _confirmAction('تأكيد العملية', 'هل تريد تغيير كلمة المرور؟');
-                                if (!confirmed) return;
-                              }
-                              setModalState(() {
-                                loading = true;
-                                formError = null;
-                              });
-                              setState(() => _passwordLoading = true);
-                              try {
-                                if (!_hasPasswordProvider(user) || user.email == null) {
-                                  setModalState(() {
-                                    formError = 'هذا الحساب لا يستخدم كلمة مرور. يرجى تسجيل الدخول بطريقة الحساب الأساسية.';
-                                  });
-                                  return;
-                                }
-                                final credential = EmailAuthProvider.credential(
-                                  email: user.email!,
-                                  password: currentPasswordController.text,
-                                );
-                                await user.reauthenticateWithCredential(credential);
-                                await user.updatePassword(newPasswordController.text);
-                                await _addSensitiveAction('تغيير كلمة المرور');
-                                if (mounted) {
-                                  Navigator.of(context).pop();
-                                  _showMessage('تم تغيير كلمة المرور بنجاح.');
-                                }
-                              } catch (error) {
-                                setModalState(() => formError = _friendlyError(error));
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _passwordLoading = false);
-                                }
-                                setModalState(() => loading = false);
-                              }
-                            },
-                      icon: loading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.check_circle_outline),
-                      label: const Text('تحديث كلمة المرور'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          );
-      },
-    );
-    currentPasswordController.dispose();
-    newPasswordController.dispose();
-    confirmPasswordController.dispose();
   }
 
   Future<void> _deleteAccount(User user) async {
-    final warningAccepted = await _confirmAction(
-      'تحذير مهم',
-      'سيتم حذف حسابك نهائياً وقد تفقد البيانات المرتبطة به. لا يمكن التراجع عن هذه العملية.',
-      confirmLabel: 'متابعة',
-    );
+    if (_deactivatedUntil != null && DateTime.now().isBefore(_deactivatedUntil!)) {
+      _showMessage('الحذف النهائي متاح بعد انتهاء فترة التعطيل المؤقت.');
+      return;
+    }
+    final warningAccepted = await _confirmAction('تحذير مهم', 'سيتم حذف حسابك نهائيًا. هذا الإجراء غير قابل للتراجع.', confirmLabel: 'متابعة');
     if (!warningAccepted) return;
 
-    final passwordController = TextEditingController();
     final phraseController = TextEditingController();
-    final proceeded = await showDialog<bool>(
+    final passwordController = TextEditingController();
+    final proceed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('تأكيد حذف الحساب'),
+        title: const Text('تأكيد نهائي'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('اكتب "حذف" للتأكيد النهائي.'),
+            const Text('اكتب "حذف" للمتابعة النهائية.'),
+            TextField(controller: phraseController, decoration: const InputDecoration(labelText: 'عبارة التأكيد')),
+            if (_hasPasswordProvider(user)) TextField(controller: passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور')),
             const SizedBox(height: 8),
-            TextField(
-              controller: phraseController,
-              textDirection: TextDirection.rtl,
-              decoration: const InputDecoration(labelText: 'عبارة التأكيد'),
-            ),
-            if (_hasPasswordProvider(user)) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                textDirection: TextDirection.rtl,
-                decoration: const InputDecoration(labelText: 'كلمة المرور الحالية'),
-              ),
-            ],
+            const Text('TODO: ربط إعادة المصادقة النهائية مع واجهة الخادم عند توفرها.'),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
-          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('حذف الحساب')),
+          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('حذف نهائي')),
         ],
       ),
     );
-
-    if (proceeded != true) return;
-    if (phraseController.text.trim() != 'حذف') {
-      _showMessage('عبارة التأكيد غير صحيحة.');
+    if (proceed != true || phraseController.text.trim() != 'حذف') {
+      _showMessage('تم إلغاء عملية الحذف.');
       return;
-    }
-    if (_confirmSensitiveActions) {
-      final finalConfirm = await _confirmAction('تأكيد أخير', 'هل أنت متأكد من حذف الحساب الآن؟', confirmLabel: 'نعم، حذف');
-      if (!finalConfirm) return;
     }
 
     setState(() => _deleteLoading = true);
     try {
       if (_hasPasswordProvider(user)) {
         final email = user.email;
-        final password = passwordController.text;
-        if (email == null || password.isEmpty) {
-          _showMessage('أدخل كلمة المرور الحالية لإتمام الحذف.');
+        if (email == null || passwordController.text.isEmpty) {
+          _showMessage('أدخل كلمة المرور الحالية.');
           return;
         }
-        final credential = EmailAuthProvider.credential(email: email, password: password);
+        final credential = EmailAuthProvider.credential(email: email, password: passwordController.text);
         await user.reauthenticateWithCredential(credential);
-      } else {
-        _showMessage('لأمان الحساب: سجّل الخروج ثم الدخول مرة أخرى قبل الحذف.');
-        return;
       }
-
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'deletedAt': FieldValue.serverTimestamp(),
         'isDeleted': true,
-        'displayName': 'مستخدم محذوف',
-        'showEmailInProfile': false,
       }, SetOptions(merge: true));
-
+      await _addSensitiveAction('محاولة حذف الحساب نهائيًا');
       await user.delete();
-      await _addSensitiveAction('حذف الحساب نهائيًا');
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
-      _showMessage('تم حذف الحساب بنجاح.');
     } catch (error) {
       _showMessage(_friendlyError(error));
     } finally {
       if (mounted) setState(() => _deleteLoading = false);
     }
   }
+
+  Future<void> _showChangeEmailSheet(User user) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تغيير البريد الإلكتروني'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'البريد الجديد')),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.of(context).pop(controller.text.trim()), child: const Text('تحديث')),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty) return;
+    setState(() => _emailLoading = true);
+    try {
+      await user.verifyBeforeUpdateEmail(result);
+      await _addSensitiveAction('طلب تغيير البريد الإلكتروني');
+      _showMessage('تم إرسال رسالة تحقق إلى البريد الجديد.');
+    } catch (error) {
+      _showMessage(_friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _emailLoading = false);
+    }
+  }
+
+  Future<void> _showChangePasswordSheet(User user) async {
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تغيير كلمة المرور'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: current, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور الحالية')),
+            TextField(controller: next, obscureText: true, decoration: const InputDecoration(labelText: 'كلمة المرور الجديدة')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('تحديث')),
+        ],
+      ),
+    );
+    if (proceed != true) return;
+    setState(() => _passwordLoading = true);
+    try {
+      final email = user.email;
+      if (email == null || current.text.isEmpty || next.text.length < 6) {
+        _showMessage('تحقق من المدخلات.');
+        return;
+      }
+      final credential = EmailAuthProvider.credential(email: email, password: current.text);
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(next.text);
+      await _addSensitiveAction('تغيير كلمة المرور');
+      _showMessage('تم تحديث كلمة المرور.');
+    } catch (error) {
+      _showMessage(_friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _passwordLoading = false);
+    }
+  }
+
+  bool _hasPasswordProvider(User user) => user.providerData.any((provider) => provider.providerId == 'password');
 
   Future<bool> _confirmAction(String title, String message, {String confirmLabel = 'تأكيد'}) async {
     final result = await showDialog<bool>(
@@ -741,22 +680,82 @@ class _PrivacyTabState extends State<_PrivacyTab> {
     return result == true;
   }
 
+  String _friendlyError(Object error) {
+    if (error is FirebaseAuthException) {
+      switch (error.code) {
+        case 'invalid-email':
+          return 'صيغة البريد الإلكتروني غير صحيحة.';
+        case 'email-already-in-use':
+          return 'هذا البريد مستخدم بالفعل.';
+        case 'requires-recent-login':
+          return 'يرجى تسجيل الدخول مرة أخرى ثم المحاولة.';
+      }
+    }
+    return 'حدث خطأ غير متوقع.';
+  }
+
+  Future<Map<String, dynamic>?> _readUserProfile(String uid) async {
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc.data();
+  }
+
+  String _resolveName(Map<String, dynamic>? data, User? user) {
+    final name = (data?['displayName'] as String?)?.trim();
+    final best = name?.isNotEmpty == true ? name! : (user?.displayName ?? 'غير محدد');
+    if (_showFullName) return best;
+    return best.split(' ').first;
+  }
+
+  String _maskedEmail(String email) {
+    if (!_hideEmail || !email.contains('@')) return email;
+    final parts = email.split('@');
+    if (parts.first.length < 3) return '***@${parts.last}';
+    return '${parts.first.substring(0, 3)}***@${parts.last}';
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _sectionHeader(String title, String subtitle) {
-    return Padding(
-      padding: const EdgeInsetsDirectional.only(bottom: 8, top: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 2),
-          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-        ],
+  String _presetLabel(_PrivacyPreset preset) {
+    switch (preset) {
+      case _PrivacyPreset.strict:
+        return 'صارم';
+      case _PrivacyPreset.balanced:
+        return 'متوازن';
+      case _PrivacyPreset.open:
+        return 'مفتوح';
+      case _PrivacyPreset.custom:
+        return 'مخصص';
+    }
+  }
+
+  int get _privacyScore {
+    int score = 0;
+    if (_hideEmail) score += 20;
+    if (!_showFullName) score += 20;
+    if (_confirmSensitiveActions) score += 20;
+    if (_hideActivityStatus) score += 20;
+    if (!_allowSearchByEmail) score += 20;
+    return score;
+  }
+
+  (Color, String, String) get _privacyHealth {
+    final score = _privacyScore;
+    if (score >= 80) return (Colors.green, '🟢 ممتاز', 'إعداداتك تقلل التعرض وتزيد حماية الحساب.');
+    if (score >= 50) return (Colors.amber, '🟡 متوسط', 'حمايتك جيدة، ويمكن تعزيزها باختيار نمط أكثر صرامة.');
+    return (Colors.red, '🔴 منخفض', 'هناك إعدادات مفتوحة؛ راجع عناصر الخصوصية لرفع مستوى الأمان.');
+  }
+
+  Widget _badge(String text, {bool cloud = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: cloud ? Colors.orange.withOpacity(0.14) : Colors.teal.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(999),
       ),
+      child: Text(text, style: TextStyle(fontSize: 12, color: cloud ? Colors.orange.shade900 : Colors.teal.shade900)),
     );
   }
 
@@ -767,220 +766,152 @@ class _PrivacyTabState extends State<_PrivacyTab> {
       return const Center(child: Text('يرجى تسجيل الدخول للوصول إلى إعدادات الخصوصية.'));
     }
 
+    final health = _privacyHealth;
+
     return FutureBuilder<Map<String, dynamic>?>(
       future: _readUserProfile(user.uid),
       builder: (context, snapshot) {
-        final profile = snapshot.data;
-        final displayName = _resolveName(profile, user);
-        final email = _maskedEmail(user.email ?? 'غير محدد');
+        final displayName = _resolveName(snapshot.data, user);
+        final email = _maskedEmail(user.email ?? 'غير متوفر');
 
-        return Directionality(
-          textDirection: TextDirection.rtl,
+        if (_privacyLockEnabled && !_privacyUnlocked) {
+          return Center(
+            child: ElevatedButton.icon(
+              onPressed: _unlockPrivacy,
+              icon: const Icon(Icons.lock_open),
+              label: const Text('فتح إعدادات الخصوصية'),
+            ),
+          );
+        }
+
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
           child: ListView(
+            key: ValueKey(_preset),
             padding: const EdgeInsets.all(16),
             children: [
-              _sectionHeader('نظرة عامة على الحساب', 'عرض معلوماتك الأساسية بشكل آمن.'),
               Card(
-                elevation: 1,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: ListTile(
+                  leading: CircleAvatar(backgroundColor: health.$1.withOpacity(0.12), child: Icon(Icons.privacy_tip_outlined, color: health.$1)),
+                  title: Text('مؤشر الخصوصية: $_privacyScore/100'),
+                  subtitle: Text('${health.$2}\n${health.$3}'),
+                  isThreeLine: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Wrap(
+                    spacing: 8,
+                    children: _PrivacyPreset.values.map((preset) {
+                      return ChoiceChip(
+                        label: Text(_presetLabel(preset)),
+                        selected: _preset == preset,
+                        onSelected: (_) => _applyPreset(preset),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
                 child: Column(
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.person_outline),
-                      title: const Text('الاسم الكامل'),
-                      subtitle: Text(displayName),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.email_outlined),
-                      title: const Text('البريد الإلكتروني'),
-                      subtitle: Text(email),
-                    ),
+                    ListTile(title: const Text('نظرة عامة على الحساب'), subtitle: Text(displayName)),
+                    ListTile(title: const Text('البريد الإلكتروني'), subtitle: Text(email), trailing: _badge('محلي فقط')),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _sectionHeader('إدارة الحساب', 'قم بتحديث بيانات الدخول المرتبطة بحسابك.'),
+              const SizedBox(height: 12),
               Card(
-                elevation: 1,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 child: Column(
                   children: [
                     ListTile(
-                      leading: const Icon(Icons.alternate_email),
+                      leading: const Icon(Icons.alternate_email_outlined),
                       title: const Text('تغيير البريد الإلكتروني'),
-                      subtitle: const Text('تحديث البريد بعد التحقق من الهوية.'),
-                      trailing: _emailLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_left),
+                      trailing: _emailLoading ? const CircularProgressIndicator() : const Icon(Icons.chevron_left),
                       onTap: _emailLoading ? null : () => _showChangeEmailSheet(user),
                     ),
                     const Divider(height: 1),
                     ListTile(
                       leading: const Icon(Icons.password_outlined),
-                      title: const Text('تغيير كلمة السر'),
-                      subtitle: const Text('استخدم كلمة قوية لحماية حسابك.'),
-                      trailing: _passwordLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_left),
+                      title: const Text('تغيير كلمة المرور'),
+                      trailing: _passwordLoading ? const CircularProgressIndicator() : const Icon(Icons.chevron_left),
                       onTap: _passwordLoading ? null : () => _showChangePasswordSheet(user),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _sectionHeader('عناصر الخصوصية', 'اضبط ما يتم عرضه وكيفية تنفيذ العمليات الحساسة.'),
+              const SizedBox(height: 12),
               Card(
-                elevation: 1,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 child: Column(
                   children: [
+                    SwitchListTile.adaptive(value: _hideEmail, title: const Text('إخفاء البريد الإلكتروني'), subtitle: const Text('إخفاء جزء من بريدك في الواجهة.'), secondary: _badge('محلي فقط'), onChanged: (v) => _toggleSetting(_hideEmailKey, v, (x) => _hideEmail = x)),
+                    SwitchListTile.adaptive(value: _showFullName, title: const Text('إظهار الاسم الكامل'), subtitle: const Text('إظهار الاسم الكامل بدل الاسم الأول فقط.'), secondary: _badge('محلي فقط'), onChanged: (v) => _toggleSetting(_showFullNameKey, v, (x) => _showFullName = x)),
+                    SwitchListTile.adaptive(value: _confirmSensitiveActions, title: const Text('تأكيد العمليات الحساسة'), subtitle: const Text('طلب تأكيد إضافي قبل الإجراءات المهمة.'), secondary: _badge('محلي فقط'), onChanged: (v) => _toggleSetting(_confirmSensitiveKey, v, (x) => _confirmSensitiveActions = x)),
+                    SwitchListTile.adaptive(value: _hideActivityStatus, title: const Text('إخفاء حالة النشاط'), subtitle: const Text('سيتم تطبيق هذا الإعداد محليًا.'), secondary: _badge('محلي فقط'), onChanged: (v) => _toggleSetting(_hideActivityKey, v, (x) => _hideActivityStatus = x)),
+                    SwitchListTile.adaptive(value: _allowSearchByEmail, title: const Text('السماح بالبحث عني عبر البريد'), subtitle: const Text('يتطلب ربطًا سحابيًا كاملًا لاحقًا.'), secondary: _badge('سحابي لاحقًا', cloud: true), onChanged: (v) => _toggleSetting(_allowSearchByEmailKey, v, (x) => _allowSearchByEmail = x)),
+                    SwitchListTile.adaptive(value: _privacyLockEnabled, title: const Text('قفل الخصوصية'), subtitle: const Text('طلب بصمة/‏PIN قبل الوصول أو التعديل.'), secondary: _badge('محلي فقط'), onChanged: _setPrivacyLock),
                     SwitchListTile.adaptive(
-                      value: _hideEmail,
-                      title: const Text('إخفاء البريد الإلكتروني'),
-                      subtitle: const Text('يتم إخفاء جزء من البريد في شاشة الخصوصية.'),
-                      onChanged: (value) {
-                        setState(() => _hideEmail = value);
-                        _setPrivacyPref(_hideEmailKey, value);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    SwitchListTile.adaptive(
-                      value: _showFullName,
-                      title: const Text('إظهار الاسم كامل'),
-                      subtitle: const Text('عند إيقافه يظهر الاسم الأول فقط.'),
-                      onChanged: (value) {
-                        setState(() => _showFullName = value);
-                        _setPrivacyPref(_showFullNameKey, value);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    SwitchListTile.adaptive(
-                      value: _confirmSensitiveActions,
-                      title: const Text('طلب تأكيد قبل العمليات الحساسة'),
-                      subtitle: const Text('مثل تغيير البريد أو كلمة المرور أو الحذف.'),
-                      onChanged: (value) {
-                        setState(() => _confirmSensitiveActions = value);
-                        _setPrivacyPref(_confirmSensitiveKey, value);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    SwitchListTile.adaptive(
-                      value: _hideActivityStatus,
-                      title: const Text('إخفاء حالة النشاط'),
-                      subtitle: const Text('يتم حفظ الإعداد محلياً للاستخدام المستقبلي.'),
-                      onChanged: (value) {
-                        setState(() => _hideActivityStatus = value);
-                        _setPrivacyPref(_hideActivityKey, value);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    SwitchListTile.adaptive(
-                      value: _allowSearchByEmail,
-                      title: const Text('السماح بالبحث عني عبر البريد'),
-                      subtitle: const Text('إعداد محلي قابل للتفعيل لاحقاً مع الخادم.'),
-                      onChanged: (value) {
-                        setState(() => _allowSearchByEmail = value);
-                        _setPrivacyPref(_allowSearchByEmailKey, value);
+                      value: _hideMenuEntry,
+                      title: const Text('إخفاء الخصوصية من القائمة'),
+                      subtitle: const Text('إخفاء مدخل الأمان والخصوصية من القائمة الرئيسية.'),
+                      secondary: _badge('محلي فقط'),
+                      onChanged: (value) async {
+                        if (!await _guardSensitiveEdit()) return;
+                        setState(() => _hideMenuEntry = value);
+                        await _setBool(_hideMenuKey, value);
+                        await _addSensitiveAction(value ? 'إخفاء الخصوصية من القائمة' : 'إظهار الخصوصية في القائمة');
                       },
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _sectionHeader('إدارة البيانات', 'التحكم في بياناتك المحلية وسجل العمليات الحساسة.'),
+              const SizedBox(height: 12),
               Card(
-                elevation: 1,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 child: Column(
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.download_outlined),
-                      title: const Text('تنزيل بياناتي'),
-                      subtitle: const Text('تجهيز نسخة محلية من بيانات الخصوصية بصيغة JSON.'),
-                      trailing: _exportLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_left),
-                      onTap: _exportLoading ? null : () => _exportData(user, displayName),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.restart_alt_outlined),
-                      title: const Text('مسح بيانات التطبيق'),
-                      subtitle: const Text('إعادة التفضيلات المحلية إلى القيم الافتراضية.'),
-                      trailing: _resetLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_left),
-                      onTap: _resetLoading ? null : _resetLocalData,
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.cleaning_services_outlined),
-                      title: const Text('مسح الكاش'),
-                      subtitle: const Text('حذف الملفات المؤقتة لتحسين الأداء والمساحة.'),
-                      trailing: _clearCacheLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_left),
-                      onTap: _clearCacheLoading ? null : _clearCache,
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.history_toggle_off_outlined),
-                      title: const Text('سجل النشاط الحساس'),
-                      subtitle: const Text('عرض آخر 5 عمليات حساسة تمت على هذا الجهاز.'),
-                      trailing: const Icon(Icons.chevron_left),
-                      onTap: _showActivityLog,
-                    ),
+                    ListTile(leading: const Icon(Icons.download_outlined), title: const Text('تنزيل بياناتي'), trailing: _exportLoading ? const CircularProgressIndicator() : const Icon(Icons.chevron_left), onTap: _exportLoading ? null : () => _exportData(user, displayName)),
+                    ListTile(leading: const Icon(Icons.restart_alt_outlined), title: const Text('مسح بيانات التطبيق'), trailing: _resetLoading ? const CircularProgressIndicator() : const Icon(Icons.chevron_left), onTap: _resetLoading ? null : _resetLocalData),
+                    ListTile(leading: const Icon(Icons.cleaning_services_outlined), title: const Text('مسح الكاش'), trailing: _clearCacheLoading ? const CircularProgressIndicator() : const Icon(Icons.chevron_left), onTap: _clearCacheLoading ? null : _clearCache),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _sectionHeader('منطقة الخطر', 'إجراءات حساسة تتطلب تأكيداً وقد تكون غير قابلة للتراجع.'),
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.history_toggle_off_outlined),
+                  title: const Text('سجل النشاط الحساس'),
+                  subtitle: Text(_activity.take(3).join('\n').ifEmpty('لا توجد عناصر بعد.')),
+                  isThreeLine: _activity.isNotEmpty,
+                  trailing: const Icon(Icons.chevron_left),
+                  onTap: _showActivityLog,
+                ),
+              ),
+              const SizedBox(height: 12),
               Card(
                 color: Theme.of(context).colorScheme.errorContainer.withOpacity(0.4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 child: Column(
                   children: [
+                    const ListTile(
+                      leading: Icon(Icons.warning_amber_rounded, color: Colors.red),
+                      title: Text('منطقة الخطر'),
+                      subtitle: Text('إجراءات حساسة وغير قابلة للتراجع. تعامل بحذر شديد.'),
+                    ),
                     SwitchListTile.adaptive(
                       value: _accountDeactivated,
                       activeColor: Colors.red,
-                      secondary: const Icon(Icons.pause_circle_outline, color: Colors.red),
                       title: const Text('تعطيل الحساب مؤقتًا'),
-                      subtitle: const Text('يتم إيقاف الحساب مؤقتًا دون حذف البيانات.'),
+                      subtitle: Text(_deactivatedUntil == null ? 'اختر مدة التعطيل ثم يمكنك الحذف النهائي بعد انتهاء المدة.' : 'حتى: ${_deactivatedUntil!.toLocal()}'),
                       onChanged: _toggleDeactivated,
                     ),
-                    const Divider(height: 1),
                     ListTile(
                       leading: const Icon(Icons.delete_forever, color: Colors.red),
-                      title: const Text('حذف الحساب'),
-                      subtitle: const Text('حذف نهائي غير قابل للتراجع بعد التأكيد وكلمة المرور.'),
-                      trailing: _deleteLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_left, color: Colors.red),
+                      title: const Text('حذف الحساب نهائيًا'),
+                      subtitle: Text(_deactivatedUntil != null && DateTime.now().isBefore(_deactivatedUntil!) ? 'متاح بعد انتهاء العد التنازلي للتعطيل المؤقت.' : 'يتطلب تأكيدًا قويًا وقد يطلب كلمة المرور.'),
+                      trailing: _deleteLoading ? const CircularProgressIndicator() : const Icon(Icons.chevron_left, color: Colors.red),
                       onTap: _deleteLoading ? null : () => _deleteAccount(user),
                     ),
                   ],
@@ -992,4 +923,8 @@ class _PrivacyTabState extends State<_PrivacyTab> {
       },
     );
   }
+}
+
+extension on String {
+  String ifEmpty(String fallback) => trim().isEmpty ? fallback : this;
 }
