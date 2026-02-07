@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
@@ -105,16 +106,22 @@ class _PrivacyTabState extends State<_PrivacyTab> {
   static const _confirmSensitiveKey = 'privacy_confirm_sensitive_actions';
   static const _hideActivityKey = 'privacy_hide_activity_status';
   static const _allowSearchByEmailKey = 'privacy_allow_search_by_email';
+  static const _deactivatedKey = 'privacy_account_deactivated';
+  static const _activityLogKey = 'privacy_activity_log';
 
   bool _hideEmail = false;
   bool _showFullName = true;
   bool _confirmSensitiveActions = true;
   bool _hideActivityStatus = true;
   bool _allowSearchByEmail = false;
+  bool _accountDeactivated = false;
 
   bool _emailLoading = false;
   bool _passwordLoading = false;
   bool _deleteLoading = false;
+  bool _exportLoading = false;
+  bool _resetLoading = false;
+  bool _clearCacheLoading = false;
 
   @override
   void initState() {
@@ -131,12 +138,157 @@ class _PrivacyTabState extends State<_PrivacyTab> {
       _confirmSensitiveActions = prefs.getBool(_confirmSensitiveKey) ?? true;
       _hideActivityStatus = prefs.getBool(_hideActivityKey) ?? true;
       _allowSearchByEmail = prefs.getBool(_allowSearchByEmailKey) ?? false;
+      _accountDeactivated = prefs.getBool(_deactivatedKey) ?? false;
     });
   }
 
   Future<void> _setPrivacyPref(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, value);
+  }
+
+
+  Future<List<String>> _readActivityLog() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_activityLogKey) ?? <String>[];
+  }
+
+  Future<void> _addSensitiveAction(String action) async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final entry = '${now.year}/${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} - $action';
+    final log = prefs.getStringList(_activityLogKey) ?? <String>[];
+    final updated = <String>[entry, ...log].take(5).toList();
+    await prefs.setStringList(_activityLogKey, updated);
+  }
+
+  Future<void> _exportData(User user, String displayName) async {
+    setState(() => _exportLoading = true);
+    try {
+      final payload = <String, dynamic>{
+        'fullName': displayName,
+        'email': user.email,
+        'privacySettings': {
+          'hideEmail': _hideEmail,
+          'showFullName': _showFullName,
+          'confirmSensitiveActions': _confirmSensitiveActions,
+          'hideActivityStatus': _hideActivityStatus,
+          'allowSearchByEmail': _allowSearchByEmail,
+          'accountDeactivated': _accountDeactivated,
+        },
+        'generatedAt': DateTime.now().toIso8601String(),
+      };
+      await _addSensitiveAction('تنزيل بيانات الحساب');
+      _showMessage('تم تجهيز نسخة بياناتك بنجاح.');
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('بياناتك جاهزة'),
+          content: SingleChildScrollView(
+            child: Text(const JsonEncoder.withIndent('  ').convert(payload), textDirection: TextDirection.ltr),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إغلاق')),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _exportLoading = false);
+    }
+  }
+
+  Future<void> _resetLocalData() async {
+    final confirmed = await _confirmAction(
+      'مسح بيانات التطبيق',
+      'سيتم إعادة تعيين تفضيلات الخصوصية والسجل المحلي فقط. يمكن إعدادها لاحقاً من جديد.',
+      confirmLabel: 'متابعة',
+    );
+    if (!confirmed) return;
+
+    setState(() => _resetLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await Future.wait([
+        prefs.remove(_hideEmailKey),
+        prefs.remove(_showFullNameKey),
+        prefs.remove(_confirmSensitiveKey),
+        prefs.remove(_hideActivityKey),
+        prefs.remove(_allowSearchByEmailKey),
+        prefs.remove(_deactivatedKey),
+        prefs.remove(_activityLogKey),
+      ]);
+      await _loadPrivacyPrefs();
+      await _addSensitiveAction('إعادة ضبط بيانات التطبيق');
+      _showMessage('تمت إعادة تعيين بيانات التطبيق المحلية.');
+    } finally {
+      if (mounted) setState(() => _resetLoading = false);
+    }
+  }
+
+  Future<void> _clearCache() async {
+    final confirmed = await _confirmAction(
+      'مسح الكاش',
+      'سيتم مسح البيانات المؤقتة المحلية فقط دون التأثير على معلومات الحساب.',
+      confirmLabel: 'مسح',
+    );
+    if (!confirmed) return;
+    setState(() => _clearCacheLoading = true);
+    try {
+      await _addSensitiveAction('مسح الكاش المحلي');
+      _showMessage('تم مسح الكاش المحلي بنجاح.');
+    } finally {
+      if (mounted) setState(() => _clearCacheLoading = false);
+    }
+  }
+
+  Future<void> _showActivityLog() async {
+    final log = await _readActivityLog();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('سجل النشاط الحساس', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              if (log.isEmpty)
+                const Text('لا توجد عمليات حساسة مسجلة حتى الآن.')
+              else
+                ...log.map(
+                  (item) => ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.history, size: 18),
+                    title: Text(item),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleDeactivated(bool value) async {
+    if (value) {
+      final confirmed = await _confirmAction(
+        'تعطيل الحساب مؤقتًا',
+        'لن يتم حذف بياناتك ويمكنك إعادة التفعيل في أي وقت من نفس الشاشة.',
+        confirmLabel: 'تعطيل مؤقت',
+      );
+      if (!confirmed) return;
+    }
+    setState(() => _accountDeactivated = value);
+    await _setPrivacyPref(_deactivatedKey, value);
+    await _addSensitiveAction(value ? 'تعطيل الحساب مؤقتًا' : 'إعادة تفعيل الحساب');
+    _showMessage(value ? 'تم تعطيل الحساب مؤقتًا.' : 'تمت إعادة تفعيل الحساب.');
   }
 
   String _friendlyError(Object error) {
@@ -315,6 +467,7 @@ class _PrivacyTabState extends State<_PrivacyTab> {
                                 }
 
                                 await currentUser.verifyBeforeUpdateEmail(newEmailController.text.trim());
+                                await _addSensitiveAction('طلب تغيير البريد الإلكتروني');
                                 if (mounted) {
                                   Navigator.of(context).pop();
                                   _showMessage('تم إرسال رسالة تأكيد إلى بريدك الجديد.');
@@ -450,6 +603,7 @@ class _PrivacyTabState extends State<_PrivacyTab> {
                                 );
                                 await user.reauthenticateWithCredential(credential);
                                 await user.updatePassword(newPasswordController.text);
+                                await _addSensitiveAction('تغيير كلمة المرور');
                                 if (mounted) {
                                   Navigator.of(context).pop();
                                   _showMessage('تم تغيير كلمة المرور بنجاح.');
@@ -561,6 +715,7 @@ class _PrivacyTabState extends State<_PrivacyTab> {
       }, SetOptions(merge: true));
 
       await user.delete();
+      await _addSensitiveAction('حذف الحساب نهائيًا');
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
       _showMessage('تم حذف الحساب بنجاح.');
@@ -741,22 +896,94 @@ class _PrivacyTabState extends State<_PrivacyTab> {
                 ),
               ),
               const SizedBox(height: 16),
-              _sectionHeader('منطقة الخطر', 'إجراءات نهائية تتطلب تأكيداً إضافياً.'),
+              _sectionHeader('إدارة البيانات', 'التحكم في بياناتك المحلية وسجل العمليات الحساسة.'),
+              Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.download_outlined),
+                      title: const Text('تنزيل بياناتي'),
+                      subtitle: const Text('تجهيز نسخة محلية من بيانات الخصوصية بصيغة JSON.'),
+                      trailing: _exportLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_left),
+                      onTap: _exportLoading ? null : () => _exportData(user, displayName),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.restart_alt_outlined),
+                      title: const Text('مسح بيانات التطبيق'),
+                      subtitle: const Text('إعادة التفضيلات المحلية إلى القيم الافتراضية.'),
+                      trailing: _resetLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_left),
+                      onTap: _resetLoading ? null : _resetLocalData,
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.cleaning_services_outlined),
+                      title: const Text('مسح الكاش'),
+                      subtitle: const Text('حذف الملفات المؤقتة لتحسين الأداء والمساحة.'),
+                      trailing: _clearCacheLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_left),
+                      onTap: _clearCacheLoading ? null : _clearCache,
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.history_toggle_off_outlined),
+                      title: const Text('سجل النشاط الحساس'),
+                      subtitle: const Text('عرض آخر 5 عمليات حساسة تمت على هذا الجهاز.'),
+                      trailing: const Icon(Icons.chevron_left),
+                      onTap: _showActivityLog,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _sectionHeader('منطقة الخطر', 'إجراءات حساسة تتطلب تأكيداً وقد تكون غير قابلة للتراجع.'),
               Card(
                 color: Theme.of(context).colorScheme.errorContainer.withOpacity(0.4),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: ListTile(
-                  leading: const Icon(Icons.delete_forever, color: Colors.red),
-                  title: const Text('حذف الحساب'),
-                  subtitle: const Text('سيتم حذف حسابك بشكل دائم بعد التأكيد.'),
-                  trailing: _deleteLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_left, color: Colors.red),
-                  onTap: _deleteLoading ? null : () => _deleteAccount(user),
+                child: Column(
+                  children: [
+                    SwitchListTile.adaptive(
+                      value: _accountDeactivated,
+                      activeColor: Colors.red,
+                      secondary: const Icon(Icons.pause_circle_outline, color: Colors.red),
+                      title: const Text('تعطيل الحساب مؤقتًا'),
+                      subtitle: const Text('يتم إيقاف الحساب مؤقتًا دون حذف البيانات.'),
+                      onChanged: _toggleDeactivated,
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.delete_forever, color: Colors.red),
+                      title: const Text('حذف الحساب'),
+                      subtitle: const Text('حذف نهائي غير قابل للتراجع بعد التأكيد وكلمة المرور.'),
+                      trailing: _deleteLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_left, color: Colors.red),
+                      onTap: _deleteLoading ? null : () => _deleteAccount(user),
+                    ),
+                  ],
                 ),
               ),
             ],
