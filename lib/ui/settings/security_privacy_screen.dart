@@ -103,10 +103,14 @@ class _PrivacyTabState extends State<_PrivacyTab> {
   static const _hideEmailKey = 'privacy_hide_email';
   static const _showFullNameKey = 'privacy_show_full_name';
   static const _confirmSensitiveKey = 'privacy_confirm_sensitive_actions';
+  static const _hideActivityKey = 'privacy_hide_activity_status';
+  static const _allowSearchByEmailKey = 'privacy_allow_search_by_email';
 
   bool _hideEmail = false;
   bool _showFullName = true;
   bool _confirmSensitiveActions = true;
+  bool _hideActivityStatus = true;
+  bool _allowSearchByEmail = false;
 
   bool _emailLoading = false;
   bool _passwordLoading = false;
@@ -125,6 +129,8 @@ class _PrivacyTabState extends State<_PrivacyTab> {
       _hideEmail = prefs.getBool(_hideEmailKey) ?? false;
       _showFullName = prefs.getBool(_showFullNameKey) ?? true;
       _confirmSensitiveActions = prefs.getBool(_confirmSensitiveKey) ?? true;
+      _hideActivityStatus = prefs.getBool(_hideActivityKey) ?? true;
+      _allowSearchByEmail = prefs.getBool(_allowSearchByEmailKey) ?? false;
     });
   }
 
@@ -191,178 +197,292 @@ class _PrivacyTabState extends State<_PrivacyTab> {
   Future<void> _showChangeEmailSheet(User user) async {
     final newEmailController = TextEditingController();
     final passwordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (context) {
         final hasPasswordProvider = _hasPasswordProvider(user);
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            MediaQuery.of(context).viewInsets.bottom + 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('تغيير البريد الإلكتروني', textAlign: TextAlign.right),
-              const SizedBox(height: 12),
-              TextField(
-                controller: newEmailController,
-                keyboardType: TextInputType.emailAddress,
-                textDirection: TextDirection.rtl,
-                decoration: const InputDecoration(labelText: 'البريد الإلكتروني الجديد'),
-              ),
-              if (hasPasswordProvider) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  textDirection: TextDirection.rtl,
-                  decoration: const InputDecoration(labelText: 'كلمة المرور الحالية'),
+        bool loading = false;
+        String? formError;
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: StatefulBuilder(
+            builder: (context, setModalState) => Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('تغيير البريد الإلكتروني', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 6),
+                    Text(
+                      'سيتم إرسال رسالة تحقق إلى البريد الجديد قبل اعتماده.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      initialValue: user.email ?? 'غير متوفر',
+                      enabled: false,
+                      decoration: const InputDecoration(
+                        labelText: 'البريد الحالي',
+                        prefixIcon: Icon(Icons.mark_email_read_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: newEmailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'البريد الإلكتروني الجديد',
+                        prefixIcon: Icon(Icons.alternate_email),
+                      ),
+                      validator: (value) {
+                        final nextEmail = (value ?? '').trim();
+                        final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                        if (nextEmail.isEmpty) return 'يرجى إدخال البريد الإلكتروني الجديد.';
+                        if (!emailRegex.hasMatch(nextEmail)) return 'يرجى إدخال بريد إلكتروني صالح.';
+                        if (nextEmail == user.email) return 'البريد الجديد مطابق للبريد الحالي.';
+                        return null;
+                      },
+                    ),
+                    if (hasPasswordProvider) ...[
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'كلمة المرور الحالية',
+                          prefixIcon: Icon(Icons.lock_outline),
+                        ),
+                        validator: (value) {
+                          if ((value ?? '').isEmpty) return 'أدخل كلمة المرور الحالية لإتمام العملية.';
+                          return null;
+                        },
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'هذا الحساب لا يستخدم كلمة مرور. يرجى تسجيل الخروج ثم تسجيل الدخول مرة أخرى قبل تغيير البريد.',
+                      ),
+                    ],
+                    if (formError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(formError!, style: const TextStyle(color: Colors.red)),
+                    ],
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: loading
+                          ? null
+                          : () async {
+                              if (!(formKey.currentState?.validate() ?? false)) return;
+                              if (_confirmSensitiveActions) {
+                                final confirmed = await _confirmAction('تأكيد العملية', 'هل تريد تغيير البريد الإلكتروني؟');
+                                if (!confirmed) return;
+                              }
+                              setModalState(() {
+                                loading = true;
+                                formError = null;
+                              });
+                              setState(() => _emailLoading = true);
+                              try {
+                                await user.reload();
+                                final currentUser = FirebaseAuth.instance.currentUser;
+                                if (currentUser == null) {
+                                  setModalState(() => formError = 'يرجى تسجيل الدخول أولاً.');
+                                  return;
+                                }
+                                if (_hasPasswordProvider(currentUser)) {
+                                  final email = currentUser.email;
+                                  if (email == null) {
+                                    setModalState(() => formError = 'تعذر قراءة البريد الحالي.');
+                                    return;
+                                  }
+                                  final credential = EmailAuthProvider.credential(
+                                    email: email,
+                                    password: passwordController.text,
+                                  );
+                                  await currentUser.reauthenticateWithCredential(credential);
+                                } else {
+                                  setModalState(() {
+                                    formError = 'لإكمال التحقق الأمني، سجّل الخروج ثم سجّل الدخول مرة أخرى.';
+                                  });
+                                  return;
+                                }
+
+                                await currentUser.verifyBeforeUpdateEmail(newEmailController.text.trim());
+                                if (mounted) {
+                                  Navigator.of(context).pop();
+                                  _showMessage('تم إرسال رسالة تأكيد إلى بريدك الجديد.');
+                                }
+                              } catch (error) {
+                                setModalState(() => formError = _friendlyError(error));
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _emailLoading = false);
+                                }
+                                setModalState(() => loading = false);
+                              }
+                            },
+                      icon: loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_circle_outline),
+                      label: const Text('تحديث البريد الإلكتروني'),
+                    ),
+                  ],
                 ),
-              ] else
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text(
-                    'هذا الحساب لا يستخدم كلمة مرور. لحمايتك، يرجى تسجيل الخروج ثم تسجيل الدخول مرة أخرى قبل تغيير البريد.',
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('متابعة'),
               ),
-            ],
+            ),
           ),
         );
       },
     );
-
-    final nextEmail = newEmailController.text.trim();
-    final currentPassword = passwordController.text;
-    if (nextEmail.isEmpty) return;
-    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    if (!emailRegex.hasMatch(nextEmail)) {
-      _showMessage('يرجى إدخال بريد إلكتروني صالح.');
-      return;
-    }
-    if (_confirmSensitiveActions) {
-      final confirmed = await _confirmAction('تأكيد العملية', 'هل تريد تغيير البريد الإلكتروني؟');
-      if (!confirmed) return;
-    }
-
-    setState(() => _emailLoading = true);
-    try {
-      await user.reload();
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        _showMessage('يرجى تسجيل الدخول أولاً.');
-        return;
-      }
-      if (_hasPasswordProvider(currentUser)) {
-        final email = currentUser.email;
-        if (email == null || currentPassword.isEmpty) {
-          _showMessage('أدخل كلمة المرور الحالية لإكمال العملية.');
-          return;
-        }
-        final credential = EmailAuthProvider.credential(email: email, password: currentPassword);
-        await currentUser.reauthenticateWithCredential(credential);
-      } else {
-        _showMessage('لإكمال التحقق الأمني، سجّل الخروج ثم سجّل الدخول مرة أخرى، ثم أعد المحاولة.');
-        return;
-      }
-
-      await currentUser.verifyBeforeUpdateEmail(nextEmail);
-      _showMessage('تم إرسال رسالة تأكيد إلى بريدك الجديد.');
-      if (mounted) setState(() {});
-    } catch (error) {
-      _showMessage(_friendlyError(error));
-    } finally {
-      if (mounted) setState(() => _emailLoading = false);
-    }
+    newEmailController.dispose();
+    passwordController.dispose();
   }
 
   Future<void> _showChangePasswordSheet(User user) async {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('تغيير كلمة السر', textAlign: TextAlign.right),
-            const SizedBox(height: 12),
-            TextField(
-              controller: currentPasswordController,
-              obscureText: true,
-              textDirection: TextDirection.rtl,
-              decoration: const InputDecoration(labelText: 'كلمة المرور الحالية'),
+      showDragHandle: true,
+      builder: (context) {
+        bool loading = false;
+        String? formError;
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: StatefulBuilder(
+            builder: (context, setModalState) => Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('تغيير كلمة السر', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 6),
+                    Text(
+                      'اختر كلمة مرور قوية لا تقل عن 6 أحرف.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: currentPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'كلمة المرور الحالية',
+                        prefixIcon: Icon(Icons.lock_outline),
+                      ),
+                      validator: (value) => (value ?? '').isEmpty ? 'أدخل كلمة المرور الحالية.' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: newPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'كلمة المرور الجديدة',
+                        prefixIcon: Icon(Icons.password_outlined),
+                      ),
+                      validator: (value) {
+                        if ((value ?? '').isEmpty) return 'أدخل كلمة المرور الجديدة.';
+                        if ((value ?? '').length < 6) return 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: confirmPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'تأكيد كلمة المرور الجديدة',
+                        prefixIcon: Icon(Icons.verified_user_outlined),
+                      ),
+                      validator: (value) {
+                        if ((value ?? '') != newPasswordController.text) {
+                          return 'تأكيد كلمة المرور غير مطابق.';
+                        }
+                        return null;
+                      },
+                    ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(formError!, style: const TextStyle(color: Colors.red)),
+                    ],
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: loading
+                          ? null
+                          : () async {
+                              if (!(formKey.currentState?.validate() ?? false)) return;
+                              if (_confirmSensitiveActions) {
+                                final confirmed = await _confirmAction('تأكيد العملية', 'هل تريد تغيير كلمة المرور؟');
+                                if (!confirmed) return;
+                              }
+                              setModalState(() {
+                                loading = true;
+                                formError = null;
+                              });
+                              setState(() => _passwordLoading = true);
+                              try {
+                                if (!_hasPasswordProvider(user) || user.email == null) {
+                                  setModalState(() {
+                                    formError = 'هذا الحساب لا يستخدم كلمة مرور. يرجى تسجيل الدخول بطريقة الحساب الأساسية.';
+                                  });
+                                  return;
+                                }
+                                final credential = EmailAuthProvider.credential(
+                                  email: user.email!,
+                                  password: currentPasswordController.text,
+                                );
+                                await user.reauthenticateWithCredential(credential);
+                                await user.updatePassword(newPasswordController.text);
+                                if (mounted) {
+                                  Navigator.of(context).pop();
+                                  _showMessage('تم تغيير كلمة المرور بنجاح.');
+                                }
+                              } catch (error) {
+                                setModalState(() => formError = _friendlyError(error));
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _passwordLoading = false);
+                                }
+                                setModalState(() => loading = false);
+                              }
+                            },
+                      icon: loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_circle_outline),
+                      label: const Text('تحديث كلمة المرور'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: newPasswordController,
-              obscureText: true,
-              textDirection: TextDirection.rtl,
-              decoration: const InputDecoration(labelText: 'كلمة المرور الجديدة'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: confirmPasswordController,
-              obscureText: true,
-              textDirection: TextDirection.rtl,
-              decoration: const InputDecoration(labelText: 'تأكيد كلمة المرور الجديدة'),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('متابعة'),
-            ),
-          ],
+          ),
         ),
-      ),
+      },
     );
-
-    final currentPassword = currentPasswordController.text;
-    final newPassword = newPasswordController.text;
-    final confirm = confirmPasswordController.text;
-    if (currentPassword.isEmpty && newPassword.isEmpty && confirm.isEmpty) return;
-    if (newPassword != confirm) {
-      _showMessage('تأكيد كلمة المرور غير مطابق.');
-      return;
-    }
-    if (newPassword.length < 6) {
-      _showMessage('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.');
-      return;
-    }
-    if (_confirmSensitiveActions) {
-      final confirmed = await _confirmAction('تأكيد العملية', 'هل تريد تغيير كلمة المرور؟');
-      if (!confirmed) return;
-    }
-
-    setState(() => _passwordLoading = true);
-    try {
-      if (!_hasPasswordProvider(user) || user.email == null) {
-        _showMessage('هذا الحساب لا يستخدم كلمة مرور. يرجى تسجيل الدخول بطريقة الحساب الأساسية لتحديث بيانات الأمان.');
-        return;
-      }
-      final credential = EmailAuthProvider.credential(email: user.email!, password: currentPassword);
-      await user.reauthenticateWithCredential(credential);
-      await user.updatePassword(newPassword);
-      _showMessage('تم تغيير كلمة المرور بنجاح.');
-    } catch (error) {
-      _showMessage(_friendlyError(error));
-    } finally {
-      if (mounted) setState(() => _passwordLoading = false);
-    }
+    currentPasswordController.dispose();
+    newPasswordController.dispose();
+    confirmPasswordController.dispose();
   }
 
   Future<void> _deleteAccount(User user) async {
@@ -471,6 +591,20 @@ class _PrivacyTabState extends State<_PrivacyTab> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Widget _sectionHeader(String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(bottom: 8, top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 2),
+          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -485,100 +619,148 @@ class _PrivacyTabState extends State<_PrivacyTab> {
         final displayName = _resolveName(profile, user);
         final email = _maskedEmail(user.email ?? 'غير محدد');
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _sectionHeader('نظرة عامة على الحساب', 'عرض معلوماتك الأساسية بشكل آمن.'),
+              Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('نظرة عامة على الحساب', textAlign: TextAlign.right),
-                    const SizedBox(height: 12),
                     ListTile(
                       leading: const Icon(Icons.person_outline),
-                      title: const Text('الاسم واللقب', textAlign: TextAlign.right),
-                      subtitle: Text(displayName, textAlign: TextAlign.right),
+                      title: const Text('الاسم الكامل'),
+                      subtitle: Text(displayName),
                     ),
+                    const Divider(height: 1),
                     ListTile(
                       leading: const Icon(Icons.email_outlined),
-                      title: const Text('البريد الإلكتروني', textAlign: TextAlign.right),
-                      subtitle: Text(email, textAlign: TextAlign.right),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: _emailLoading ? null : () => _showChangeEmailSheet(user),
-                      icon: _emailLoading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.alternate_email),
-                      label: const Text('تغيير البريد الإلكتروني'),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: _passwordLoading ? null : () => _showChangePasswordSheet(user),
-                      icon: _passwordLoading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.password),
-                      label: const Text('تغيير كلمة السر'),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _deleteLoading ? null : () => _deleteAccount(user),
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                      icon: _deleteLoading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.delete_forever),
-                      label: const Text('حذف الحساب'),
+                      title: const Text('البريد الإلكتروني'),
+                      subtitle: Text(email),
                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Column(
-                children: [
-                  SwitchListTile.adaptive(
-                    value: _hideEmail,
-                    title: const Text('إخفاء البريد الإلكتروني', textAlign: TextAlign.right),
-                    onChanged: (value) {
-                      setState(() => _hideEmail = value);
-                      _setPrivacyPref(_hideEmailKey, value);
-                    },
-                  ),
-                  SwitchListTile.adaptive(
-                    value: _showFullName,
-                    title: const Text('إظهار الاسم كامل', textAlign: TextAlign.right),
-                    onChanged: (value) {
-                      setState(() => _showFullName = value);
-                      _setPrivacyPref(_showFullNameKey, value);
-                    },
-                  ),
-                  SwitchListTile.adaptive(
-                    value: _confirmSensitiveActions,
-                    title: const Text('طلب تأكيد قبل العمليات الحساسة', textAlign: TextAlign.right),
-                    onChanged: (value) {
-                      setState(() => _confirmSensitiveActions = value);
-                      _setPrivacyPref(_confirmSensitiveKey, value);
-                    },
-                  ),
-                ],
+              const SizedBox(height: 16),
+              _sectionHeader('إدارة الحساب', 'قم بتحديث بيانات الدخول المرتبطة بحسابك.'),
+              Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.alternate_email),
+                      title: const Text('تغيير البريد الإلكتروني'),
+                      subtitle: const Text('تحديث البريد بعد التحقق من الهوية.'),
+                      trailing: _emailLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_left),
+                      onTap: _emailLoading ? null : () => _showChangeEmailSheet(user),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.password_outlined),
+                      title: const Text('تغيير كلمة السر'),
+                      subtitle: const Text('استخدم كلمة قوية لحماية حسابك.'),
+                      trailing: _passwordLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chevron_left),
+                      onTap: _passwordLoading ? null : () => _showChangePasswordSheet(user),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              _sectionHeader('عناصر الخصوصية', 'اضبط ما يتم عرضه وكيفية تنفيذ العمليات الحساسة.'),
+              Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Column(
+                  children: [
+                    SwitchListTile.adaptive(
+                      value: _hideEmail,
+                      title: const Text('إخفاء البريد الإلكتروني'),
+                      subtitle: const Text('يتم إخفاء جزء من البريد في شاشة الخصوصية.'),
+                      onChanged: (value) {
+                        setState(() => _hideEmail = value);
+                        _setPrivacyPref(_hideEmailKey, value);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    SwitchListTile.adaptive(
+                      value: _showFullName,
+                      title: const Text('إظهار الاسم كامل'),
+                      subtitle: const Text('عند إيقافه يظهر الاسم الأول فقط.'),
+                      onChanged: (value) {
+                        setState(() => _showFullName = value);
+                        _setPrivacyPref(_showFullNameKey, value);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    SwitchListTile.adaptive(
+                      value: _confirmSensitiveActions,
+                      title: const Text('طلب تأكيد قبل العمليات الحساسة'),
+                      subtitle: const Text('مثل تغيير البريد أو كلمة المرور أو الحذف.'),
+                      onChanged: (value) {
+                        setState(() => _confirmSensitiveActions = value);
+                        _setPrivacyPref(_confirmSensitiveKey, value);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    SwitchListTile.adaptive(
+                      value: _hideActivityStatus,
+                      title: const Text('إخفاء حالة النشاط'),
+                      subtitle: const Text('يتم حفظ الإعداد محلياً للاستخدام المستقبلي.'),
+                      onChanged: (value) {
+                        setState(() => _hideActivityStatus = value);
+                        _setPrivacyPref(_hideActivityKey, value);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    SwitchListTile.adaptive(
+                      value: _allowSearchByEmail,
+                      title: const Text('السماح بالبحث عني عبر البريد'),
+                      subtitle: const Text('إعداد محلي قابل للتفعيل لاحقاً مع الخادم.'),
+                      onChanged: (value) {
+                        setState(() => _allowSearchByEmail = value);
+                        _setPrivacyPref(_allowSearchByEmailKey, value);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              _sectionHeader('منطقة الخطر', 'إجراءات نهائية تتطلب تأكيداً إضافياً.'),
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer.withOpacity(0.4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Colors.red),
+                  title: const Text('حذف الحساب'),
+                  subtitle: const Text('سيتم حذف حسابك بشكل دائم بعد التأكيد.'),
+                  trailing: _deleteLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.chevron_left, color: Colors.red),
+                  onTap: _deleteLoading ? null : () => _deleteAccount(user),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
