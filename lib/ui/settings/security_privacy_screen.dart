@@ -476,6 +476,7 @@ class _PrivacyTabState extends State<_PrivacyTab> {
                 ),
               ),
             ),
+          ),
           );
       },
     );
