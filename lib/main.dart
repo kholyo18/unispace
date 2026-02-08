@@ -9388,6 +9388,38 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
     return int.tryParse(value.toString()) ?? fallback;
   }
 
+  Widget _quickCalcActionButton({
+    required VoidCallback? onPressed,
+    VoidCallback? onLongPress,
+    required IconData icon,
+    required String label,
+    required double horizontalPadding,
+  }) {
+    return FilledButton(
+      onPressed: onPressed,
+      onLongPress: onLongPress,
+      style: FilledButton.styleFrom(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -9411,31 +9443,41 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
             );
           }),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              FilledButton.icon(
-                onPressed: _add,
-                icon: const Icon(Icons.add),
-                label: Text(S.of(context).add),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _calc,
-                icon: const Icon(
-                  Icons.calculate,
-                ),
-                label: Text(S.of(context).calculate),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                  onPressed: _saveState,
-                  onLongPress: _clearSavedState,
-                  icon: const Icon(Icons.save),
-                  label: Text(
-                    S.of(context).save,
-                  )),
-              const Spacer(),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontalPadding = constraints.maxWidth < 360 ? 8.0 : 12.0;
+              return Row(
+                children: [
+                  Expanded(
+                    child: _quickCalcActionButton(
+                      onPressed: _add,
+                      icon: Icons.add,
+                      label: S.of(context).add,
+                      horizontalPadding: horizontalPadding,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _quickCalcActionButton(
+                      onPressed: _calc,
+                      icon: Icons.calculate,
+                      label: S.of(context).calculate,
+                      horizontalPadding: horizontalPadding,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _quickCalcActionButton(
+                      onPressed: _saveState,
+                      onLongPress: _clearSavedState,
+                      icon: Icons.save,
+                      label: S.of(context).save,
+                      horizontalPadding: horizontalPadding,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
           Column(
