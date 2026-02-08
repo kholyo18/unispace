@@ -288,15 +288,19 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
     final app = UniSpaceApp.of(context);
     final theme = Theme.of(context);
 
     return SafeArea(
       child: Drawer(
-        child: ValueListenableBuilder<UserProfileData>(
-          valueListenable: UserProfileService.instance.notifier,
-          builder: (context, profile, _) {
+        child: StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.userChanges(),
+          initialData: FirebaseAuth.instance.currentUser,
+          builder: (context, authSnapshot) {
+            final user = authSnapshot.data;
+            return ValueListenableBuilder<UserProfileData>(
+              valueListenable: UserProfileService.instance.notifier,
+              builder: (context, profile, _) {
             final displayName = user?.displayName ??
                 user?.email?.split('@').first ??
                 S.of(context).guestUser;
@@ -740,6 +744,8 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                 ),
                 const SizedBox(height: 12),
               ],
+            );
+              },
             );
           },
         ),
