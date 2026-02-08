@@ -460,20 +460,6 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                 //     );
                 //   },
                 // ),
-                if (!_hidePrivacyEntry)
-                  _drawerItem(
-                    context,
-                    icon: Icons.security_outlined,
-                    title: 'الأمان و الخصوصية',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const SecurityPrivacyScreen(),
-                        ),
-                      ).then((_) => _loadPrivacyDrawerVisibility());
-                    },
-                  ),
                 // _drawerItem(
                 //   context,
                 //   icon: Icons.privacy_tip_outlined,
@@ -650,6 +636,20 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     );
                   },
                 ),
+                if (!_hidePrivacyEntry)
+                  _drawerItem(
+                    context,
+                    icon: Icons.security_outlined,
+                    title: 'الأمان و الخصوصية',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SecurityPrivacyScreen(),
+                        ),
+                      ).then((_) => _loadPrivacyDrawerVisibility());
+                    },
+                  ),
                 // _drawerItem(
                 //   context,
                 //   icon: Icons.star_rate_outlined,
