@@ -1211,12 +1211,16 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  Future<void> _signInWithGoogle({bool useAnotherAccount = false}) async {
+  Future<void> _signInWithGoogle() async {
     setState(() => googleLoading = true);
     try {
       // تأكد من إضافة SHA-1/SHA-256 في Firebase لكل من debug/release عند الحاجة.
-      if (useAnotherAccount) {
-        await _googleSignIn.signOut();
+      await _googleSignIn.signOut();
+      try {
+        await _googleSignIn.disconnect();
+      } catch (e, stackTrace) {
+        debugPrint('Google disconnect skipped: $e');
+        debugPrintStack(stackTrace: stackTrace);
       }
 
       final googleUser = await _googleSignIn.signIn();
@@ -1234,7 +1238,8 @@ class _SignInScreenState extends State<SignInScreen> {
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-      final authResult = await FirebaseAuth.instance.signInWithCredential(credential);
+      final authResult =
+          await FirebaseAuth.instance.signInWithCredential(credential);
       final user = authResult.user;
       if (user != null) {
         await SessionService.instance.initSession(user.uid);
@@ -1258,10 +1263,6 @@ class _SignInScreenState extends State<SignInScreen> {
     } finally {
       if (mounted) setState(() => googleLoading = false);
     }
-  }
-
-  Future<void> _signInWithAnotherGoogleAccount() async {
-    await _signInWithGoogle(useAnotherAccount: true);
   }
 
   Future<void> _register() async {
@@ -1413,13 +1414,6 @@ class _SignInScreenState extends State<SignInScreen> {
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                TextButton(
-                  onPressed: loading || googleLoading
-                      ? null
-                      : _signInWithAnotherGoogleAccount,
-                  child: const Text('استخدام حساب آخر'),
                 ),
               ]),
             ),
