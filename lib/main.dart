@@ -10529,7 +10529,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   late final TabController _tabController;
   late SemesterModel _semester1;
   late SemesterModel _semester2;
-  late final GradesLocalStore _gradesStore;
+  late GradesLocalStore _gradesStore;
   final Set<String> _loadedModuleStates = {};
 
   int currentIndex = 0; // ← هذا يمثل index الحالي
@@ -10537,14 +10537,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   @override
   void initState() {
     super.initState();
-    _gradesStore = GradesLocalStore(
-      scope: GradesStorageScope(
-        collegeId: widget.collegeId,
-        departmentId: widget.departmentId,
-        specialtyId: widget.specialtyId,
-        level: widget.level,
-      ),
-    );
+    _initializeGradesStore();
     _tabController = TabController(length: 2, vsync: this);
     _initSemesters();
     Future.microtask(() async {
@@ -10561,10 +10554,17 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
         await loadSemesterNotes();
       });
     });
+  }
 
-
-
-
+  void _initializeGradesStore() {
+    _gradesStore = GradesLocalStore(
+      scope: GradesStorageScope(
+        collegeId: widget.collegeId,
+        departmentId: widget.departmentId,
+        specialtyId: widget.specialtyId,
+        level: widget.level,
+      ),
+    );
   }
 
 
@@ -10669,8 +10669,16 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
   @override
   void didUpdateWidget(covariant StudiesTableScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.semester1Modules != widget.semester1Modules ||
-        oldWidget.semester2Modules != widget.semester2Modules) {
+    final trackChanged = oldWidget.collegeId != widget.collegeId ||
+        oldWidget.departmentId != widget.departmentId ||
+        oldWidget.specialtyId != widget.specialtyId ||
+        oldWidget.level != widget.level;
+    final modulesChanged = oldWidget.semester1Modules != widget.semester1Modules ||
+        oldWidget.semester2Modules != widget.semester2Modules;
+    if (trackChanged || modulesChanged) {
+      if (trackChanged) {
+        _initializeGradesStore();
+      }
       _initSemesters();
       _loadedModuleStates.clear();
       Future.microtask(() async {
@@ -10842,8 +10850,10 @@ class GradesStorageScope {
 
   String _sanitize(String value) {
     final normalized = value.trim().toLowerCase();
-    final cleaned = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
-    return cleaned.replaceAll(RegExp(r'^_+|_+$'), '');
+    if (normalized.isEmpty) return '';
+    // Keep non-latin identifiers stable (e.g. Arabic) to avoid collisions
+    // across tracks that would otherwise be reduced to empty/unknown values.
+    return Uri.encodeComponent(normalized);
   }
 
   String get storageKey {
@@ -10861,6 +10871,7 @@ class GradesStorageScope {
 }
 
 class GradesLocalStore {
+  static const bool _debugGradeStorageKeys = false;
   static const String _globalStorageKey = 'unispace_grades_v1';
   static const String _modulesStoragePrefix = 'modules_';
   static const String _scopedStoragePrefix = 'unispace_grades_v2_';
@@ -10893,6 +10904,9 @@ class GradesLocalStore {
   Future<Map<String, dynamic>> _loadAll() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
+    if (_debugGradeStorageKeys) {
+      debugPrint('GRADES_LOAD_ALL key=$_storageKey');
+    }
     if (raw == null || raw.isEmpty) {
       return <String, dynamic>{};
     }
@@ -10918,6 +10932,9 @@ class GradesLocalStore {
 
   Future<void> _saveAll(Map<String, dynamic> data) async {
     final prefs = await SharedPreferences.getInstance();
+    if (_debugGradeStorageKeys) {
+      debugPrint('GRADES_SAVE_ALL key=$_storageKey entries=${data.length}');
+    }
     try {
       await prefs.setString(_storageKey, jsonEncode(data));
     } catch (error, stackTrace) {
@@ -10997,7 +11014,11 @@ class GradesLocalStore {
       ) async {
     await _migrateLegacyGradeEntryIfNeeded(semester, moduleId);
     final all = await _loadAll();
-    final entry = all[_entryKey(semester, moduleId)];
+    final entryKey = _entryKey(semester, moduleId);
+    if (_debugGradeStorageKeys) {
+      debugPrint('GRADES_LOAD_GRADE key=$_storageKey entry=$entryKey');
+    }
+    final entry = all[entryKey];
     if (entry is! Map) {
       return null;
     }
@@ -11045,6 +11066,9 @@ class GradesLocalStore {
             cred != 0;
 
     final key = _entryKey(semester, moduleId);
+    if (_debugGradeStorageKeys) {
+      debugPrint('GRADES_SAVE_GRADE key=$_storageKey entry=$key');
+    }
 
     if (!hasValues) {
       all.remove(key);
