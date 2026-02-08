@@ -32,18 +32,23 @@ class PrivacyAccountData {
 }
 
 class PrivacyAccountRepository {
+  static const displayNameKey = 'displayName';
   static const firstNameKey = 'privacy_account_first_name';
   static const lastNameKey = 'privacy_account_last_name';
   static const emailKey = 'privacy_account_email';
-  static const lastNameChangeAtKey = 'privacy_account_last_name_change_at';
+  static const lastNameChangeAtKey = 'lastNameChangeAt';
 
   String? _userScope(User? user) {
     final uid = user?.uid.trim();
     if (uid != null && uid.isNotEmpty) return uid;
     final email = user?.email?.trim().toLowerCase();
-    if (email != null && email.isNotEmpty) return email;
+    if (email != null && email.isNotEmpty) {
+      return email.codeUnits.map((value) => value.toRadixString(16)).join();
+    }
     return null;
   }
+
+  String? currentUserScope() => _userScope(FirebaseAuth.instance.currentUser);
 
   String _scopedKey(String baseKey, User? user) {
     final scope = _userScope(user);
@@ -54,13 +59,14 @@ class PrivacyAccountRepository {
   Future<PrivacyAccountData> load() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
-    final fallbackName = user?.displayName?.trim() ?? '';
+    final scopedDisplayName = prefs.getString(_scopedKey(displayNameKey, user))?.trim();
+    final fallbackName = (scopedDisplayName?.isNotEmpty == true)
+        ? scopedDisplayName!
+        : user?.displayName?.trim() ?? '';
     final parts = fallbackName.split(RegExp(r'\s+')).where((item) => item.isNotEmpty).toList();
 
-    final first =
-        prefs.getString(_scopedKey(firstNameKey, user))?.trim() ?? prefs.getString(firstNameKey)?.trim();
-    final last =
-        prefs.getString(_scopedKey(lastNameKey, user))?.trim() ?? prefs.getString(lastNameKey)?.trim();
+    final first = prefs.getString(_scopedKey(firstNameKey, user))?.trim();
+    final last = prefs.getString(_scopedKey(lastNameKey, user))?.trim();
 
     final firstName = first?.isNotEmpty == true
         ? first!
@@ -74,15 +80,11 @@ class PrivacyAccountRepository {
             : '';
 
     final scopedEmail = prefs.getString(_scopedKey(emailKey, user))?.trim();
-    final globalEmail = prefs.getString(emailKey)?.trim();
     final email = (scopedEmail?.isNotEmpty == true)
         ? scopedEmail!
-        : (globalEmail?.isNotEmpty == true)
-            ? globalEmail!
         : (user?.email?.trim() ?? '');
 
-    final rawLastChange =
-        prefs.getString(_scopedKey(lastNameChangeAtKey, user)) ?? prefs.getString(lastNameChangeAtKey);
+    final rawLastChange = prefs.getString(_scopedKey(lastNameChangeAtKey, user));
     final lastNameChangeAt = rawLastChange == null ? null : DateTime.tryParse(rawLastChange);
 
     return PrivacyAccountData(
@@ -101,6 +103,7 @@ class PrivacyAccountRepository {
 
     await prefs.setString(_scopedKey(firstNameKey, user), first);
     await prefs.setString(_scopedKey(lastNameKey, user), last);
+    await prefs.setString(_scopedKey(displayNameKey, user), [first, last].where((item) => item.isNotEmpty).join(' ').trim());
     await prefs.setString(_scopedKey(lastNameChangeAtKey, user), changedAt.toIso8601String());
 
     if (user != null) {
