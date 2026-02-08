@@ -1,7 +1,13 @@
 import 'package:UniSpace/generated/l10n.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:local_auth/local_auth.dart';
 
+import '../../../models/security_audit.dart';
+import '../../../services/security_audit_service.dart';
+import '../session_service.dart';
 import 'privacy_account_repository.dart';
 
 class PrivacyAccountOverviewTab extends StatefulWidget {
@@ -30,6 +36,9 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
   bool _showConfirmPassword = false;
   bool _newPasswordTouched = false;
   bool _confirmPasswordTouched = false;
+  bool _passwordExpanded = false;
+  bool _auditLoading = true;
+  SecurityAudit? _lastPasswordAudit;
 
   @override
   void initState() {
@@ -63,10 +72,13 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
 
   Future<void> _load() async {
     final data = await _repository.load();
+    final audit = await SecurityAuditService.instance.loadLastPasswordChange();
     if (!mounted) return;
     setState(() {
       _data = data;
+      _lastPasswordAudit = audit;
       _loading = false;
+      _auditLoading = false;
     });
   }
 
@@ -137,9 +149,10 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     int score = 0;
     if (value.length >= 8) score++;
     if (RegExp(r'\d').hasMatch(value)) score++;
+    if (RegExp(r'[A-Z]').hasMatch(value) && RegExp(r'[a-z]').hasMatch(value)) score++;
     if (RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-\\/\[\]]').hasMatch(value)) score++;
     if (score <= 1) return (label: 'ضعيف', color: Colors.red);
-    if (score == 2) return (label: 'متوسط', color: Colors.orange);
+    if (score <= 3) return (label: 'متوسط', color: Colors.orange);
     return (label: 'قوي', color: Colors.green);
   }
 
@@ -188,12 +201,15 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       }
 
       await user.updatePassword(_newPassword);
+      final audit = await SecurityAuditService.instance.buildAuditRecord();
+      await SecurityAuditService.instance.saveLastPasswordChange(audit);
       _currentPasswordController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
       setState(() {
         _newPasswordTouched = false;
         _confirmPasswordTouched = false;
+        _lastPasswordAudit = audit;
       });
       _snack('تم تحديث كلمة المرور بنجاح');
     } on FirebaseAuthException catch (e) {
@@ -647,6 +663,172 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     return null;
   }
 
+
+  String _networkLabel(String value) {
+    switch (value) {
+      case 'wifi':
+        return 'Wi-Fi';
+      case 'cellular':
+        return 'بيانات الهاتف';
+      default:
+        return 'غير معروف';
+    }
+  }
+
+  String _dateWithDzTimezone(SecurityAudit audit) {
+    final local = audit.timestampUtc.toLocal();
+    final formatted = DateFormat('yyyy/MM/dd - HH:mm:ss').format(local);
+    return '$formatted (GMT+1 الجزائر)';
+  }
+
+  Future<void> _showPasswordAuditDetails() async {
+    final audit = _lastPasswordAudit;
+    if (audit == null) {
+      _snack('لا توجد بيانات متاحة بعد');
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        Widget detailRow(String title, String value) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 4, child: Text(title, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+                const SizedBox(width: 8),
+                Expanded(flex: 6, child: Text(value, style: Theme.of(context).textTheme.bodyMedium)),
+              ],
+            ),
+          );
+        }
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('آخر تغيير كلمة المرور', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                detailRow('التاريخ والوقت', _dateWithDzTimezone(audit)),
+                detailRow('الجهاز', [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ').isEmpty ? 'غير متوفر' : [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ')),
+                detailRow('الشركة المصنّعة', audit.deviceManufacturer?.trim().isNotEmpty == true ? audit.deviceManufacturer! : 'غير متوفر'),
+                detailRow('نظام التشغيل', '${audit.osName ?? 'غير متوفر'} ${audit.osVersion ?? ''}'.trim()),
+                detailRow('إصدار التطبيق', '${audit.appVersion ?? 'غير متوفر'} (${audit.buildNumber ?? '-'})'),
+                detailRow('نوع الاتصال', _networkLabel(audit.networkType)),
+                detailRow('الموقع التقريبي', audit.locationApprox?.trim().isNotEmpty == true ? audit.locationApprox! : 'غير متوفر'),
+                detailRow('عنوان IP', audit.maskedIp),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _copyFullIpSecurely,
+                    icon: const Icon(Icons.copy_outlined),
+                    label: const Text('نسخ IP الكامل'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _handleThisWasNotMe,
+                    icon: const Icon(Icons.warning_amber_rounded),
+                    label: const Text('هذا ليس أنا'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _copyFullIpSecurely() async {
+    final audit = _lastPasswordAudit;
+    final ip = audit?.ipAddress?.trim();
+    if (ip == null || ip.isEmpty) {
+      _snack('عنوان IP غير متوفر');
+      return;
+    }
+
+    final reAuthed = await _promptSensitiveReAuth();
+    if (!reAuthed) return;
+
+    await Clipboard.setData(ClipboardData(text: ip));
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    _snack('تم نسخ IP الكامل بأمان');
+  }
+
+  Future<bool> _promptSensitiveReAuth() async {
+    final localAuth = LocalAuthentication();
+    try {
+      final canUseBiometric = await localAuth.canCheckBiometrics && await localAuth.isDeviceSupported();
+      if (canUseBiometric) {
+        final didAuth = await localAuth.authenticate(
+          localizedReason: 'تحقق من هويتك لنسخ IP الكامل',
+          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+        );
+        if (didAuth) return true;
+      }
+    } catch (_) {
+      // fallback to password prompt below
+    }
+
+    return _showReauthSheet();
+  }
+
+  Future<void> _handleThisWasNotMe() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text('تحذير أمني شديد'),
+            content: const Text('إذا لم تكن أنت من غيّر كلمة المرور، سنقوم بتسجيل الخروج من جميع الجلسات فوراً. هل تريد المتابعة؟'),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+              ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('متابعة')),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (confirm != true) return;
+    final reAuthed = await _promptSensitiveReAuth();
+    if (!reAuthed) return;
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final currentSessionId = await SessionService.instance.getCurrentSessionId(user.uid) ??
+            await SessionService.instance.getOrCreateSessionId(user.uid);
+        await SessionService.instance.revokeAllOtherSessions(uid: user.uid, currentSessionId: currentSessionId);
+      } else {
+        throw StateError('No active user');
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      _snack('تم إنهاء الجلسات الأخرى كإجراء احترازي.');
+    } catch (_) {
+      _snack('تعذر إنهاء جميع الجلسات حالياً. TODO: دعم كامل من الخادم.');
+    }
+
+    if (!mounted) return;
+    setState(() => _passwordExpanded = true);
+    _snack('يرجى تغيير كلمة المرور فوراً. التحقق بخطوتين: قريباً');
+  }
+
   void _snack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -712,151 +894,153 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
           ),
           const SizedBox(height: 20),
-          Text('تغيير كلمة المرور', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _currentPasswordController,
-                    focusNode: _currentPasswordFocusNode,
-                    obscureText: !_showCurrentPassword,
-                    autofillHints: const [AutofillHints.password],
-                    textInputAction: TextInputAction.next,
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: (_) => _newPasswordFocusNode.requestFocus(),
-                    decoration: InputDecoration(
-                      labelText: 'كلمة المرور الحالية',
-                      helperText: 'أدخل كلمة المرور الحالية لإثبات ملكية الحساب.',
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _showCurrentPassword = !_showCurrentPassword),
-                        icon: Icon(_showCurrentPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                      ),
-                    ),
-                  ),
-                  Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: TextButton(
-                      onPressed: _sendingReset ? null : _handleForgotPassword,
-                      child: _sendingReset
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('نسيت كلمة المرور؟'),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'قد يصل البريد خلال دقيقة، وتأكد من مجلد الرسائل غير المرغوب فيها.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _newPasswordController,
-                    focusNode: _newPasswordFocusNode,
-                    obscureText: !_showNewPassword,
-                    autofillHints: const [AutofillHints.newPassword],
-                    textInputAction: TextInputAction.next,
-                    onChanged: (_) {
-                      setState(() {
-                        _newPasswordTouched = true;
-                      });
-                    },
-                    onSubmitted: (_) => _confirmPasswordFocusNode.requestFocus(),
-                    decoration: InputDecoration(
-                      labelText: 'كلمة المرور الجديدة',
-                      helperText: 'يجب أن تحتوي على 8 أحرف على الأقل.',
-                      errorText: _newPasswordError,
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _showNewPassword = !_showNewPassword),
-                        icon: Icon(_showNewPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Builder(
-                    builder: (context) {
-                      final strength = _passwordStrength();
-                      return Row(
-                        children: [
-                          const Icon(Icons.shield_outlined, size: 16),
-                          const SizedBox(width: 6),
-                          Text('قوة كلمة المرور: ', style: Theme.of(context).textTheme.bodySmall),
-                          Text(
-                            strength.label,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: strength.color,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _confirmPasswordController,
-                    focusNode: _confirmPasswordFocusNode,
-                    obscureText: !_showConfirmPassword,
-                    autofillHints: const [AutofillHints.newPassword],
-                    textInputAction: TextInputAction.done,
-                    onChanged: (_) {
-                      setState(() {
-                        _confirmPasswordTouched = true;
-                      });
-                    },
-                    onSubmitted: (_) {
-                      FocusScope.of(context).unfocus();
-                      if (_canSubmitPasswordChange) _handleChangePassword();
-                    },
-                    decoration: InputDecoration(
-                      labelText: 'تأكيد كلمة المرور الجديدة',
-                      helperText: 'أعد إدخال كلمة المرور الجديدة للتأكيد.',
-                      errorText: _confirmPasswordError,
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _showConfirmPassword = !_showConfirmPassword),
-                        icon: Icon(_showConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(
-                        _confirmPassword.isEmpty ? Icons.info_outline : (_isConfirmMatch ? Icons.check_circle : Icons.error_outline),
-                        size: 16,
-                        color: _confirmPassword.isEmpty
-                            ? Colors.grey
-                            : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _confirmPassword.isEmpty
-                            ? 'قم بإدخال التأكيد للتحقق من التطابق.'
-                            : (_isConfirmMatch ? 'كلمتا المرور متطابقتان' : 'كلمتا المرور غير متطابقتين'),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: _confirmPassword.isEmpty
-                                  ? Colors.grey.shade700
-                                  : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
-                            ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _canSubmitPasswordChange ? _handleChangePassword : null,
-                    child: _updatingPassword
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('حفظ كلمة المرور الجديدة'),
-                  ),
-                ],
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.history_toggle_off_rounded)),
+              title: const Text('آخر تغيير كلمة المرور'),
+              subtitle: Text(
+                _auditLoading
+                    ? 'جارِ تحميل البيانات...'
+                    : (_lastPasswordAudit == null
+                        ? 'غير متوفر'
+                        : '${_dateWithDzTimezone(_lastPasswordAudit!)} • IP: ${_lastPasswordAudit!.maskedIp}'),
               ),
+              trailing: TextButton.icon(
+                onPressed: _lastPasswordAudit == null ? null : _showPasswordAuditDetails,
+                icon: const Icon(Icons.expand_more),
+                label: const Text('عرض التفاصيل'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: ExpansionTile(
+              title: const Text('تغيير كلمة المرور', style: TextStyle(fontWeight: FontWeight.w700)),
+              leading: const Icon(Icons.password_outlined),
+              trailing: Icon(_passwordExpanded ? Icons.expand_less : Icons.expand_more),
+              initiallyExpanded: _passwordExpanded,
+              onExpansionChanged: (value) => setState(() => _passwordExpanded = value),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                TextField(
+                  controller: _currentPasswordController,
+                  focusNode: _currentPasswordFocusNode,
+                  obscureText: !_showCurrentPassword,
+                  autofillHints: const [AutofillHints.password],
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _newPasswordFocusNode.requestFocus(),
+                  decoration: InputDecoration(
+                    labelText: 'كلمة المرور الحالية',
+                    helperText: 'أدخل كلمة المرور الحالية لإثبات ملكية الحساب.',
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(() => _showCurrentPassword = !_showCurrentPassword),
+                      icon: Icon(_showCurrentPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton(
+                    onPressed: _sendingReset ? null : _handleForgotPassword,
+                    child: _sendingReset
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('نسيت كلمة المرور؟'),
+                  ),
+                ),
+                Text(
+                  'قد يصل البريد خلال دقيقة، وتأكد من مجلد الرسائل غير المرغوب فيها.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _newPasswordController,
+                  focusNode: _newPasswordFocusNode,
+                  obscureText: !_showNewPassword,
+                  autofillHints: const [AutofillHints.newPassword],
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => setState(() => _newPasswordTouched = true),
+                  onSubmitted: (_) => _confirmPasswordFocusNode.requestFocus(),
+                  decoration: InputDecoration(
+                    labelText: 'كلمة المرور الجديدة',
+                    helperText: 'يجب أن تحتوي على 8 أحرف على الأقل.',
+                    errorText: _newPasswordError,
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(() => _showNewPassword = !_showNewPassword),
+                      icon: Icon(_showNewPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Builder(
+                  builder: (context) {
+                    final strength = _passwordStrength();
+                    return Row(
+                      children: [
+                        const Icon(Icons.shield_outlined, size: 16),
+                        const SizedBox(width: 6),
+                        Text('قوة كلمة المرور: ', style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          strength.label,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: strength.color, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _confirmPasswordController,
+                  focusNode: _confirmPasswordFocusNode,
+                  obscureText: !_showConfirmPassword,
+                  autofillHints: const [AutofillHints.newPassword],
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => setState(() => _confirmPasswordTouched = true),
+                  onSubmitted: (_) {
+                    FocusScope.of(context).unfocus();
+                    if (_canSubmitPasswordChange) _handleChangePassword();
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'تأكيد كلمة المرور الجديدة',
+                    helperText: 'أعد إدخال كلمة المرور الجديدة للتأكيد.',
+                    errorText: _confirmPasswordError,
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(() => _showConfirmPassword = !_showConfirmPassword),
+                      icon: Icon(_showConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      _confirmPassword.isEmpty ? Icons.info_outline : (_isConfirmMatch ? Icons.check_circle : Icons.error_outline),
+                      size: 16,
+                      color: _confirmPassword.isEmpty ? Colors.grey : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _confirmPassword.isEmpty
+                          ? 'قم بإدخال التأكيد للتحقق من التطابق.'
+                          : (_isConfirmMatch ? 'كلمتا المرور متطابقتان' : 'كلمتا المرور غير متطابقتين'),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: _confirmPassword.isEmpty
+                                ? Colors.grey.shade700
+                                : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _canSubmitPasswordChange ? _handleChangePassword : null,
+                  child: _updatingPassword
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('حفظ كلمة المرور الجديدة'),
+                ),
+              ],
             ),
           ),
         ],
