@@ -160,16 +160,13 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     final shouldProceed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: const Text('تأكيد التحديث'),
-            content: const Text('هل تريد تحديث كلمة المرور؟'),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
-              ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('تحديث')),
-            ],
-          ),
+        return AlertDialog(
+          title: const Text('تأكيد التحديث'),
+          content: const Text('هل تريد تحديث كلمة المرور؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('تحديث')),
+          ],
         );
       },
     );
@@ -233,16 +230,13 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     final send = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: const Text('إعادة تعيين كلمة المرور'),
-            content: Text('سنرسل رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المسجل: $maskedEmail'),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
-              ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('إرسال الرابط')),
-            ],
-          ),
+        return AlertDialog(
+          title: const Text('إعادة تعيين كلمة المرور'),
+          content: Text('سنرسل رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المسجل: $maskedEmail'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('إرسال الرابط')),
+          ],
         );
       },
     );
@@ -343,70 +337,67 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOut,
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-              child: Directionality(
-                textDirection: TextDirection.rtl,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(s.privacyReauthTitle, style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 8),
-                      Text(s.privacyReauthSubtitle, style: Theme.of(context).textTheme.bodyMedium),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: passwordController,
-                        obscureText: true,
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          labelText: s.password,
-                          errorText: error,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(s.privacyReauthTitle, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(s.privacyReauthSubtitle, style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: true,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: s.password,
+                        errorText: error,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: loading ? null : () => Navigator.of(context).pop(false),
+                            child: Text(s.cancel),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: loading ? null : () => Navigator.of(context).pop(false),
-                              child: Text(s.cancel),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: loading
-                                  ? null
-                                  : () async {
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: loading
+                                ? null
+                                : () async {
+                                    setModalState(() {
+                                      loading = true;
+                                      error = null;
+                                    });
+                                    final ok = await _reauthenticate(passwordController.text);
+                                    if (!context.mounted) return;
+                                    if (ok) {
+                                      Navigator.of(context).pop(true);
+                                    } else {
                                       setModalState(() {
-                                        loading = true;
-                                        error = null;
+                                        loading = false;
+                                        error = s.privacyReauthFailed;
                                       });
-                                      final ok = await _reauthenticate(passwordController.text);
-                                      if (!context.mounted) return;
-                                      if (ok) {
-                                        Navigator.of(context).pop(true);
-                                      } else {
-                                        setModalState(() {
-                                          loading = false;
-                                          error = s.privacyReauthFailed;
-                                        });
-                                      }
-                                    },
-                              child: loading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : Text(s.privacyContinue),
-                            ),
+                                    }
+                                  },
+                            child: loading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : Text(s.privacyContinue),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             );
@@ -453,39 +444,36 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOut,
           padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: Directionality(
-            textDirection: TextDirection.rtl,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(s.privacyEditNameTitle, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: firstController,
-                      decoration: InputDecoration(labelText: s.privacyFirstName),
-                      validator: (value) => _validateName(value, s),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: lastController,
-                      decoration: InputDecoration(labelText: s.privacyLastName),
-                      validator: (value) => _validateName(value, s),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (!(formKey.currentState?.validate() ?? false)) return;
-                        Navigator.of(context).pop((firstController.text.trim(), lastController.text.trim()));
-                      },
-                      child: Text(s.save),
-                    ),
-                  ],
-                ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(s.privacyEditNameTitle, style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: firstController,
+                    decoration: InputDecoration(labelText: s.privacyFirstName),
+                    validator: (value) => _validateName(value, s),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: lastController,
+                    decoration: InputDecoration(labelText: s.privacyLastName),
+                    validator: (value) => _validateName(value, s),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (!(formKey.currentState?.validate() ?? false)) return;
+                      Navigator.of(context).pop((firstController.text.trim(), lastController.text.trim()));
+                    },
+                    child: Text(s.save),
+                  ),
+                ],
               ),
             ),
           ),
@@ -523,11 +511,9 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOut,
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-              child: Directionality(
-                textDirection: TextDirection.rtl,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                  child: AnimatedSwitcher(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 220),
                     child: Column(
                       key: ValueKey(step),
@@ -632,7 +618,6 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                         ),
                       ],
                     ),
-                  ),
                 ),
               ),
             );
@@ -707,44 +692,41 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
           );
         }
 
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('آخر تغيير كلمة المرور', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 16),
-                detailRow('التاريخ والوقت', _dateWithDzTimezone(audit)),
-                detailRow('الجهاز', [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ').isEmpty ? 'غير متوفر' : [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ')),
-                detailRow('الشركة المصنّعة', audit.deviceManufacturer?.trim().isNotEmpty == true ? audit.deviceManufacturer! : 'غير متوفر'),
-                detailRow('نظام التشغيل', '${audit.osName ?? 'غير متوفر'} ${audit.osVersion ?? ''}'.trim()),
-                detailRow('إصدار التطبيق', '${audit.appVersion ?? 'غير متوفر'} (${audit.buildNumber ?? '-'})'),
-                detailRow('نوع الاتصال', _networkLabel(audit.networkType)),
-                detailRow('الموقع التقريبي', audit.locationApprox?.trim().isNotEmpty == true ? audit.locationApprox! : 'غير متوفر'),
-                detailRow('عنوان IP', audit.maskedIp),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _copyFullIpSecurely,
-                    icon: const Icon(Icons.copy_outlined),
-                    label: const Text('نسخ IP الكامل'),
-                  ),
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('آخر تغيير كلمة المرور', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              detailRow('التاريخ والوقت', _dateWithDzTimezone(audit)),
+              detailRow('الجهاز', [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ').isEmpty ? 'غير متوفر' : [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ')),
+              detailRow('الشركة المصنّعة', audit.deviceManufacturer?.trim().isNotEmpty == true ? audit.deviceManufacturer! : 'غير متوفر'),
+              detailRow('نظام التشغيل', '${audit.osName ?? 'غير متوفر'} ${audit.osVersion ?? ''}'.trim()),
+              detailRow('إصدار التطبيق', '${audit.appVersion ?? 'غير متوفر'} (${audit.buildNumber ?? '-'})'),
+              detailRow('نوع الاتصال', _networkLabel(audit.networkType)),
+              detailRow('الموقع التقريبي', audit.locationApprox?.trim().isNotEmpty == true ? audit.locationApprox! : 'غير متوفر'),
+              detailRow('عنوان IP', audit.maskedIp),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _copyFullIpSecurely,
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('نسخ IP الكامل'),
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.tonalIcon(
-                    onPressed: _handleThisWasNotMe,
-                    icon: const Icon(Icons.warning_amber_rounded),
-                    label: const Text('هذا ليس أنا'),
-                  ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: _handleThisWasNotMe,
+                  icon: const Icon(Icons.warning_amber_rounded),
+                  label: const Text('هذا ليس أنا'),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -790,16 +772,13 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: const Text('تحذير أمني شديد'),
-            content: const Text('إذا لم تكن أنت من غيّر كلمة المرور، سنقوم بتسجيل الخروج من جميع الجلسات فوراً. هل تريد المتابعة؟'),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
-              ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('متابعة')),
-            ],
-          ),
+        return AlertDialog(
+          title: const Text('تحذير أمني شديد'),
+          content: const Text('إذا لم تكن أنت من غيّر كلمة المرور، سنقوم بتسجيل الخروج من جميع الجلسات فوراً. هل تريد المتابعة؟'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
+            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('متابعة')),
+          ],
         );
       },
     );
