@@ -548,5 +548,68 @@
   "sessionSignOutFailed": "تعذر تسجيل خروج هذه الجلسة.",
   "otherSessionsSignedOutSuccess": "تم تسجيل الخروج من الأجهزة الأخرى.",
   "logoutAllOtherDevices": "تسجيل خروج الأجهزة الأخرى",
-  "sessionUnknownDevice": "جهاز غير معروف"
+  "sessionUnknownDevice": "جهاز غير معروف",
+  "privacyTabTitle": "الخصوصية",
+  "privacyTabSubtitle": "تحكم في بيانات حسابك بأمان",
+  "privacyAccountOverviewSection": "نظرة عامة على الحساب",
+  "privacyNameRowTitle": "الاسم واللقب",
+  "privacyEmailRowTitle": "البريد الإلكتروني",
+  "privacyNameRuleAllowed": "يمكنك تغيير الاسم مرة واحدة شهريًا.",
+  "privacyNameRuleBlockedDays": "يمكنك تغيير الاسم بعد: {days} يوم / {hours} ساعة",
+  "@privacyNameRuleBlockedDays": {
+    "placeholders": {
+      "days": {},
+      "hours": {}
+    }
+  },
+  "privacyNameRuleBlockedHours": "يمكنك تغيير الاسم بعد: {hours} ساعة",
+  "@privacyNameRuleBlockedHours": {
+    "placeholders": {
+      "hours": {}
+    }
+  },
+  "privacyReauthTitle": "تأكيد كلمة السر",
+  "privacyReauthSubtitle": "لحماية حسابك، يرجى إدخال كلمة المرور الحالية قبل المتابعة.",
+  "privacyContinue": "متابعة",
+  "privacyReauthFailed": "تعذر التحقق من كلمة المرور. حاول مجددًا.",
+  "privacyEditNameTitle": "تعديل الاسم",
+  "privacyFirstName": "الاسم",
+  "privacyLastName": "اللقب",
+  "privacyNameValidationRequired": "هذا الحقل مطلوب",
+  "privacyNameValidationShort": "يجب أن يكون الاسم حرفين على الأقل",
+  "privacyNameValidationLong": "الحد الأقصى 40 حرفًا",
+  "privacyNameSaved": "تم تحديث الاسم بنجاح.",
+  "privacyEmailSaved": "تم تحديث البريد الإلكتروني محليًا.",
+  "privacyEmailFlowTitle": "تغيير البريد الإلكتروني",
+  "privacyStepOf": "الخطوة {current} من {total}",
+  "@privacyStepOf": {
+    "placeholders": {
+      "current": {},
+      "total": {}
+    }
+  },
+  "privacyEmailFlowSecurityNote": "ملاحظة أمنية: لا تتم مشاركة كلمة المرور أو حفظها داخل التطبيق.",
+  "privacyEmailFlowStep1Help": "أدخل بريدك الحالي للتأكيد. التلميح: {masked}",
+  "@privacyEmailFlowStep1Help": {
+    "placeholders": {
+      "masked": {}
+    }
+  },
+  "privacyEmailCurrentLabel": "البريد الإلكتروني الحالي",
+  "privacyEmailFlowStep2Help": "سنرسل رابط تغيير البريد إلى بريدك الحالي للتحقق.",
+  "privacyEmailFlowSendLink": "إرسال رابط تغيير البريد",
+  "privacyEmailFlowStep3Help": "أدخل البريد الإلكتروني الجديد ثم قم بتأكيده.",
+  "privacyEmailNewLabel": "البريد الإلكتروني الجديد",
+  "privacyEmailConfirmLabel": "تأكيد البريد الإلكتروني الجديد",
+  "privacyEmailFlowStep4Help": "راجع البريد الجديد: {masked}",
+  "@privacyEmailFlowStep4Help": {
+    "placeholders": {
+      "masked": {}
+    }
+  },
+  "privacyEmailCurrentMismatch": "البريد الحالي غير مطابق.",
+  "privacyEmailValidationRequired": "يرجى إدخال البريد الجديد وتأكيده.",
+  "privacyEmailConfirmMismatch": "البريدان غير متطابقين.",
+  "privacyLoadFailed": "تعذر تحميل بيانات الخصوصية."
+
 }

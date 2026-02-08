@@ -544,5 +544,68 @@
   "weakPasswordError": "Le mot de passe est trop faible.",
   "emailAuthDisabledError": "La connexion par e-mail est désactivée.",
   "userDisabledError": "Ce compte est désactivé.",
-  "genericAuthError": "Une erreur est survenue. Veuillez réessayer."
+  "genericAuthError": "Une erreur est survenue. Veuillez réessayer.",
+  "privacyTabTitle": "Confidentialité",
+  "privacyTabSubtitle": "Gérez vos données de compte en toute sécurité",
+  "privacyAccountOverviewSection": "Aperçu du compte",
+  "privacyNameRowTitle": "Prénom et nom",
+  "privacyEmailRowTitle": "E-mail",
+  "privacyNameRuleAllowed": "Vous pouvez modifier votre nom une fois par mois.",
+  "privacyNameRuleBlockedDays": "Vous pouvez modifier votre nom après : {days} jour / {hours} heure",
+  "@privacyNameRuleBlockedDays": {
+    "placeholders": {
+      "days": {},
+      "hours": {}
+    }
+  },
+  "privacyNameRuleBlockedHours": "Vous pouvez modifier votre nom après : {hours} heure",
+  "@privacyNameRuleBlockedHours": {
+    "placeholders": {
+      "hours": {}
+    }
+  },
+  "privacyReauthTitle": "Confirmer le mot de passe",
+  "privacyReauthSubtitle": "Pour votre sécurité, saisissez votre mot de passe actuel avant de continuer.",
+  "privacyContinue": "Continuer",
+  "privacyReauthFailed": "Échec de la vérification du mot de passe. Réessayez.",
+  "privacyEditNameTitle": "Modifier le nom",
+  "privacyFirstName": "Prénom",
+  "privacyLastName": "Nom",
+  "privacyNameValidationRequired": "Ce champ est requis",
+  "privacyNameValidationShort": "Le nom doit contenir au moins 2 caractères",
+  "privacyNameValidationLong": "Maximum 40 caractères",
+  "privacyNameSaved": "Nom mis à jour avec succès.",
+  "privacyEmailSaved": "E-mail mis à jour localement.",
+  "privacyEmailFlowTitle": "Modifier l'e-mail",
+  "privacyStepOf": "Étape {current} sur {total}",
+  "@privacyStepOf": {
+    "placeholders": {
+      "current": {},
+      "total": {}
+    }
+  },
+  "privacyEmailFlowSecurityNote": "Note de sécurité : votre mot de passe n'est jamais stocké dans l'application.",
+  "privacyEmailFlowStep1Help": "Saisissez votre e-mail actuel pour vérifier. Indice : {masked}",
+  "@privacyEmailFlowStep1Help": {
+    "placeholders": {
+      "masked": {}
+    }
+  },
+  "privacyEmailCurrentLabel": "E-mail actuel",
+  "privacyEmailFlowStep2Help": "Nous enverrons un lien de changement d'e-mail à votre boîte actuelle pour vérification.",
+  "privacyEmailFlowSendLink": "Envoyer le lien de changement d'e-mail",
+  "privacyEmailFlowStep3Help": "Saisissez votre nouvel e-mail et confirmez-le.",
+  "privacyEmailNewLabel": "Nouvel e-mail",
+  "privacyEmailConfirmLabel": "Confirmer le nouvel e-mail",
+  "privacyEmailFlowStep4Help": "Vérifiez le nouvel e-mail : {masked}",
+  "@privacyEmailFlowStep4Help": {
+    "placeholders": {
+      "masked": {}
+    }
+  },
+  "privacyEmailCurrentMismatch": "L'e-mail actuel ne correspond pas.",
+  "privacyEmailValidationRequired": "Saisissez et confirmez le nouvel e-mail.",
+  "privacyEmailConfirmMismatch": "Les e-mails ne correspondent pas.",
+  "privacyLoadFailed": "Impossible de charger les données de confidentialité."
+
 }
