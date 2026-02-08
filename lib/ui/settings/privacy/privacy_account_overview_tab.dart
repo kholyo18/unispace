@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:UniSpace/generated/l10n.dart';
@@ -41,6 +42,8 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
   bool _passwordExpanded = false;
   bool _auditLoading = true;
   SecurityAudit? _lastPasswordAudit;
+  StreamSubscription<User?>? _authStateSubscription;
+  String? _activeUserScope;
 
   @override
   void initState() {
@@ -58,6 +61,18 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         setState(() => _confirmPasswordTouched = true);
       }
     });
+    _activeUserScope = _repository.currentUserScope();
+    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((_) {
+      final nextScope = _repository.currentUserScope();
+      if (nextScope == _activeUserScope) return;
+      _activeUserScope = nextScope;
+      if (!mounted) return;
+      setState(() {
+        _data = null;
+        _loading = true;
+      });
+      _load();
+    });
     _load();
   }
 
@@ -69,6 +84,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     _currentPasswordFocusNode.dispose();
     _newPasswordFocusNode.dispose();
     _confirmPasswordFocusNode.dispose();
+    _authStateSubscription?.cancel();
     super.dispose();
   }
 
