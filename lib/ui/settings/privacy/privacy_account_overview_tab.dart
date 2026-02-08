@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:UniSpace/generated/l10n.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -826,7 +828,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     }
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: ui.TextDirection.rtl,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
