@@ -551,5 +551,68 @@
   "sessionSignOutFailed": "Unable to sign out this session.",
   "otherSessionsSignedOutSuccess": "Signed out from other devices.",
   "logoutAllOtherDevices": "Log out other devices",
-  "sessionUnknownDevice": "Unknown device"
+  "sessionUnknownDevice": "Unknown device",
+  "privacyTabTitle": "Privacy",
+  "privacyTabSubtitle": "Manage your account data securely",
+  "privacyAccountOverviewSection": "Account overview",
+  "privacyNameRowTitle": "First and last name",
+  "privacyEmailRowTitle": "Email",
+  "privacyNameRuleAllowed": "You can change your name once per month.",
+  "privacyNameRuleBlockedDays": "You can change your name after: {days} day / {hours} hour",
+  "@privacyNameRuleBlockedDays": {
+    "placeholders": {
+      "days": {},
+      "hours": {}
+    }
+  },
+  "privacyNameRuleBlockedHours": "You can change your name after: {hours} hour",
+  "@privacyNameRuleBlockedHours": {
+    "placeholders": {
+      "hours": {}
+    }
+  },
+  "privacyReauthTitle": "Confirm password",
+  "privacyReauthSubtitle": "For your security, enter your current password before continuing.",
+  "privacyContinue": "Continue",
+  "privacyReauthFailed": "Password verification failed. Please try again.",
+  "privacyEditNameTitle": "Edit name",
+  "privacyFirstName": "First name",
+  "privacyLastName": "Last name",
+  "privacyNameValidationRequired": "This field is required",
+  "privacyNameValidationShort": "Name must be at least 2 characters",
+  "privacyNameValidationLong": "Maximum 40 characters",
+  "privacyNameSaved": "Name updated successfully.",
+  "privacyEmailSaved": "Email updated locally.",
+  "privacyEmailFlowTitle": "Change email",
+  "privacyStepOf": "Step {current} of {total}",
+  "@privacyStepOf": {
+    "placeholders": {
+      "current": {},
+      "total": {}
+    }
+  },
+  "privacyEmailFlowSecurityNote": "Security note: your password is never stored in the app.",
+  "privacyEmailFlowStep1Help": "Enter your current email to verify. Hint: {masked}",
+  "@privacyEmailFlowStep1Help": {
+    "placeholders": {
+      "masked": {}
+    }
+  },
+  "privacyEmailCurrentLabel": "Current email",
+  "privacyEmailFlowStep2Help": "We'll send an email change link to your current inbox for verification.",
+  "privacyEmailFlowSendLink": "Send change email link",
+  "privacyEmailFlowStep3Help": "Enter your new email and confirm it.",
+  "privacyEmailNewLabel": "New email",
+  "privacyEmailConfirmLabel": "Confirm new email",
+  "privacyEmailFlowStep4Help": "Review new email: {masked}",
+  "@privacyEmailFlowStep4Help": {
+    "placeholders": {
+      "masked": {}
+    }
+  },
+  "privacyEmailCurrentMismatch": "Current email does not match.",
+  "privacyEmailValidationRequired": "Enter and confirm your new email.",
+  "privacyEmailConfirmMismatch": "Emails do not match.",
+  "privacyLoadFailed": "Unable to load privacy data."
+
 }
