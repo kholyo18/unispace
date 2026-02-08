@@ -668,6 +668,12 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     return '$formatted (GMT+1 الجزائر)';
   }
 
+  String _compactAuditDate(SecurityAudit audit) {
+    final local = audit.timestampUtc.toLocal();
+    final formatted = DateFormat('dd/MM/yyyy – HH:mm').format(local);
+    return '$formatted (GMT+1)';
+  }
+
   Future<void> _showPasswordAuditDetails() async {
     final audit = _lastPasswordAudit;
     if (audit == null) {
@@ -874,26 +880,6 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.history_toggle_off_rounded)),
-              title: const Text('آخر تغيير كلمة المرور'),
-              subtitle: Text(
-                _auditLoading
-                    ? 'جارِ تحميل البيانات...'
-                    : (_lastPasswordAudit == null
-                        ? 'غير متوفر'
-                        : '${_dateWithDzTimezone(_lastPasswordAudit!)} • IP: ${_lastPasswordAudit!.maskedIp}'),
-              ),
-              trailing: TextButton.icon(
-                onPressed: _lastPasswordAudit == null ? null : _showPasswordAuditDetails,
-                icon: const Icon(Icons.expand_more),
-                label: const Text('عرض التفاصيل'),
-              ),
-            ),
-          ),
           const SizedBox(height: 14),
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1014,9 +1000,58 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.45),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.history_rounded,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _auditLoading
+                                  ? 'جارِ تحميل بيانات آخر تغيير...'
+                                  : (_lastPasswordAudit == null
+                                      ? 'آخر تغيير كلمة المرور: غير متوفر'
+                                      : 'آخر تغيير كلمة المرور: ${_compactAuditDate(_lastPasswordAudit!)}'),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _lastPasswordAudit == null ? 'IP: —' : 'IP: ${_lastPasswordAudit!.maskedIp}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _lastPasswordAudit == null ? null : _showPasswordAuditDetails,
+                        child: const Text('عرض التفاصيل ⌄'),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _canSubmitPasswordChange ? _handleChangePassword : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _confirmPassword.isEmpty
+                        ? null
+                        : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
+                    foregroundColor: _confirmPassword.isEmpty ? null : Colors.white,
+                  ),
                   child: _updatingPassword
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text('حفظ كلمة المرور الجديدة'),
