@@ -37,14 +37,30 @@ class PrivacyAccountRepository {
   static const emailKey = 'privacy_account_email';
   static const lastNameChangeAtKey = 'privacy_account_last_name_change_at';
 
+  String? _userScope(User? user) {
+    final uid = user?.uid.trim();
+    if (uid != null && uid.isNotEmpty) return uid;
+    final email = user?.email?.trim().toLowerCase();
+    if (email != null && email.isNotEmpty) return email;
+    return null;
+  }
+
+  String _scopedKey(String baseKey, User? user) {
+    final scope = _userScope(user);
+    if (scope == null) return baseKey;
+    return '${baseKey}_$scope';
+  }
+
   Future<PrivacyAccountData> load() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
     final fallbackName = user?.displayName?.trim() ?? '';
     final parts = fallbackName.split(RegExp(r'\s+')).where((item) => item.isNotEmpty).toList();
 
-    final first = prefs.getString(firstNameKey)?.trim();
-    final last = prefs.getString(lastNameKey)?.trim();
+    final first =
+        prefs.getString(_scopedKey(firstNameKey, user))?.trim() ?? prefs.getString(firstNameKey)?.trim();
+    final last =
+        prefs.getString(_scopedKey(lastNameKey, user))?.trim() ?? prefs.getString(lastNameKey)?.trim();
 
     final firstName = first?.isNotEmpty == true
         ? first!
@@ -57,11 +73,16 @@ class PrivacyAccountRepository {
             ? parts.sublist(1).join(' ')
             : '';
 
-    final email = (prefs.getString(emailKey)?.trim().isNotEmpty == true)
-        ? prefs.getString(emailKey)!.trim()
+    final scopedEmail = prefs.getString(_scopedKey(emailKey, user))?.trim();
+    final globalEmail = prefs.getString(emailKey)?.trim();
+    final email = (scopedEmail?.isNotEmpty == true)
+        ? scopedEmail!
+        : (globalEmail?.isNotEmpty == true)
+            ? globalEmail!
         : (user?.email?.trim() ?? '');
 
-    final rawLastChange = prefs.getString(lastNameChangeAtKey);
+    final rawLastChange =
+        prefs.getString(_scopedKey(lastNameChangeAtKey, user)) ?? prefs.getString(lastNameChangeAtKey);
     final lastNameChangeAt = rawLastChange == null ? null : DateTime.tryParse(rawLastChange);
 
     return PrivacyAccountData(
@@ -74,13 +95,24 @@ class PrivacyAccountRepository {
 
   Future<void> saveName({required String firstName, required String lastName, required DateTime changedAt}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(firstNameKey, firstName.trim());
-    await prefs.setString(lastNameKey, lastName.trim());
-    await prefs.setString(lastNameChangeAtKey, changedAt.toIso8601String());
+    final user = FirebaseAuth.instance.currentUser;
+    final first = firstName.trim();
+    final last = lastName.trim();
+
+    await prefs.setString(_scopedKey(firstNameKey, user), first);
+    await prefs.setString(_scopedKey(lastNameKey, user), last);
+    await prefs.setString(_scopedKey(lastNameChangeAtKey, user), changedAt.toIso8601String());
+
+    if (user != null) {
+      final fullName = [first, last].where((item) => item.isNotEmpty).join(' ').trim();
+      await user.updateDisplayName(fullName);
+      await user.reload();
+    }
   }
 
   Future<void> saveEmail(String email) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(emailKey, email.trim());
+    final user = FirebaseAuth.instance.currentUser;
+    await prefs.setString(_scopedKey(emailKey, user), email.trim());
   }
 }
