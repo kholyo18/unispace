@@ -1030,6 +1030,7 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   final email = TextEditingController();
   final password = TextEditingController();
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
   bool loading = false;
   bool googleLoading = false;
 
@@ -1210,11 +1211,15 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  Future<void> _signInWithGoogle() async {
+  Future<void> _signInWithGoogle({bool useAnotherAccount = false}) async {
     setState(() => googleLoading = true);
     try {
       // تأكد من إضافة SHA-1/SHA-256 في Firebase لكل من debug/release عند الحاجة.
-      final googleUser = await GoogleSignIn().signIn();
+      if (useAnotherAccount) {
+        await _googleSignIn.signOut();
+      }
+
+      final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         debugPrint('Google sign-in canceled by user.');
         _showAuthSnack(
@@ -1253,6 +1258,10 @@ class _SignInScreenState extends State<SignInScreen> {
     } finally {
       if (mounted) setState(() => googleLoading = false);
     }
+  }
+
+  Future<void> _signInWithAnotherGoogleAccount() async {
+    await _signInWithGoogle(useAnotherAccount: true);
   }
 
   Future<void> _register() async {
@@ -1404,6 +1413,13 @@ class _SignInScreenState extends State<SignInScreen> {
                       ),
                     ),
                   ),
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: loading || googleLoading
+                      ? null
+                      : _signInWithAnotherGoogleAccount,
+                  child: const Text('استخدام حساب آخر'),
                 ),
               ]),
             ),
