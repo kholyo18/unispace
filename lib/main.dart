@@ -1947,6 +1947,11 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
             departmentId: selectedMajor.name,
             specialtyId: selectedTrack.name,
             level: selectedTrack.level,
+            academicScopeId: buildAcademicStorageSignature(
+              semester1: sem1,
+              semester2: sem2,
+              level: selectedTrack.level,
+            ),
             semester1Modules: sem1,
             semester2Modules: sem2,
           ),
@@ -10070,6 +10075,34 @@ String _moduleIdForSemester(String semester, String moduleName) {
   return _slugifyModuleId('$normalizedSemester-$normalizedModule');
 }
 
+String buildAcademicStorageSignature({
+  required SemesterSpec semester1,
+  required SemesterSpec semester2,
+  required String level,
+}) {
+  String moduleFingerprint(ModuleSpec module) {
+    final weights = module.evalWeights
+        .map((weight) => '${weight.label.toUpperCase()}:${weight.weight}')
+        .join('|');
+    return '${module.name.trim()}#${module.coef}#${module.credits}#$weights';
+  }
+
+  String semesterFingerprint(SemesterSpec semester) {
+    final modules = semester.modules
+        .map(moduleFingerprint)
+        .join('||');
+    return '${semester.name.trim().toUpperCase()}::${modules}';
+  }
+
+  final raw = [
+    level.trim().toUpperCase(),
+    semesterFingerprint(semester1),
+    semesterFingerprint(semester2),
+  ].join('###');
+
+  return base64UrlEncode(utf8.encode(raw)).replaceAll('=', '');
+}
+
 class ModuleModel {
   ModuleModel({
     required this.id,
@@ -10518,6 +10551,11 @@ class MajorTracksScreen extends StatelessWidget {
                                   departmentId: major.name,
                                   specialtyId: track.name,
                                   level: track.level,
+                                  academicScopeId: buildAcademicStorageSignature(
+                                    semester1: sem1,
+                                    semester2: sem2,
+                                    level: track.level,
+                                  ),
                                   semester1Modules: sem1,
                                   semester2Modules: sem2,
                                 ),
@@ -10552,6 +10590,7 @@ class StudiesTableScreen extends StatefulWidget {
   final String departmentId;
   final String specialtyId;
   final String level;
+  final String academicScopeId;
   final SemesterSpec semester1Modules;
   final SemesterSpec semester2Modules;
 
@@ -10563,6 +10602,7 @@ class StudiesTableScreen extends StatefulWidget {
     required this.departmentId,
     required this.specialtyId,
     required this.level,
+    required this.academicScopeId,
     required this.semester1Modules,
     required this.semester2Modules,
   });
@@ -10631,6 +10671,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
         departmentId: widget.departmentId,
         specialtyId: widget.specialtyId,
         level: widget.level,
+        academicScopeId: widget.academicScopeId,
       ),
     );
   }
@@ -10909,12 +10950,14 @@ class GradesStorageScope {
     required this.departmentId,
     required this.specialtyId,
     required this.level,
+    required this.academicScopeId,
   });
 
   final String collegeId;
   final String departmentId;
   final String specialtyId;
   final String level;
+  final String academicScopeId;
 
   String _sanitize(String value) {
     final normalized = value.trim().toLowerCase();
@@ -10925,14 +10968,15 @@ class GradesStorageScope {
   }
 
   String get storageKey {
-    final college = _sanitize(collegeId);
-    final department = _sanitize(departmentId);
-    final specialty = _sanitize(specialtyId);
+    final scope = _sanitize(academicScopeId);
+    if (scope.isNotEmpty) {
+      return 'scope__$scope';
+    }
+
+    // Fallback for safety in case the new scope id is missing unexpectedly.
     final lvl = _sanitize(level);
     return [
-      if (college.isNotEmpty) college else 'unknown_college',
-      if (department.isNotEmpty) department else 'unknown_department',
-      if (specialty.isNotEmpty) specialty else 'unknown_specialty',
+      'scope__legacy',
       if (lvl.isNotEmpty) lvl else 'unknown_level',
     ].join('__');
   }
