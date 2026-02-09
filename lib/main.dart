@@ -719,11 +719,11 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                         await SessionService.instance.revokeCurrentSession(currentUser.uid);
                       }
                       await FirebaseAuth.instance.signOut();
+                      if (kDebugMode) {
+                        debugPrint('[Auth] logout complete');
+                      }
                       if (!context.mounted) return;
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const SignInScreen()),
-                        (_) => false,
-                      );
+                      Navigator.of(context).pop();
                     },
                   )
                 else
@@ -1002,8 +1002,15 @@ class _DrawerLeading extends StatelessWidget {
 // ============================================================================
 // Auth Gate + SignIn
 // ============================================================================
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  User? _lastAuthUser;
 
   Future<bool> _isTwoFactorRequired(User user) async {
     final profile = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
@@ -1022,6 +1029,14 @@ class AuthGate extends StatelessWidget {
           builder: (ctx, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+            if (!identical(_lastAuthUser, snap.data)) {
+              _lastAuthUser = snap.data;
+              if (kDebugMode) {
+                debugPrint(
+                  '[AuthGate] authStateChanges user=${snap.data?.uid ?? 'null'}',
+                );
+              }
             }
             if (!snap.hasData) return const SignInScreen();
             final user = snap.data!;
@@ -1141,6 +1156,9 @@ class _SignInScreenState extends State<SignInScreen> {
       return;
     }
     setState(() => loading = true);
+    if (kDebugMode) {
+      debugPrint('[Auth] email login started: $trimmedEmail');
+    }
     try {
       final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: trimmedEmail,
@@ -1159,6 +1177,9 @@ class _SignInScreenState extends State<SignInScreen> {
         }
       }
       if (user != null) {
+        if (kDebugMode) {
+          debugPrint('[Auth] email login success uid=${user.uid}');
+        }
         final profile = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         final twoFactorEnabled = profile.data()?['twoFactorEnabled'] as bool? ?? false;
         if (!twoFactorEnabled) {
@@ -1174,6 +1195,9 @@ class _SignInScreenState extends State<SignInScreen> {
       debugPrintStack(stackTrace: stackTrace);
       _showAuthSnack('حدث خطأ أثناء تسجيل الدخول.');
     } finally {
+      if (kDebugMode) {
+        debugPrint('[Auth] email login finished loading=false');
+      }
       if (mounted) setState(() => loading = false);
     }
   }
@@ -1248,6 +1272,9 @@ class _SignInScreenState extends State<SignInScreen> {
 
   Future<void> _signInWithGoogle() async {
     setState(() => googleLoading = true);
+    if (kDebugMode) {
+      debugPrint('[Auth] google login started');
+    }
     try {
       // تأكد من إضافة SHA-1/SHA-256 في Firebase لكل من debug/release عند الحاجة.
       await _googleSignIn.signOut();
@@ -1277,6 +1304,9 @@ class _SignInScreenState extends State<SignInScreen> {
           await FirebaseAuth.instance.signInWithCredential(credential);
       final user = authResult.user;
       if (user != null) {
+        if (kDebugMode) {
+          debugPrint('[Auth] google login success uid=${user.uid}');
+        }
         await SessionService.instance.initSession(user.uid);
       }
     } on FirebaseAuthException catch (e, stackTrace) {
@@ -1296,6 +1326,9 @@ class _SignInScreenState extends State<SignInScreen> {
       debugPrintStack(stackTrace: stackTrace);
       _showAuthSnack('حدث خطأ أثناء تسجيل الدخول عبر Google. حاول مرة أخرى.');
     } finally {
+      if (kDebugMode) {
+        debugPrint('[Auth] google login finished loading=false');
+      }
       if (mounted) setState(() => googleLoading = false);
     }
   }
@@ -1660,6 +1693,9 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, Wi
     if (user == null) return;
     final revoked = await SessionService.instance.isCurrentSessionRevoked(user.uid);
     if (revoked) {
+      if (kDebugMode) {
+        debugPrint('[Auth] session revoked -> signOut');
+      }
       await FirebaseAuth.instance.signOut();
       return;
     }
