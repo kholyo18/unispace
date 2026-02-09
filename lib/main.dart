@@ -719,6 +719,9 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                       if (currentUser != null) {
                         await SessionService.instance.revokeCurrentSession(currentUser.uid);
                       }
+                      if (kDebugMode) {
+                        debugPrint('[Auth] drawer logout requested');
+                      }
                       await AuthSessionService.signOutFully();
                       if (kDebugMode) {
                         debugPrint('[Auth] logout complete');
@@ -733,9 +736,10 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     icon: Icons.login,
                     title: S.of(context).login,
                     onTap: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const SignInScreen()),
-                      );
+                      if (kDebugMode) {
+                        debugPrint('[Auth] login drawer item tapped while signed out');
+                      }
+                      Navigator.of(context).pop();
                     },
                   ),
                 const SizedBox(height: 12),
@@ -1039,10 +1043,18 @@ class _AuthGateState extends State<AuthGate> {
                 );
               }
             }
-            if (!snap.hasData) return const SignInScreen();
+            if (!snap.hasData) {
+              if (kDebugMode) {
+                debugPrint('[AuthGate] routing -> SignInScreen (no user)');
+              }
+              return const SignInScreen();
+            }
             final user = snap.data!;
             final isPasswordUser = user.providerData.any((info) => info.providerId == 'password');
             if (isPasswordUser && !user.emailVerified) {
+              if (kDebugMode) {
+                debugPrint('[AuthGate] routing -> SignInScreen (email not verified)');
+              }
               unawaited(
                 AuthSessionService.signOutFully(
                   beforeSignOut: () => SessionService.instance.revokeCurrentSession(user.uid),
@@ -1050,7 +1062,12 @@ class _AuthGateState extends State<AuthGate> {
               );
               return const SignInScreen();
             }
-            if (!isPasswordUser) return const HomeShell();
+            if (!isPasswordUser) {
+              if (kDebugMode) {
+                debugPrint('[AuthGate] routing -> HomeShell (social provider)');
+              }
+              return const HomeShell();
+            }
             return FutureBuilder<bool>(
               future: _isTwoFactorRequired(user),
               builder: (context, twoFactorSnap) {
@@ -1058,7 +1075,13 @@ class _AuthGateState extends State<AuthGate> {
                   return const Scaffold(body: Center(child: CircularProgressIndicator()));
                 }
                 if (twoFactorSnap.data == true) {
+                  if (kDebugMode) {
+                    debugPrint('[AuthGate] routing -> TwoFactorOtpScreen');
+                  }
                   return TwoFactorOtpScreen(email: user.email ?? '');
+                }
+                if (kDebugMode) {
+                  debugPrint('[AuthGate] routing -> HomeShell (authenticated)');
                 }
                 return const HomeShell();
               },
@@ -1079,7 +1102,7 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   final email = TextEditingController();
   final password = TextEditingController();
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = AuthSessionService.googleSignIn;
   bool loading = false;
   bool googleLoading = false;
 
@@ -1153,12 +1176,19 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _login() async {
+    if (loading || googleLoading) {
+      if (kDebugMode) {
+        debugPrint('[Auth] email login ignored: another auth request is active');
+      }
+      return;
+    }
     final trimmedEmail = email.text.trim();
     final trimmedPassword = password.text.trim();
     if (trimmedEmail.isEmpty || trimmedPassword.isEmpty) {
       _showAuthSnack('الرجاء إدخال البريد الإلكتروني وكلمة المرور.');
       return;
     }
+    if (!mounted) return;
     setState(() => loading = true);
     if (kDebugMode) {
       debugPrint('[Auth] email login started: $trimmedEmail');
@@ -1275,6 +1305,13 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    if (googleLoading || loading) {
+      if (kDebugMode) {
+        debugPrint('[Auth] google login ignored: another auth request is active');
+      }
+      return;
+    }
+    if (!mounted) return;
     setState(() => googleLoading = true);
     if (kDebugMode) {
       debugPrint('[Auth] google login started');
