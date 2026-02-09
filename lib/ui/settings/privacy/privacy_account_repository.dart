@@ -38,6 +38,12 @@ class PrivacyAccountRepository {
   static const emailKey = 'privacy_account_email';
   static const lastNameChangeAtKey = 'lastNameChangeAt';
 
+  static const _legacyDisplayNameKey = 'displayName';
+  static const _legacyFirstNameKey = 'privacy_account_first_name';
+  static const _legacyLastNameKey = 'privacy_account_last_name';
+  static const _legacyEmailKey = 'privacy_account_email';
+  static const _legacyLastNameChangeAtKey = 'lastNameChangeAt';
+
   String? _userScope(User? user) {
     final uid = user?.uid.trim();
     if (uid != null && uid.isNotEmpty) return uid;
@@ -52,13 +58,32 @@ class PrivacyAccountRepository {
 
   String _scopedKey(String baseKey, User? user) {
     final scope = _userScope(user);
-    if (scope == null) return baseKey;
+    if (scope == null) return '${baseKey}_guest';
     return '${baseKey}_$scope';
+  }
+
+  Future<void> _migrateLegacyIfNeeded(SharedPreferences prefs, User? user) async {
+    if (_userScope(user) == null) return;
+
+    Future<void> migrateString(String legacyKey, String scopedKey) async {
+      if (prefs.containsKey(scopedKey) || !prefs.containsKey(legacyKey)) return;
+      final value = prefs.getString(legacyKey);
+      if (value == null) return;
+      await prefs.setString(scopedKey, value);
+      await prefs.remove(legacyKey);
+    }
+
+    await migrateString(_legacyDisplayNameKey, _scopedKey(displayNameKey, user));
+    await migrateString(_legacyFirstNameKey, _scopedKey(firstNameKey, user));
+    await migrateString(_legacyLastNameKey, _scopedKey(lastNameKey, user));
+    await migrateString(_legacyEmailKey, _scopedKey(emailKey, user));
+    await migrateString(_legacyLastNameChangeAtKey, _scopedKey(lastNameChangeAtKey, user));
   }
 
   Future<PrivacyAccountData> load() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
+    await _migrateLegacyIfNeeded(prefs, user);
     final scopedDisplayName = prefs.getString(_scopedKey(displayNameKey, user))?.trim();
     final fallbackName = (scopedDisplayName?.isNotEmpty == true)
         ? scopedDisplayName!
@@ -98,6 +123,7 @@ class PrivacyAccountRepository {
   Future<void> saveName({required String firstName, required String lastName, required DateTime changedAt}) async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
+    await _migrateLegacyIfNeeded(prefs, user);
     final first = firstName.trim();
     final last = lastName.trim();
 
@@ -116,6 +142,7 @@ class PrivacyAccountRepository {
   Future<void> saveEmail(String email) async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
+    await _migrateLegacyIfNeeded(prefs, user);
     await prefs.setString(_scopedKey(emailKey, user), email.trim());
   }
 }
