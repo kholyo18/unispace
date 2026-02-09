@@ -1,7 +1,7 @@
 {
   "@@locale": "ar",
   "sections": "الأقسام",
-  "majors": "التخصصات",
+  "majors": "تخصصات",
   "comments": "التعليقات",
   "comment": "تعليق",
   "writeYourComment": "اكتب تعليقك",
@@ -9,7 +9,7 @@
   "cancel": "إلغاء",
   "delete": "حذف",
   "posted": "نشر",
-  "searchClipboard": "ابحث داخل الحافظة",
+  "searchClipboard": "ابحث داخل الحافظة…",
   "note": "ملاحظة",
   "title": "العنوان",
   "content": "المحتوى",
@@ -54,92 +54,79 @@
   "resetSent": "تم إرسال رابط إعادة التعيين",
   "resetFailed": "تعذر الإرسال: {e}",
   "notRegistered": "غير مسجّل",
-  "searchClipboard": "ابحث داخل الحافظة…",
   "pinned": "مثبّتة",
   "otherNotes": "باقي الملاحظات",
-  "note": "ملاحظة",
-  "title": "العنوان",
-  "content": "المحتوى",
-  "pinNote": "تثبيت الملاحظة",
   "noPostsYet": "لا توجد منشورات بعد",
   "startDiscussion": "ابدأ النقاش الأول في المجتمع وشارك تجربتك مع زملائك.",
   "createPost": "نشر",
-
   "newPost": "منشور جديد",
   "mediaUrl": "رابط صورة/فيديو",
   "hashtag": "#",
   "share": "مشاركة",
   "report": "إبلاغ",
-  "commentsCount": "تعليقات ({count})",
+  "commentsCount": "Comments ({count})",
   "writeComment": "اكتب تعليقك…",
   "quickCalc2": "حساب سريع",
   "add": "إضافة",
   "calculate": "احسب",
   "pass": " ناجح",
   "fail": " راسب",
-  "credits": "الرصيد: {value}",
+  "credits": "رصيد:",
   "systemMode": "حسب النظام",
   "darkMode": "الوضع الداكن",
   "lightMode": "الوضع الفاتح",
-  "resetFailed": "تعذر الإرسال: {e}",
   "aboutAppDetails": "UniSpace لا يجمع بيانات شخصية خارج Firebase. جميع البيانات آمنة.",
   "chooseTheme": "اختر المظهر",
-  "light": "فاتح"
-,"dark": "داكن"
-,"system": "حسب النظام"
-,"chooseLanguage": "اختر اللغة",
-"arabic": "العربية"
-,"register": "تسجيل"
-,"post": "تم نشر منشورك ✅",
-  "createPoste": "أنشئ منشوراً"
-,"majors": "تخصصات"
-,"oneMajor": "تخصص واحد"
-,"noMajorsYet": "لا تخصصات مسجّلة بعد"
-,"editWeights": "تعديل الأوزان"
-,"facultyEconomics": "كلية العلوم الاقتصادية والتجارية وعلوم التسيير"
-,"commentsCount": "Comments ({count})"
-,"basicEducationDept": "قسم التعليم الأساسي"
-,"basicEducation": "التعليم الأساسي",
+  "light": "فاتح",
+  "dark": "داكن",
+  "system": "حسب النظام",
+  "chooseLanguage": "اختر اللغة",
+  "arabic": "العربية",
+  "register": "تسجيل",
+  "post": "تم نشر منشورك ✅",
+  "createPoste": "أنشئ منشوراً",
+  "oneMajor": "تخصص واحد",
+  "noMajorsYet": "لا تخصصات مسجّلة بعد",
+  "editWeights": "تعديل الأوزان",
+  "facultyEconomics": "كلية العلوم الاقتصادية والتجارية وعلوم التسيير",
+  "basicEducationDept": "قسم التعليم الأساسي",
+  "basicEducation": "التعليم الأساسي",
   "managementSciencesDept": "قسم علوم التسيير",
   "managementSciences": "علوم التسيير",
   "businessAdministration": "إدارة أعمال",
   "financialManagement": "الإدارة المالية",
   "humanResourcesManagement": "إدارة موارد بشرية",
-  "corporateFinancialManagement": "التسيير المالي للمؤسسات"
-,"commercialSciencesDept": "قسم علوم تجارية",
+  "corporateFinancialManagement": "التسيير المالي للمؤسسات",
+  "commercialSciencesDept": "قسم علوم تجارية",
   "commercialSciences": "علوم تجارية",
   "financeInternationalTrade": "مالية وتجارة دولية",
   "marketing": "تسويق",
   "servicesMarketing": "تسويق الخدمات",
-  "hotelTourismMarketing": "تسويق فندقي وسياحي"
-,"financialAccountingDept": "قسم علوم مالية ومحاسبة",
+  "hotelTourismMarketing": "تسويق فندقي وسياحي",
+  "financialAccountingDept": "قسم علوم مالية ومحاسبة",
   "financialAccounting": "علوم مالية ومحاسبة",
   "finance": "مالية",
   "accounting": "محاسبة",
   "accountingTaxation": "محاسبة وجباية",
-  "corporateFinance": "مالية المؤسسة"
-,"economicsDept": "قسم علوم اقتصادية",
+  "corporateFinance": "مالية المؤسسة",
+  "economicsDept": "قسم علوم اقتصادية",
   "economics": "علوم اقتصادية",
-  "monetaryFinancialEconomics": "اقتصاد نقدي ومالي"
-,"internationalEconomics": "اقتصاد دولي"
-,"noSubjectsThisSemester": "لا توجد مواد في هذا الفصل."
-,"credits": "رصيد:",
-  "coefficient": "معامل:"
-,"close": "إغلاق"
-,"studyResults": "نتائج الدراسة"
-,"notesTdTpExam": "العلامات (TD/TP/EXAM)"
-,"facultyLawPolitical": "كلية الحقوق والعلوم السياسية",
+  "monetaryFinancialEconomics": "اقتصاد نقدي ومالي",
+  "internationalEconomics": "اقتصاد دولي",
+  "noSubjectsThisSemester": "لا توجد مواد في هذا الفصل.",
+  "coefficient": "معامل:",
+  "close": "إغلاق",
+  "studyResults": "نتائج الدراسة",
+  "notesTdTpExam": "العلامات (TD/TP/EXAM)",
+  "facultyLawPolitical": "كلية الحقوق والعلوم السياسية",
   "politicalSciences": "علوم سياسية",
   "commonCore": "جذع مشترك",
-
   "basicUnit": "الوحدة الأساسية",
   "methodologicalUnit": "الوحدة المنهجية",
   "exploratoryUnit": "الوحدة الاستكشافية",
   "horizontalUnit": "الوحدة الأفقية",
-
   "politicalAdministrativeOrgs": "تنظيمات سياسية وإدارية",
   "law": "حقوق",
-
   "publicLaw": "قانون عام",
   "privateLaw": "قانون خاص",
   "advancedPublicLaw": "قانون عام معمق",
@@ -154,11 +141,9 @@
   "internationalCooperation": "التعاون الدولي",
   "localAdministration": "الإدارة المحلية",
   "contactUs": "تواصل معنا",
-  "report": "إبلاغ",
   "blockAccount": "حظر الحساب",
   "followComment": "متابعة التعليق",
   "copyText": "نسخ النص",
-  "share": "مشاركة",
   "hide": "إخفاء",
   "savePost": "حفظ المنشور",
   "university": "الجامعة",
@@ -168,7 +153,6 @@
   "mood": "Mood",
   "name": "الاسم",
   "posts": "المنشورات",
-  "comments": "التعليقات",
   "profile": "الملف الشخصي",
   "following": "يتابع",
   "userInfo": "معلومات المستخدم",
@@ -610,6 +594,104 @@
   "privacyEmailCurrentMismatch": "البريد الحالي غير مطابق.",
   "privacyEmailValidationRequired": "يرجى إدخال البريد الجديد وتأكيده.",
   "privacyEmailConfirmMismatch": "البريدان غير متطابقين.",
-  "privacyLoadFailed": "تعذر تحميل بيانات الخصوصية."
-
+  "privacyLoadFailed": "تعذر تحميل بيانات الخصوصية.",
+  "securityPrivacyTitle": "الأمان والخصوصية",
+  "securitySegmentTitle": "الأمان",
+  "privacySegmentTitle": "الخصوصية",
+  "privacyPasswordNewLengthError": "كلمة المرور الجديدة يجب أن تتكون من 8 أحرف على الأقل.",
+  "privacyPasswordMustDifferError": "يجب أن تكون كلمة المرور الجديدة مختلفة عن الحالية.",
+  "privacyPasswordMismatchError": "كلمتا المرور غير متطابقتين.",
+  "privacyPasswordStrengthWeak": "ضعيف",
+  "privacyPasswordStrengthMedium": "متوسط",
+  "privacyPasswordStrengthStrong": "قوي",
+  "privacyPasswordUpdateConfirmTitle": "تأكيد التحديث",
+  "privacyPasswordUpdateConfirmBody": "هل تريد تحديث كلمة المرور؟",
+  "privacyPasswordUpdateAction": "تحديث",
+  "privacyPasswordUpdateRequiresSignin": "تعذر تحديث كلمة المرور، يرجى تسجيل الدخول مرة أخرى.",
+  "privacyPasswordReauthFailedGeneric": "تعذر التحقق من الهوية، حاول لاحقًا.",
+  "privacyPasswordUpdateSuccess": "تم تحديث كلمة المرور بنجاح.",
+  "privacyPasswordUpdateFailed": "تعذر تحديث كلمة المرور، حاول لاحقًا.",
+  "privacyNotAvailable": "غير متوفر",
+  "privacyResetPasswordDialogBody": "سنرسل رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المسجل: {maskedEmail}",
+  "@privacyResetPasswordDialogBody": {
+    "placeholders": {
+      "maskedEmail": {}
+    }
+  },
+  "privacySendResetLinkAction": "إرسال الرابط",
+  "privacyNoEmailLinked": "لا يوجد بريد إلكتروني مرتبط بالحساب.",
+  "privacyResetLinkSent": "تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني.",
+  "privacyResetLinkFailed": "تعذر إرسال الرابط، حاول لاحقًا.",
+  "privacyNetworkCellular": "بيانات الهاتف",
+  "privacyUnknown": "غير معروف",
+  "algeriaLabel": "الجزائر",
+  "privacyNoAuditDataYet": "لا توجد بيانات متاحة بعد.",
+  "privacyLastPasswordChangeTitle": "آخر تغيير كلمة المرور",
+  "privacyDateTimeLabel": "التاريخ والوقت",
+  "privacyDeviceLabel": "الجهاز",
+  "privacyManufacturerLabel": "الشركة المصنّعة",
+  "privacyOperatingSystemLabel": "نظام التشغيل",
+  "privacyAppVersionLabel": "إصدار التطبيق",
+  "privacyConnectionTypeLabel": "نوع الاتصال",
+  "privacyApproxLocationLabel": "الموقع التقريبي",
+  "privacyIpAddressLabel": "عنوان IP",
+  "privacyCopyFullIp": "نسخ IP الكامل",
+  "privacyThisWasNotMe": "هذا ليس أنا",
+  "privacyIpUnavailable": "عنوان IP غير متوفر.",
+  "privacyCopyIpSuccess": "تم نسخ IP الكامل بأمان.",
+  "privacyReauthCopyIpReason": "تحقق من هويتك لنسخ IP الكامل",
+  "privacySecurityAlertTitle": "تحذير أمني شديد",
+  "privacySecurityAlertBody": "إذا لم تكن أنت من غيّر كلمة المرور، سنقوم بتسجيل الخروج من جميع الجلسات فوراً. هل تريد المتابعة؟",
+  "privacyContinueAction": "متابعة",
+  "privacyOtherSessionsRevokedPrecaution": "تم إنهاء الجلسات الأخرى كإجراء احترازي.",
+  "privacyRevokeSessionsFailed": "تعذر إنهاء جميع الجلسات حالياً.",
+  "privacyChangePasswordNowNote": "يرجى تغيير كلمة المرور فوراً. التحقق بخطوتين: قريباً.",
+  "privacyChangePasswordTitle": "تغيير كلمة المرور",
+  "privacyCurrentPasswordLabel": "كلمة المرور الحالية",
+  "privacyCurrentPasswordHelper": "أدخل كلمة المرور الحالية لإثبات ملكية الحساب.",
+  "privacyResetEmailHint": "قد يصل البريد خلال دقيقة، وتأكد من مجلد الرسائل غير المرغوب فيها.",
+  "privacyNewPasswordLabel": "كلمة المرور الجديدة",
+  "privacyNewPasswordHelper": "يجب أن تحتوي على 8 أحرف على الأقل.",
+  "privacyPasswordStrengthLabel": "قوة كلمة المرور: ",
+  "privacyConfirmNewPasswordLabel": "تأكيد كلمة المرور الجديدة",
+  "privacyConfirmNewPasswordHelper": "أعد إدخال كلمة المرور الجديدة للتأكيد.",
+  "privacyEnterConfirmToMatch": "قم بإدخال التأكيد للتحقق من التطابق.",
+  "privacyPasswordsMatch": "كلمتا المرور متطابقتان.",
+  "privacyLoadingLastChange": "جارِ تحميل بيانات آخر تغيير...",
+  "privacyLastPasswordChangeUnavailable": "آخر تغيير كلمة المرور: غير متوفر",
+  "privacyLastPasswordChangeAt": "آخر تغيير كلمة المرور: {date}",
+  "@privacyLastPasswordChangeAt": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "privacyViewDetails": "عرض التفاصيل ⌄",
+  "privacySaveNewPassword": "حفظ كلمة المرور الجديدة",
+  "sessionAgoMinutes": "منذ {minutes} د",
+  "@sessionAgoMinutes": {
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "sessionAgoHours": "منذ {hours} س",
+  "@sessionAgoHours": {
+    "placeholders": {
+      "hours": {}
+    }
+  },
+  "sessionAgoDays": "منذ {days} ي",
+  "@sessionAgoDays": {
+    "placeholders": {
+      "days": {}
+    }
+  },
+  "sessionDeviceNameLabel": "اسم الجهاز",
+  "sessionTrustedDevice": "جهاز موثوق",
+  "sessionModelLabel": "الموديل",
+  "sessionPlatformLabel": "المنصة",
+  "sessionVersionLabel": "الإصدار",
+  "sessionLoginDateLabel": "تاريخ الدخول",
+  "sessionLastActivityLabel": "آخر نشاط",
+  "sessionNetworkLabel": "الشبكة",
+  "dangerZone": "منطقة الخطر"
 }

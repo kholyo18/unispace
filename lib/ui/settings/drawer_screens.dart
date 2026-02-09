@@ -1483,12 +1483,13 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   }
 
   String _relativeSince(Timestamp? timestamp, BuildContext context) {
+    final s = S.of(context);
     if (timestamp == null) return S.of(context).activeSessionNow;
     final diff = DateTime.now().difference(timestamp.toDate());
     if (diff.inMinutes < 1) return S.of(context).activeSessionNow;
-    if (diff.inHours < 1) return 'منذ ${diff.inMinutes} د';
-    if (diff.inDays < 1) return 'منذ ${diff.inHours} س';
-    return 'منذ ${diff.inDays} ي';
+    if (diff.inHours < 1) return s.sessionAgoMinutes('${diff.inMinutes}');
+    if (diff.inDays < 1) return s.sessionAgoHours('${diff.inHours}');
+    return s.sessionAgoDays('${diff.inDays}');
   }
 
   String _formatTimestamp(Timestamp? timestamp, BuildContext context) {
@@ -1573,7 +1574,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     TextField(
                       controller: aliasController,
                       textDirection: m.TextDirection.rtl,
-                      decoration: const InputDecoration(labelText: 'اسم الجهاز'),
+                      decoration: InputDecoration(labelText: S.of(context).sessionDeviceNameLabel),
                     ),
                     const SizedBox(height: 8),
                     SwitchListTile.adaptive(
@@ -1586,16 +1587,16 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           trusted: value,
                         );
                       },
-                      title: const Text('جهاز موثوق'),
+                      title: Text(S.of(context).sessionTrustedDevice),
                     ),
                     const Divider(),
-                    Text('الموديل: ${session.model}'),
-                    Text('المنصة: ${session.platform} ${session.osVersion}'),
-                    Text('الإصدار: ${session.appVersion} (${session.buildNumber})'),
-                    Text('تاريخ الدخول: ${_formatTimestamp(session.createdAt, context)}'),
-                    Text('آخر نشاط: ${_formatTimestamp(session.lastSeenAt, context)} (${_relativeSince(session.lastSeenAt, context)})'),
-                    if ((session.locale ?? '').isNotEmpty) Text('اللغة: ${session.locale}'),
-                    if ((session.networkType ?? '').isNotEmpty) Text('الشبكة: ${session.networkType}'),
+                    Text('${S.of(context).sessionModelLabel}: ${session.model}'),
+                    Text('${S.of(context).sessionPlatformLabel}: ${session.platform} ${session.osVersion}'),
+                    Text('${S.of(context).sessionVersionLabel}: ${session.appVersion} (${session.buildNumber})'),
+                    Text('${S.of(context).sessionLoginDateLabel}: ${_formatTimestamp(session.createdAt, context)}'),
+                    Text('${S.of(context).sessionLastActivityLabel}: ${_formatTimestamp(session.lastSeenAt, context)} (${_relativeSince(session.lastSeenAt, context)})'),
+                    if ((session.locale ?? '').isNotEmpty) Text('${S.of(context).changeLanguage}: ${session.locale}'),
+                    if ((session.networkType ?? '').isNotEmpty) Text('${S.of(context).sessionNetworkLabel}: ${session.networkType}'),
                     const SizedBox(height: 12),
                     FilledButton.tonal(
                       onPressed: () async {
@@ -1607,7 +1608,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         if (!mounted) return;
                         Navigator.of(context).pop();
                       },
-                      child: const Text('حفظ التغييرات'),
+                      child: Text(S.of(context).save),
                     ),
                     const SizedBox(height: 8),
                     if (!isCurrent)
@@ -1620,7 +1621,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         child: Text(S.of(context).signOut),
                       ),
                     const SizedBox(height: 12),
-                    Text('منطقة الخطر', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.red)),
+                    Text(S.of(context).dangerZone, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.red)),
                     const SizedBox(height: 8),
                     OutlinedButton(
                       onPressed: () => _logoutAllOther(user.uid),

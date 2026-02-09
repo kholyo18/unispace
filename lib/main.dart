@@ -644,7 +644,7 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                   _drawerItem(
                     context,
                     icon: Icons.security_outlined,
-                    title: 'الأمان و الخصوصية',
+                    title: S.of(context).securityPrivacyTitle,
                     onTap: () {
                       Navigator.push(
                         context,
