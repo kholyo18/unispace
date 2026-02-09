@@ -4,6 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import * as logger from "firebase-functions/logger";
 import { error as logError, info as logInfo, warn as logWarn } from "firebase-functions/logger";
 import sgMail from "@sendgrid/mail";
 
@@ -21,6 +22,7 @@ const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const USERNAME_RESERVE_MINUTES = 15;
 
 export const helloWorld = onRequest((req, res) => {
+  logger.info("helloWorld function invoked", { path: req.path, method: req.method });
   res.send("Hello from Firebase!");
 });
 
