@@ -17,6 +17,7 @@ import '../../features/downloads/downloads_repository.dart';
 import 'favorites_service.dart';
 import 'security_service.dart';
 import 'session_service.dart';
+import '../../services/auth_session_service.dart';
 import 'user_profile_service.dart';
 
 class NotificationsSettingsScreen extends StatelessWidget {
@@ -254,7 +255,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
                       if (currentUser != null) {
                         await SessionService.instance.revokeCurrentSession(currentUser.uid);
                       }
-                      await FirebaseAuth.instance.signOut();
+                      await AuthSessionService.signOutFully();
                     },
                     child: Text(S.of(context).signOut),
                   ),
