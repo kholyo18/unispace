@@ -327,6 +327,42 @@
   "twoFactorAuthHint": "يتطلب رمز تحقق عند تسجيل الدخول.",
   "twoFactorEnabledToast": "تم تفعيل المصادقة الثنائية.",
   "twoFactorDisabledToast": "تم إيقاف المصادقة الثنائية.",
+  "twoFactorEnableConfirmTitle": "تفعيل المصادقة الثنائية؟",
+  "twoFactorEnableConfirmBody": "سيُطلب منك إدخال رمز لمرة واحدة يتم إرساله إلى بريدك بعد تسجيل الدخول بكلمة المرور.",
+  "twoFactorOtpTitle": "رمز التحقق عبر البريد",
+  "twoFactorOtpDescription": "أدخل الرمز المكوّن من 6 أرقام المرسل إلى {email}.",
+  "@twoFactorOtpDescription": {
+    "placeholders": {
+      "email": {}
+    }
+  },
+  "twoFactorCodeLabel": "رمز التحقق",
+  "twoFactorCodeHint": "رمز من 6 أرقام",
+  "twoFactorConfirmButton": "تأكيد",
+  "twoFactorResendCode": "إعادة إرسال الرمز",
+  "twoFactorResendIn": "إعادة الإرسال خلال {seconds}ث",
+  "@twoFactorResendIn": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "twoFactorBackToLogin": "العودة لتسجيل الدخول",
+  "twoFactorCodeSent": "تم إرسال رمز التحقق إلى بريدك.",
+  "twoFactorCodeExpired": "انتهت صلاحية الرمز. اطلب رمزًا جديدًا.",
+  "twoFactorCodeIncorrect": "الرمز غير صحيح. حاول مرة أخرى.",
+  "twoFactorTooManyAttempts": "محاولات فاشلة كثيرة. حاول لاحقًا.",
+  "twoFactorResendCooldown": "يرجى الانتظار قبل إعادة الإرسال.",
+  "twoFactorVerifiedSuccess": "اكتملت المصادقة الثنائية بنجاح.",
+  "twoFactorCodeInvalidFormat": "أدخل رمزًا صالحًا من 6 أرقام.",
+  "twoFactorChallengeMissing": "تعذر العثور على جلسة التحقق. سجّل الدخول مجددًا.",
+  "twoFactorSendFailed": "فشل إرسال رمز التحقق.",
+  "twoFactorGenericError": "تعذر إتمام التحقق. حاول مرة أخرى.",
+  "twoFactorAttemptsRemaining": "المحاولات المتبقية: {count}",
+  "@twoFactorAttemptsRemaining": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "manageDevicesTitle": "إدارة الأجهزة",
   "manageDevicesHint": "راجع الجلسات والأجهزة النشطة.",
   "manageDevicesDescription": "اطلع على أماكن تسجيل الدخول وأزل الوصول عند الحاجة.",

@@ -191,8 +191,27 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
                     );
                     return;
                   }
-                  await UserProfileService.instance
-                      .updateProfile(twoFactorEnabled: value);
+                  if (value) {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text(S.of(context).twoFactorEnableConfirmTitle),
+                        content: Text(S.of(context).twoFactorEnableConfirmBody),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: Text(S.of(context).cancel),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: Text(S.of(context).twoFactorConfirmButton),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true) return;
+                  }
+                  await UserProfileService.instance.updateProfile(twoFactorEnabled: value);
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
