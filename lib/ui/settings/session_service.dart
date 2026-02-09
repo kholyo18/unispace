@@ -226,6 +226,7 @@ class SessionService with WidgetsBindingObserver {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.uid != uid) return;
     await revokeSession(user: user, sessionId: sessionId);
+    await clearCurrentSessionId(uid);
     _stopHeartbeat();
     await _sessionSubscription?.cancel();
     _sessionSubscription = null;
