@@ -9,6 +9,8 @@ import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../services/auth_session_service.dart';
+
 class SessionService with WidgetsBindingObserver {
   SessionService._();
 
@@ -274,7 +276,7 @@ class SessionService with WidgetsBindingObserver {
       await clearCurrentSessionId(uid);
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null && currentUser.uid == uid) {
-        await FirebaseAuth.instance.signOut();
+        await AuthSessionService.signOutFully();
       }
     });
   }

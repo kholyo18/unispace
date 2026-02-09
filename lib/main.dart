@@ -54,6 +54,7 @@ import 'ui/settings/security_privacy_screen.dart';
 import 'ui/settings/email_verification_service.dart';
 import 'ui/settings/user_profile_service.dart';
 import 'ui/settings/session_service.dart';
+import 'services/auth_session_service.dart';
 import 'services/two_factor_service.dart';
 import 'features/auth/signup_flow.dart';
 import 'features/settings/about/about_screen.dart';
@@ -718,7 +719,7 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                       if (currentUser != null) {
                         await SessionService.instance.revokeCurrentSession(currentUser.uid);
                       }
-                      await FirebaseAuth.instance.signOut();
+                      await AuthSessionService.signOutFully();
                       if (kDebugMode) {
                         debugPrint('[Auth] logout complete');
                       }
@@ -1042,8 +1043,11 @@ class _AuthGateState extends State<AuthGate> {
             final user = snap.data!;
             final isPasswordUser = user.providerData.any((info) => info.providerId == 'password');
             if (isPasswordUser && !user.emailVerified) {
-              SessionService.instance.revokeCurrentSession(user.uid);
-              FirebaseAuth.instance.signOut();
+              unawaited(
+                AuthSessionService.signOutFully(
+                  beforeSignOut: () => SessionService.instance.revokeCurrentSession(user.uid),
+                ),
+              );
               return const SignInScreen();
             }
             if (!isPasswordUser) return const HomeShell();
@@ -1170,7 +1174,7 @@ class _SignInScreenState extends State<SignInScreen> {
             user.providerData.any((info) => info.providerId == 'password');
         if (isPasswordUser && !user.emailVerified) {
           await SessionService.instance.revokeCurrentSession(user.uid);
-          await FirebaseAuth.instance.signOut();
+          await AuthSessionService.signOutFully();
           if (!mounted) return;
           await _showUnverifiedDialog(trimmedEmail, trimmedPassword);
           return;
@@ -1259,7 +1263,7 @@ class _SignInScreenState extends State<SignInScreen> {
       }
       await user.sendEmailVerification();
       await SessionService.instance.revokeCurrentSession(user.uid);
-      await FirebaseAuth.instance.signOut();
+      await AuthSessionService.signOutFully();
       _showAuthSnack(S.of(context).verificationEmailSent);
     } on FirebaseAuthException catch (e) {
       _showAuthSnack(_mapAuthError(e));
@@ -1277,14 +1281,9 @@ class _SignInScreenState extends State<SignInScreen> {
     }
     try {
       // تأكد من إضافة SHA-1/SHA-256 في Firebase لكل من debug/release عند الحاجة.
-      await _googleSignIn.signOut();
-      try {
-        await _googleSignIn.disconnect();
-      } catch (e, stackTrace) {
-        debugPrint('Google disconnect skipped: $e');
-        debugPrintStack(stackTrace: stackTrace);
+      if (kDebugMode) {
+        debugPrint('[Auth] google login before GoogleSignIn.signIn()');
       }
-
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         debugPrint('Google sign-in canceled by user.');
@@ -1300,9 +1299,15 @@ class _SignInScreenState extends State<SignInScreen> {
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
+      if (kDebugMode) {
+        debugPrint('[Auth] google login credential ready (idToken=${googleAuth.idToken != null})');
+      }
       final authResult =
           await FirebaseAuth.instance.signInWithCredential(credential);
       final user = authResult.user;
+      if (kDebugMode) {
+        debugPrint('[Auth] google login FirebaseAuth.currentUser=${FirebaseAuth.instance.currentUser?.uid ?? 'null'}');
+      }
       if (user != null) {
         if (kDebugMode) {
           debugPrint('[Auth] google login success uid=${user.uid}');
@@ -1696,7 +1701,7 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, Wi
       if (kDebugMode) {
         debugPrint('[Auth] session revoked -> signOut');
       }
-      await FirebaseAuth.instance.signOut();
+      await AuthSessionService.signOutFully();
       return;
     }
     await SessionService.instance.updateLastSeen(user.uid);
