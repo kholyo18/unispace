@@ -12864,7 +12864,14 @@ class PdfReportService {
     required SemesterModel semester1,
     required SemesterModel semester2,
   }) async {
-    final pdf = pw.Document();
+    final generatedAt = DateTime.now();
+    final pdf = pw.Document(
+      title: 'Relevé des résultats UniSpace',
+      author: 'UniSpace',
+      subject: 'Relevé annuel des résultats',
+      creator: 'UniSpace Flutter App',
+      producer: 'UniSpace PDF Service',
+    );
 
     // حساب المتوسطات
     final moy1 = semester1.semesterAverage();
@@ -12875,76 +12882,74 @@ class PdfReportService {
     final cred2 = semester2.creditsEarned();
     final totalCred = cred1 + cred2;
 
-    final decision = ann == 0 ? '---' : (ann >= 10 ? 'SUCCEED' : 'FAILED');
+    final decision = ann == 0 ? '---' : (ann >= 10 ? 'SUCCÈS' : 'AJOURNÉ');
     final regularFont =
         pw.Font.ttf(await rootBundle.load("assets/fonts/Tajawal-Regular.ttf"));
     final boldFont =
         pw.Font.ttf(await rootBundle.load("assets/fonts/Tajawal-Bold.ttf"));
+    final user = FirebaseAuth.instance.currentUser;
+    final fullName = (user?.displayName?.trim().isNotEmpty ?? false)
+        ? user!.displayName!.trim()
+        : 'Étudiant UniSpace';
+    final email = _maskEmail(user?.email);
+    final docId = _buildDocumentId(generatedAt, semester1, semester2);
+    final academicYear = _academicYear(generatedAt);
 
     pdf.addPage(
       pw.MultiPage(
         margin: const pw.EdgeInsets.all(24),
+        theme: pw.ThemeData.withFont(base: regularFont, bold: boldFont),
+        footer: (context) => _footer(context, generatedAt, docId),
         build: (context) => [
-          pw.Text("Université ",
-              style: pw.TextStyle(font: boldFont, fontSize: 16)),
-          pw.Text("Faculté : $faculty", style: pw.TextStyle(font: regularFont)),
-          pw.Text("Programme : $program",
-              style: pw.TextStyle(font: regularFont)),
-          pw.SizedBox(height: 20),
-
-          _sectionTitle("DÉCISION", font: boldFont),
-          pw.SizedBox(height: 10),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text("Année : ${ann.toStringAsFixed(2)}",
-                  style: pw.TextStyle(font: regularFont, fontSize: 16)),
-              pw.Text("Total Crédits : $totalCred",
-                  style: pw.TextStyle(font: regularFont, fontSize: 16)),
-              pw.Text(
-                "Résultat : $decision",
-                style: pw.TextStyle(font: regularFont, fontSize: 16),
-              ),
-            ],
+          pw.Directionality(
+            textDirection: pw.TextDirection.ltr,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('Université : Université UniSpace',
+                    style: pw.TextStyle(font: boldFont, fontSize: 14)),
+                pw.Text('Faculté : ${faculty.isEmpty ? 'Non renseignée' : faculty}'),
+                pw.Text('Programme / Spécialité : ${program.isEmpty ? 'Non renseigné' : program}'),
+                pw.Text('Année universitaire : $academicYear'),
+                pw.Text('Nom & Prénom : $fullName'),
+                pw.Text('Email : ${email ?? 'Non renseigné'}'),
+                pw.SizedBox(height: 16),
+                _sectionTitle('DÉCISION', font: boldFont),
+                pw.SizedBox(height: 8),
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey400),
+                  columnWidths: const {
+                    0: pw.FlexColumnWidth(3),
+                    1: pw.FlexColumnWidth(2),
+                    2: pw.FlexColumnWidth(3),
+                    3: pw.FlexColumnWidth(2),
+                    4: pw.FlexColumnWidth(2),
+                    5: pw.FlexColumnWidth(2),
+                  },
+                  children: [
+                    _decisionHeaderRow(),
+                    _decisionValueRow(
+                      ann,
+                      totalCred,
+                      decision,
+                      moy1,
+                      moy2,
+                      cred1,
+                      cred2,
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 14),
+                _sectionTitle('SEMESTRE 1', font: boldFont),
+                pw.SizedBox(height: 8),
+                _modulesTable(semester1.modules),
+                pw.SizedBox(height: 14),
+                _sectionTitle('SEMESTRE 2', font: boldFont),
+                pw.SizedBox(height: 8),
+                _modulesTable(semester2.modules),
+              ],
+            ),
           ),
-          pw.SizedBox(height: 20),
-
-          _sectionTitle("SEMESTRE 1", font: boldFont),
-          pw.SizedBox(height: 10),
-          pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("Moyenne S1 : ${moy1.toStringAsFixed(2)}",
-                    style: pw.TextStyle(font: regularFont, fontSize: 16)),
-                pw.Text("Crédits S1 : $cred1",
-                    style: pw.TextStyle(font: regularFont, fontSize: 16))
-              ]),
-          pw.SizedBox(height: 10),
-          _modulesTable(semester1.modules, font: regularFont),
-          pw.SizedBox(height: 10),
-
-          _sectionTitle("SEMESTRE 2", font: boldFont),
-          pw.SizedBox(height: 10),
-          pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("Moyenne S2 : ${moy2.toStringAsFixed(2)}",
-                    style: pw.TextStyle(font: regularFont, fontSize: 16)),
-                pw.Text("Crédits S2 : $cred2",
-                    style: pw.TextStyle(font: regularFont, fontSize: 16)),
-              ]),
-          pw.SizedBox(height: 10),
-          _modulesTable(semester2.modules, font: regularFont),
-
-          // pw.SizedBox(height: 10),
-          // _sectionTitle("Résumé Annuel", font: boldFont),
-          // pw.SizedBox(height: 10),
-          // pw.Text("Moyenne Année : ${ann.toStringAsFixed(2)}",
-          //     style: pw.TextStyle(font: regularFont)),
-          // pw.Text("Total Crédits : $totalCred",
-          //     style: pw.TextStyle(font: regularFont)),
-          // pw.Text("Résultat Final : $decision",
-          //     style: pw.TextStyle(font: regularFont)),
         ],
       ),
     );
@@ -12973,28 +12978,144 @@ class PdfReportService {
     );
   }
 
-  static pw.Widget _modulesTable(List<ModuleModel> modules,
-      {required pw.Font font}) {
-    return pw.Table.fromTextArray(
-      headers: ["Module", "Coef", "Cred", "Moy"],
-      data: modules.map((m) {
-        return [
-          m.title,
-          m.coef.toString(),
-          m.credits.toString(),
-          m.moy.toStringAsFixed(2),
-        ];
-      }).toList(),
-      cellStyle: pw.TextStyle(fontSize: 11, font: font),
-      headerStyle: pw.TextStyle(
-        fontWeight: pw.FontWeight.bold,
-        fontSize: 12,
-        font: font,
-      ),
-      border: pw.TableBorder.all(),
-      cellAlignment: pw.Alignment.centerLeft,
+  static pw.TableRow _decisionHeaderRow() {
+    return pw.TableRow(
+      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+      children: [
+        _tableCell('Année (moyenne générale)', bold: true),
+        _tableCell('Total Crédits', bold: true),
+        _tableCell('Résultat', bold: true),
+        _tableCell('Moyenne S1', bold: true),
+        _tableCell('Moyenne S2', bold: true),
+        _tableCell('Crédits S1/S2', bold: true),
+      ],
     );
   }
+
+  static pw.TableRow _decisionValueRow(
+    double ann,
+    double totalCred,
+    String decision,
+    double moy1,
+    double moy2,
+    double cred1,
+    double cred2,
+  ) {
+    return pw.TableRow(
+      children: [
+        _tableCell(ann.toStringAsFixed(2)),
+        _tableCell(totalCred.toStringAsFixed(0)),
+        _tableCell(decision),
+        _tableCell(moy1.toStringAsFixed(2)),
+        _tableCell(moy2.toStringAsFixed(2)),
+        _tableCell('${cred1.toStringAsFixed(0)} / ${cred2.toStringAsFixed(0)}'),
+      ],
+    );
+  }
+
+  static pw.Widget _modulesTable(List<ModuleModel> modules) {
+    final rows = modules
+        .map((m) => [
+              m.title.ellipsize(42),
+              m.coef.toString(),
+              m.credits.toString(),
+              m.moy.toStringAsFixed(2),
+            ])
+        .toList();
+
+    return pw.Table.fromTextArray(
+      headers: const ['Module', 'Coef', 'Crédit', 'Moyenne'],
+      data: rows,
+      border: pw.TableBorder.all(color: PdfColors.grey400),
+      headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+      headerStyle:
+          pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+      cellStyle: const pw.TextStyle(fontSize: 10),
+      columnWidths: const {
+        0: pw.FixedColumnWidth(250),
+        1: pw.FixedColumnWidth(55),
+        2: pw.FixedColumnWidth(55),
+        3: pw.FixedColumnWidth(70),
+      },
+      cellAlignments: const {
+        0: pw.Alignment.centerLeft,
+        1: pw.Alignment.center,
+        2: pw.Alignment.center,
+        3: pw.Alignment.center,
+      },
+    );
+  }
+
+  static pw.Widget _footer(
+      pw.Context context, DateTime generatedAt, String docId) {
+    final generated = _formatDate(generatedAt);
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Divider(color: PdfColors.grey300),
+        pw.Text('Généré le : $generated', style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Document ID : $docId', style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Page ${context.pageNumber} / ${context.pagesCount}',
+            style: const pw.TextStyle(fontSize: 9)),
+        pw.Text(
+          'Ce document est généré automatiquement par UniSpace et n’a pas de valeur administrative officielle.',
+          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+        ),
+      ],
+    );
+  }
+
+  static pw.Widget _tableCell(String text, {bool bold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  static String _academicYear(DateTime now) {
+    final startYear = now.month >= 9 ? now.year : now.year - 1;
+    final endYear = startYear + 1;
+    return '$startYear-$endYear';
+  }
+
+  static String? _maskEmail(String? email) {
+    if (email == null || !email.contains('@')) return null;
+    final parts = email.split('@');
+    final local = parts.first;
+    final domain = parts.last;
+    if (local.length <= 2) return '$local@$domain';
+    return '${local.substring(0, 2)}***@$domain';
+  }
+
+  static String _buildDocumentId(
+    DateTime generatedAt,
+    SemesterModel semester1,
+    SemesterModel semester2,
+  ) {
+    final ts =
+        '${generatedAt.year}${_two(generatedAt.month)}${_two(generatedAt.day)}-${_two(generatedAt.hour)}${_two(generatedAt.minute)}${_two(generatedAt.second)}';
+    final hashSeed = [
+      semester1.modules.length,
+      semester2.modules.length,
+      (semester1.semesterAverage() * 100).round(),
+      (semester2.semesterAverage() * 100).round(),
+    ].join('-');
+    final shortHash = hashSeed.codeUnits.fold<int>(0, (a, b) => (a + b) % 99999);
+    return 'US-$ts-${shortHash.toRadixString(16).padLeft(4, '0')}';
+  }
+
+  static String _formatDate(DateTime date) {
+    return '${_two(date.day)}/${_two(date.month)}/${date.year} ${_two(date.hour)}:${_two(date.minute)}';
+  }
+
+  static String _two(int v) => v.toString().padLeft(2, '0');
 }
 
 
