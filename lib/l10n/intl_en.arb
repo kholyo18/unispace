@@ -1,5 +1,3 @@
-
-
 {
   "@@locale": "en",
   "sections": "Sections",
@@ -11,12 +9,12 @@
   "cancel": "Cancel",
   "delete": "Delete",
   "posted": "Post",
-  "searchClipboard": "Search inside Note-pade",
+  "searchClipboard": "Search inside Note-pade…",
   "note": "Note",
   "title": "Title",
   "content": "Content",
   "save": "Save",
-  "pinNote": "Pin note",
+  "pinNote": "Pin Note",
   "noNotesYet": "No notes yet",
   "archive": "Archive",
   "home": "Home",
@@ -56,93 +54,79 @@
   "resetSent": "Reset link has been sent",
   "resetFailed": "Failed to send: {e}",
   "notRegistered": "Not registered",
-  "searchClipboard": "Search inside Note-pade…",
   "pinned": "Pinned",
   "otherNotes": "Other Notes",
-  "note": "Note",
-  "title": "Title",
-  "content": "Content",
-  "pinNote": "Pin Note",
   "noPostsYet": "No posts yet",
   "startDiscussion": "Start the first discussion in the community and share your experience with colleagues.",
   "createPost": "Post",
-
   "newPost": "New Post",
   "mediaUrl": "Image/Video URL",
   "hashtag": "#",
   "share": "Share",
   "report": "Report",
-  "commentsCount": "Comments ({count})",
+  "commentsCount": "تعليقات ({count})",
   "writeComment": "Write your comment…",
   "quickCalc2": "Quick Calc",
   "add": "Add",
   "calculate": "Calculate",
   "pass": " Passed",
   "fail": " Failed",
-  "credits": "Credits: {value}",
+  "credits": "Credits:",
   "lightMode": "Light Mode",
   "darkMode": "Dark Mode",
   "systemMode": "System Mode",
-  "resetFailed": "Failed to send: {e}",
-  "aboutAppDetails": "UniSpace does not collect personal data outside Firebase. All data is secure."
-,"chooseTheme": "Choose Theme"
-,"light": "Light"
-,"dark": "Dark"
-,"system": "System"
-,"chooseLanguage": "Choose Language"
-,"arabic": "Arabic"
-,"register": "Register"
-,"title": "Title"
-,"post": "Your post has been published ✅"
-,"createPoste": "Create a post"
-,"majors": "Majors"
-,"oneMajor": "One major"
-,"noMajorsYet": "No majors yet"
-,"editWeights": "Edit Weights"
-,"facultyEconomics": "Faculty of Economics, Commerce, and Management Sciences"
-,"commentsCount": "تعليقات ({count})"
-,"basicEducationDept": "Basic Education Department"
-,"basicEducation": "Basic Education",
+  "aboutAppDetails": "UniSpace does not collect personal data outside Firebase. All data is secure.",
+  "chooseTheme": "Choose Theme",
+  "light": "Light",
+  "dark": "Dark",
+  "system": "System",
+  "chooseLanguage": "Choose Language",
+  "arabic": "Arabic",
+  "register": "Register",
+  "post": "Your post has been published ✅",
+  "createPoste": "Create a post",
+  "oneMajor": "One major",
+  "noMajorsYet": "No majors yet",
+  "editWeights": "Edit Weights",
+  "facultyEconomics": "Faculty of Economics, Commerce, and Management Sciences",
+  "basicEducationDept": "Basic Education Department",
+  "basicEducation": "Basic Education",
   "managementSciencesDept": "Department of Management Sciences",
   "managementSciences": "Management Sciences",
   "businessAdministration": "Business Administration",
   "financialManagement": "Financial Management",
   "humanResourcesManagement": "Human Resources Management",
-  "corporateFinancialManagement": "Corporate Financial Management"
-,"commercialSciencesDept": "Department of Commercial Sciences",
+  "corporateFinancialManagement": "Corporate Financial Management",
+  "commercialSciencesDept": "Department of Commercial Sciences",
   "commercialSciences": "Commercial Sciences",
   "financeInternationalTrade": "Finance and International Trade",
   "marketing": "Marketing",
   "servicesMarketing": "Services Marketing",
-  "hotelTourismMarketing": "Hotel and Tourism Marketing"
-,"financialAccountingDept": "Department of Financial and Accounting Sciences",
+  "hotelTourismMarketing": "Hotel and Tourism Marketing",
+  "financialAccountingDept": "Department of Financial and Accounting Sciences",
   "financialAccounting": "Financial and Accounting Sciences",
   "finance": "Finance",
   "accounting": "Accounting",
   "accountingTaxation": "Accounting and Taxation",
-  "corporateFinance": "Corporate Finance"
-,"economicsDept": "Department of Economics",
+  "corporateFinance": "Corporate Finance",
+  "economicsDept": "Department of Economics",
   "economics": "Economics",
-  "monetaryFinancialEconomics": "Monetary and Financial Economics"
-,"internationalEconomics": "International Economics"
-,"noSubjectsThisSemester": "No subjects in this semester."
-,"credits": "Credits:",
-  "coefficient": "Coef:"
-,"close": "Close"
-,"studyResults": "Study Results",
-  "notesTdTpExam": "Grades (TD/TP/Exam)"
-,"facultyLawPolitical": "Faculty of Law and Political Sciences",
+  "monetaryFinancialEconomics": "Monetary and Financial Economics",
+  "internationalEconomics": "International Economics",
+  "noSubjectsThisSemester": "No subjects in this semester.",
+  "coefficient": "Coef:",
+  "close": "Close",
+  "studyResults": "Study Results",
+  "notesTdTpExam": "Grades (TD/TP/Exam)",
+  "facultyLawPolitical": "Faculty of Law and Political Sciences",
   "politicalSciences": "Political Sciences",
   "commonCore": "Common Core",
-
   "basicUnit": "Basic Unit",
   "methodologicalUnit": "Methodological Unit",
   "exploratoryUnit": "Exploratory Unit",
   "horizontalUnit": "Horizontal Unit",
-
   "politicalAdministrativeOrgs": "Political and Administrative Organizations",
   "law": "Law",
-
   "publicLaw": "Public Law",
   "privateLaw": "Private Law",
   "advancedPublicLaw": "Advanced Public Law",
@@ -157,11 +141,9 @@
   "internationalCooperation": "International Cooperation",
   "localAdministration": "Local Administration",
   "contactUs": "Contact Us",
-  "report": "Report",
   "blockAccount": "Block Account",
   "followComment": "Follow Comment",
   "copyText": "Copy Text",
-  "share": "Share",
   "hide": "Hide",
   "savePost": "Save Post",
   "university": "University",
@@ -171,7 +153,6 @@
   "mood": "Mood",
   "name": "Name",
   "posts": "Posts",
-  "comments": "Comments",
   "profile": "Profile",
   "following": "Following",
   "userInfo": "User Information",
@@ -613,6 +594,104 @@
   "privacyEmailCurrentMismatch": "Current email does not match.",
   "privacyEmailValidationRequired": "Enter and confirm your new email.",
   "privacyEmailConfirmMismatch": "Emails do not match.",
-  "privacyLoadFailed": "Unable to load privacy data."
-
+  "privacyLoadFailed": "Unable to load privacy data.",
+  "securityPrivacyTitle": "Security & Privacy",
+  "securitySegmentTitle": "Security",
+  "privacySegmentTitle": "Privacy",
+  "privacyPasswordNewLengthError": "The new password must be at least 8 characters long.",
+  "privacyPasswordMustDifferError": "The new password must be different from the current password.",
+  "privacyPasswordMismatchError": "Passwords do not match.",
+  "privacyPasswordStrengthWeak": "Weak",
+  "privacyPasswordStrengthMedium": "Medium",
+  "privacyPasswordStrengthStrong": "Strong",
+  "privacyPasswordUpdateConfirmTitle": "Confirm update",
+  "privacyPasswordUpdateConfirmBody": "Do you want to update the password?",
+  "privacyPasswordUpdateAction": "Update",
+  "privacyPasswordUpdateRequiresSignin": "Unable to update password. Please sign in again.",
+  "privacyPasswordReauthFailedGeneric": "Unable to verify your identity. Please try again later.",
+  "privacyPasswordUpdateSuccess": "Password updated successfully.",
+  "privacyPasswordUpdateFailed": "Unable to update password. Please try again later.",
+  "privacyNotAvailable": "Not available",
+  "privacyResetPasswordDialogBody": "We will send a password reset link to your registered email: {maskedEmail}",
+  "@privacyResetPasswordDialogBody": {
+    "placeholders": {
+      "maskedEmail": {}
+    }
+  },
+  "privacySendResetLinkAction": "Send link",
+  "privacyNoEmailLinked": "No email is linked to this account.",
+  "privacyResetLinkSent": "Password reset link sent to your email.",
+  "privacyResetLinkFailed": "Unable to send reset link. Please try again later.",
+  "privacyNetworkCellular": "Mobile data",
+  "privacyUnknown": "Unknown",
+  "algeriaLabel": "Algeria",
+  "privacyNoAuditDataYet": "No data available yet.",
+  "privacyLastPasswordChangeTitle": "Last password change",
+  "privacyDateTimeLabel": "Date and time",
+  "privacyDeviceLabel": "Device",
+  "privacyManufacturerLabel": "Manufacturer",
+  "privacyOperatingSystemLabel": "Operating system",
+  "privacyAppVersionLabel": "App version",
+  "privacyConnectionTypeLabel": "Connection type",
+  "privacyApproxLocationLabel": "Approximate location",
+  "privacyIpAddressLabel": "IP address",
+  "privacyCopyFullIp": "Copy full IP",
+  "privacyThisWasNotMe": "This wasn't me",
+  "privacyIpUnavailable": "IP address is unavailable.",
+  "privacyCopyIpSuccess": "Full IP copied securely.",
+  "privacyReauthCopyIpReason": "Verify your identity to copy the full IP.",
+  "privacySecurityAlertTitle": "Critical security alert",
+  "privacySecurityAlertBody": "If you did not change the password, we will immediately sign out all other sessions. Do you want to continue?",
+  "privacyContinueAction": "Continue",
+  "privacyOtherSessionsRevokedPrecaution": "Other sessions were signed out as a precaution.",
+  "privacyRevokeSessionsFailed": "Unable to end all sessions right now.",
+  "privacyChangePasswordNowNote": "Please change your password immediately. Two-step verification: coming soon.",
+  "privacyChangePasswordTitle": "Change password",
+  "privacyCurrentPasswordLabel": "Current password",
+  "privacyCurrentPasswordHelper": "Enter your current password to verify account ownership.",
+  "privacyResetEmailHint": "The email may arrive within a minute. Check your spam folder too.",
+  "privacyNewPasswordLabel": "New password",
+  "privacyNewPasswordHelper": "It must contain at least 8 characters.",
+  "privacyPasswordStrengthLabel": "Password strength: ",
+  "privacyConfirmNewPasswordLabel": "Confirm new password",
+  "privacyConfirmNewPasswordHelper": "Re-enter your new password for confirmation.",
+  "privacyEnterConfirmToMatch": "Enter confirmation to verify the match.",
+  "privacyPasswordsMatch": "Passwords match.",
+  "privacyLoadingLastChange": "Loading last change data...",
+  "privacyLastPasswordChangeUnavailable": "Last password change: Not available",
+  "privacyLastPasswordChangeAt": "Last password change: {date}",
+  "@privacyLastPasswordChangeAt": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "privacyViewDetails": "View details ⌄",
+  "privacySaveNewPassword": "Save new password",
+  "sessionAgoMinutes": "{minutes} min ago",
+  "@sessionAgoMinutes": {
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "sessionAgoHours": "{hours} h ago",
+  "@sessionAgoHours": {
+    "placeholders": {
+      "hours": {}
+    }
+  },
+  "sessionAgoDays": "{days} d ago",
+  "@sessionAgoDays": {
+    "placeholders": {
+      "days": {}
+    }
+  },
+  "sessionDeviceNameLabel": "Device name",
+  "sessionTrustedDevice": "Trusted device",
+  "sessionModelLabel": "Model",
+  "sessionPlatformLabel": "Platform",
+  "sessionVersionLabel": "Version",
+  "sessionLoginDateLabel": "Login date",
+  "sessionLastActivityLabel": "Last activity",
+  "sessionNetworkLabel": "Network",
+  "dangerZone": "Danger zone"
 }

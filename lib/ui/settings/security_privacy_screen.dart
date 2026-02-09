@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:UniSpace/generated/l10n.dart';
 
 import 'privacy/privacy_account_overview_tab.dart';
 import 'drawer_screens.dart';
@@ -45,9 +46,10 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الأمان و الخصوصية'),
+        title: Text(s.securityPrivacyTitle),
       ),
       body: Column(
         children: [
@@ -57,14 +59,14 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
               textDirection: TextDirection.rtl,
               child: CupertinoSlidingSegmentedControl<_SecurityPrivacySegment>(
                 groupValue: _segment,
-                children: const {
+                children: {
                   _SecurityPrivacySegment.security: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('الأمان'),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(s.securitySegmentTitle),
                   ),
                   _SecurityPrivacySegment.privacy: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('الخصوصية'),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(s.privacySegmentTitle),
                   ),
                 },
                 onValueChanged: (value) {

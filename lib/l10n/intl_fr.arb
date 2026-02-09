@@ -1,8 +1,7 @@
-
 {
   "@@locale": "fr",
   "sections": "Sections",
-  "majors": "Spécialis",
+  "majors": "Spécialités",
   "comments": "Commentaires",
   "comment": "Commentaire",
   "writeYourComment": "Écrivez votre commentaire",
@@ -10,7 +9,7 @@
   "cancel": "Annuler",
   "delete": "Supprimer",
   "posted": "Publication",
-  "searchClipboard": "Rechercher dans le Note-pade",
+  "searchClipboard": "Rechercher dans le Note-pade…",
   "note": "Note",
   "title": "Titre",
   "content": "Contenu",
@@ -53,19 +52,13 @@
   "tooManyRequestsError": "Trop de demandes, réessayez plus tard.",
   "resetLinkFailed": "Impossible d’envoyer le lien, réessayez.",
   "resetSent": "Le lien de réinitialisation a été envoyé",
-  "resetFailed": "Échec de l’envoi : {e}",
+  "resetFailed": "Échec de l'envoi : {e}",
   "notRegistered": "Non enregistré",
-  "searchClipboard": "Rechercher dans le Note-pade…",
   "pinned": "Épinglées",
   "otherNotes": "Autres notes",
-  "note": "Note",
-  "title": "Titre",
-  "content": "Contenu",
-  "pinNote": "Épingler la note",
   "noPostsYet": "Aucune publication pour le moment",
   "startDiscussion": "Commencez la première discussion dans la communauté et partagez votre expérience avec vos collègues.",
   "createPost": "Publication",
-
   "newPost": "Nouvelle publication",
   "mediaUrl": "Lien image/vidéo",
   "hashtag": "#",
@@ -78,70 +71,61 @@
   "calculate": "Calculer",
   "pass": " Réussi",
   "fail": " Échoué",
-  "credits": "Crédits : {value}",
+  "credits": "Crédits :",
   "lightMode": "Mode clair",
   "darkMode": "Mode sombre",
   "systemMode": "Mode système",
-  "resetFailed": "Échec de l'envoi : {e}",
-  "aboutAppDetails": "UniSpace ne collecte pas de données personnelles en dehors de Firebase. Toutes les données sont sécurisées."
-,"chooseTheme": "Choisir le thème"
-,"light": "Clair"
-,"dark": "Sombre"
-,"system": "Système"
-,"chooseLanguage": "Choisir la langue"
-,"arabic": "Arabe"
-,"register": "S'inscrire"
-,"title": "Titre"
-,"post": "Votre publication a été publiée ✅"
-,"createPoste": "Créer une publication"
-,"majors": "Spécialités"
-,"oneMajor": "Une spécialité"
-,"noMajorsYet": "Aucune spécialité enregistrée pour le moment"
-
-,"facultyEconomics": "Faculté des sciences économiques, commerciales et des sciences de gestion"
-,"commentsCount": "Commentaires ({count})"
-,"basicEducationDept": "Département de l'enseignement de base"
-,"basicEducation": "Enseignement de base",
+  "aboutAppDetails": "UniSpace ne collecte pas de données personnelles en dehors de Firebase. Toutes les données sont sécurisées.",
+  "chooseTheme": "Choisir le thème",
+  "light": "Clair",
+  "dark": "Sombre",
+  "system": "Système",
+  "chooseLanguage": "Choisir la langue",
+  "arabic": "Arabe",
+  "register": "S'inscrire",
+  "post": "Votre publication a été publiée ✅",
+  "createPoste": "Créer une publication",
+  "oneMajor": "Une spécialité",
+  "noMajorsYet": "Aucune spécialité enregistrée pour le moment",
+  "facultyEconomics": "Faculté des sciences économiques, commerciales et des sciences de gestion",
+  "basicEducationDept": "Département de l'enseignement de base",
+  "basicEducation": "Enseignement de base",
   "managementSciencesDept": "Département des sciences de gestion",
   "managementSciences": "Sciences de gestion",
   "businessAdministration": "Administration des affaires",
   "financialManagement": "Gestion financière",
   "humanResourcesManagement": "Gestion des ressources humaines",
-  "corporateFinancialManagement": "Gestion financière des entreprises"
-,"commercialSciencesDept": "Département des sciences commerciales",
+  "corporateFinancialManagement": "Gestion financière des entreprises",
+  "commercialSciencesDept": "Département des sciences commerciales",
   "commercialSciences": "Sciences commerciales",
   "financeInternationalTrade": "Finance et commerce international",
   "marketing": "Marketing",
   "servicesMarketing": "Marketing des services",
-  "hotelTourismMarketing": "Marketing hôtelier et touristique"
-,"financialAccountingDept": "Département des sciences financières et comptables",
+  "hotelTourismMarketing": "Marketing hôtelier et touristique",
+  "financialAccountingDept": "Département des sciences financières et comptables",
   "financialAccounting": "Sciences financières et comptables",
   "finance": "Finance",
   "accounting": "Comptabilité",
   "accountingTaxation": "Comptabilité et fiscalité",
-  "corporateFinance": "Finance d'entreprise"
-,"economicsDept": "Département des sciences économiques",
+  "corporateFinance": "Finance d'entreprise",
+  "economicsDept": "Département des sciences économiques",
   "economics": "Sciences économiques",
-  "monetaryFinancialEconomics": "Économie monétaire et financière"
-,"internationalEconomics": "Économie internationale"
-,"noSubjectsThisSemester": "Aucune matière dans ce semestre."
-,"credits": "Crédits :",
-  "coefficient": "Coef :"
-,"close": "Fermer"
-,"studyResults": "Résultats d'étude",
-  "notesTdTpExam": "Notes (TD/TP/Exam)"
-,"facultyLawPolitical": "Faculté de droit et des sciences politiques",
+  "monetaryFinancialEconomics": "Économie monétaire et financière",
+  "internationalEconomics": "Économie internationale",
+  "noSubjectsThisSemester": "Aucune matière dans ce semestre.",
+  "coefficient": "Coef :",
+  "close": "Fermer",
+  "studyResults": "Résultats d'étude",
+  "notesTdTpExam": "Notes (TD/TP/Exam)",
+  "facultyLawPolitical": "Faculté de droit et des sciences politiques",
   "politicalSciences": "Sciences politiques",
   "commonCore": "Tronc commun",
-
   "basicUnit": "Unité fondamentale",
   "methodologicalUnit": "Unité méthodologique",
   "exploratoryUnit": "Unité exploratoire",
   "horizontalUnit": "Unité horizontale",
-
   "politicalAdministrativeOrgs": "Organisations politiques et administratives",
   "law": "Droit",
-
   "publicLaw": "Droit public",
   "privateLaw": "Droit privé",
   "advancedPublicLaw": "Droit public approfondi",
@@ -156,11 +140,9 @@
   "internationalCooperation": "Coopération internationale",
   "localAdministration": "Administration locale",
   "contactUs": "Contactez-nous",
-  "report": "Signaler",
   "blockAccount": "Bloquer le compte",
   "followComment": "Suivre le commentaire",
   "copyText": "Copier le texte",
-  "share": "Partager",
   "hide": "Masquer",
   "savePost": "Enregistrer la publication",
   "university": "University",
@@ -170,7 +152,6 @@
   "mood": "Humeur",
   "name": "Nom",
   "posts": "Publications",
-  "comments": "Commentaires",
   "profile": "Profile",
   "following": "Following",
   "userInfo": "User Information",
@@ -606,6 +587,104 @@
   "privacyEmailCurrentMismatch": "L'e-mail actuel ne correspond pas.",
   "privacyEmailValidationRequired": "Saisissez et confirmez le nouvel e-mail.",
   "privacyEmailConfirmMismatch": "Les e-mails ne correspondent pas.",
-  "privacyLoadFailed": "Impossible de charger les données de confidentialité."
-
+  "privacyLoadFailed": "Impossible de charger les données de confidentialité.",
+  "securityPrivacyTitle": "Sécurité et confidentialité",
+  "securitySegmentTitle": "Sécurité",
+  "privacySegmentTitle": "Confidentialité",
+  "privacyPasswordNewLengthError": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
+  "privacyPasswordMustDifferError": "Le nouveau mot de passe doit être différent de l'actuel.",
+  "privacyPasswordMismatchError": "Les mots de passe ne correspondent pas.",
+  "privacyPasswordStrengthWeak": "Faible",
+  "privacyPasswordStrengthMedium": "Moyenne",
+  "privacyPasswordStrengthStrong": "Forte",
+  "privacyPasswordUpdateConfirmTitle": "Confirmer la mise à jour",
+  "privacyPasswordUpdateConfirmBody": "Voulez-vous mettre à jour le mot de passe ?",
+  "privacyPasswordUpdateAction": "Mettre à jour",
+  "privacyPasswordUpdateRequiresSignin": "Impossible de mettre à jour le mot de passe. Veuillez vous reconnecter.",
+  "privacyPasswordReauthFailedGeneric": "Impossible de vérifier votre identité. Réessayez plus tard.",
+  "privacyPasswordUpdateSuccess": "Mot de passe mis à jour avec succès.",
+  "privacyPasswordUpdateFailed": "Impossible de mettre à jour le mot de passe. Réessayez plus tard.",
+  "privacyNotAvailable": "Non disponible",
+  "privacyResetPasswordDialogBody": "Nous enverrons un lien de réinitialisation à votre e-mail enregistré : {maskedEmail}",
+  "@privacyResetPasswordDialogBody": {
+    "placeholders": {
+      "maskedEmail": {}
+    }
+  },
+  "privacySendResetLinkAction": "Envoyer le lien",
+  "privacyNoEmailLinked": "Aucun e-mail n'est lié à ce compte.",
+  "privacyResetLinkSent": "Lien de réinitialisation envoyé à votre e-mail.",
+  "privacyResetLinkFailed": "Impossible d'envoyer le lien. Réessayez plus tard.",
+  "privacyNetworkCellular": "Données mobiles",
+  "privacyUnknown": "Inconnu",
+  "algeriaLabel": "Algérie",
+  "privacyNoAuditDataYet": "Aucune donnée disponible pour le moment.",
+  "privacyLastPasswordChangeTitle": "Dernier changement de mot de passe",
+  "privacyDateTimeLabel": "Date et heure",
+  "privacyDeviceLabel": "Appareil",
+  "privacyManufacturerLabel": "Fabricant",
+  "privacyOperatingSystemLabel": "Système d'exploitation",
+  "privacyAppVersionLabel": "Version de l'application",
+  "privacyConnectionTypeLabel": "Type de connexion",
+  "privacyApproxLocationLabel": "Localisation approximative",
+  "privacyIpAddressLabel": "Adresse IP",
+  "privacyCopyFullIp": "Copier l'IP complète",
+  "privacyThisWasNotMe": "Ce n'était pas moi",
+  "privacyIpUnavailable": "Adresse IP indisponible.",
+  "privacyCopyIpSuccess": "IP complète copiée en toute sécurité.",
+  "privacyReauthCopyIpReason": "Vérifiez votre identité pour copier l'IP complète.",
+  "privacySecurityAlertTitle": "Alerte de sécurité critique",
+  "privacySecurityAlertBody": "Si vous n'avez pas changé le mot de passe, nous déconnecterons immédiatement toutes les autres sessions. Voulez-vous continuer ?",
+  "privacyContinueAction": "Continuer",
+  "privacyOtherSessionsRevokedPrecaution": "Les autres sessions ont été déconnectées par précaution.",
+  "privacyRevokeSessionsFailed": "Impossible de terminer toutes les sessions pour le moment.",
+  "privacyChangePasswordNowNote": "Veuillez changer votre mot de passe immédiatement. Vérification en deux étapes : bientôt disponible.",
+  "privacyChangePasswordTitle": "Changer le mot de passe",
+  "privacyCurrentPasswordLabel": "Mot de passe actuel",
+  "privacyCurrentPasswordHelper": "Saisissez votre mot de passe actuel pour vérifier la propriété du compte.",
+  "privacyResetEmailHint": "L'e-mail peut arriver dans une minute. Vérifiez aussi le dossier spam.",
+  "privacyNewPasswordLabel": "Nouveau mot de passe",
+  "privacyNewPasswordHelper": "Il doit contenir au moins 8 caractères.",
+  "privacyPasswordStrengthLabel": "Solidité du mot de passe : ",
+  "privacyConfirmNewPasswordLabel": "Confirmer le nouveau mot de passe",
+  "privacyConfirmNewPasswordHelper": "Saisissez à nouveau le nouveau mot de passe pour confirmation.",
+  "privacyEnterConfirmToMatch": "Saisissez la confirmation pour vérifier la correspondance.",
+  "privacyPasswordsMatch": "Les mots de passe correspondent.",
+  "privacyLoadingLastChange": "Chargement des données du dernier changement...",
+  "privacyLastPasswordChangeUnavailable": "Dernier changement de mot de passe : Non disponible",
+  "privacyLastPasswordChangeAt": "Dernier changement de mot de passe : {date}",
+  "@privacyLastPasswordChangeAt": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "privacyViewDetails": "Voir les détails ⌄",
+  "privacySaveNewPassword": "Enregistrer le nouveau mot de passe",
+  "sessionAgoMinutes": "Il y a {minutes} min",
+  "@sessionAgoMinutes": {
+    "placeholders": {
+      "minutes": {}
+    }
+  },
+  "sessionAgoHours": "Il y a {hours} h",
+  "@sessionAgoHours": {
+    "placeholders": {
+      "hours": {}
+    }
+  },
+  "sessionAgoDays": "Il y a {days} j",
+  "@sessionAgoDays": {
+    "placeholders": {
+      "days": {}
+    }
+  },
+  "sessionDeviceNameLabel": "Nom de l'appareil",
+  "sessionTrustedDevice": "Appareil de confiance",
+  "sessionModelLabel": "Modèle",
+  "sessionPlatformLabel": "Plateforme",
+  "sessionVersionLabel": "Version",
+  "sessionLoginDateLabel": "Date de connexion",
+  "sessionLastActivityLabel": "Dernière activité",
+  "sessionNetworkLabel": "Réseau",
+  "dangerZone": "Zone de danger"
 }

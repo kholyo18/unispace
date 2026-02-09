@@ -145,21 +145,23 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       !_updatingPassword;
 
   String? get _newPasswordError {
+    final s = S.of(context);
     if (!_newPasswordTouched && _newPasswordFocusNode.hasFocus) return null;
     if (_newPassword.isEmpty) return null;
-    if (!_isNewPasswordLengthValid) return 'كلمة المرور الجديدة يجب أن تتكون من 8 أحرف على الأقل';
-    if (!_isNewPasswordDifferent) return 'يجب أن تكون كلمة المرور الجديدة مختلفة عن الحالية';
+    if (!_isNewPasswordLengthValid) return s.privacyPasswordNewLengthError;
+    if (!_isNewPasswordDifferent) return s.privacyPasswordMustDifferError;
     return null;
   }
 
   String? get _confirmPasswordError {
+    final s = S.of(context);
     if (!_confirmPasswordTouched && _confirmPasswordFocusNode.hasFocus) return null;
     if (_confirmPassword.isEmpty) return null;
-    if (!_isConfirmMatch) return 'كلمتا المرور غير متطابقتين';
+    if (!_isConfirmMatch) return s.privacyPasswordMismatchError;
     return null;
   }
 
-  ({String label, Color color}) _passwordStrength() {
+  ({String label, Color color}) _passwordStrength(S s) {
     final value = _newPassword;
     if (value.isEmpty) {
       return (label: '—', color: Colors.grey);
@@ -169,21 +171,22 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     if (RegExp(r'\d').hasMatch(value)) score++;
     if (RegExp(r'[A-Z]').hasMatch(value) && RegExp(r'[a-z]').hasMatch(value)) score++;
     if (RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-\\/\[\]]').hasMatch(value)) score++;
-    if (score <= 1) return (label: 'ضعيف', color: Colors.red);
-    if (score <= 3) return (label: 'متوسط', color: Colors.orange);
-    return (label: 'قوي', color: Colors.green);
+    if (score <= 1) return (label: s.privacyPasswordStrengthWeak, color: Colors.red);
+    if (score <= 3) return (label: s.privacyPasswordStrengthMedium, color: Colors.orange);
+    return (label: s.privacyPasswordStrengthStrong, color: Colors.green);
   }
 
   Future<void> _handleChangePassword() async {
+    final s = S.of(context);
     final shouldProceed = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('تأكيد التحديث'),
-          content: const Text('هل تريد تحديث كلمة المرور؟'),
+          title: Text(s.privacyPasswordUpdateConfirmTitle),
+          content: Text(s.privacyPasswordUpdateConfirmBody),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
-            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('تحديث')),
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(s.cancel)),
+            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(s.privacyPasswordUpdateAction)),
           ],
         );
       },
@@ -195,7 +198,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null || user.email == null) {
-        _snack('تعذر تحديث كلمة المرور، يرجى تسجيل الدخول مرة أخرى');
+        _snack(s.privacyPasswordUpdateRequiresSignin);
         return;
       }
 
@@ -208,10 +211,10 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         await user.reauthenticateWithCredential(credential);
       } on FirebaseAuthException catch (e) {
         if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-          _snack('كلمة المرور الحالية غير صحيحة');
+          _snack(s.wrongPasswordError);
           return;
         }
-        _snack('تعذر التحقق من الهوية، حاول لاحقًا');
+        _snack(s.privacyPasswordReauthFailedGeneric);
         return;
       }
 
@@ -226,34 +229,35 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         _confirmPasswordTouched = false;
         _lastPasswordAudit = audit;
       });
-      _snack('تم تحديث كلمة المرور بنجاح');
+      _snack(s.privacyPasswordUpdateSuccess);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'network-request-failed') {
-        _snack('تحقق من اتصال الإنترنت ثم أعد المحاولة');
+        _snack(s.networkError);
       } else {
-        _snack('تعذر تحديث كلمة المرور، حاول لاحقًا');
+        _snack(s.privacyPasswordUpdateFailed);
       }
     } catch (_) {
-      _snack('حدث خطأ غير متوقع، حاول مجددًا');
+      _snack(s.genericAuthError);
     } finally {
       if (mounted) setState(() => _updatingPassword = false);
     }
   }
 
   Future<void> _handleForgotPassword() async {
+    final s = S.of(context);
     final user = FirebaseAuth.instance.currentUser;
     final email = user?.email;
-    final maskedEmail = email == null ? 'غير متوفر' : _maskedEmail(email);
+    final maskedEmail = email == null ? s.privacyNotAvailable : _maskedEmail(email);
 
     final send = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('إعادة تعيين كلمة المرور'),
-          content: Text('سنرسل رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني المسجل: $maskedEmail'),
+          title: Text(s.resetPasswordTitle),
+          content: Text(s.privacyResetPasswordDialogBody(maskedEmail)),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
-            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('إرسال الرابط')),
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(s.cancel)),
+            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(s.privacySendResetLinkAction)),
           ],
         );
       },
@@ -263,19 +267,19 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     setState(() => _sendingReset = true);
     try {
       if (email == null || email.trim().isEmpty) {
-        _snack('لا يوجد بريد إلكتروني مرتبط بالحساب');
+        _snack(s.privacyNoEmailLinked);
         return;
       }
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      _snack('تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني');
+      _snack(s.privacyResetLinkSent);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'network-request-failed') {
-        _snack('تحقق من اتصال الإنترنت ثم أعد المحاولة');
+        _snack(s.networkError);
       } else {
-        _snack('تعذر إرسال الرابط، حاول لاحقًا');
+        _snack(s.privacyResetLinkFailed);
       }
     } catch (_) {
-      _snack('تعذر إرسال الرابط، حاول لاحقًا');
+      _snack(s.privacyResetLinkFailed);
     } finally {
       if (mounted) setState(() => _sendingReset = false);
     }
@@ -668,20 +672,21 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
 
 
   String _networkLabel(String value) {
+    final s = S.of(context);
     switch (value) {
       case 'wifi':
         return 'Wi-Fi';
       case 'cellular':
-        return 'بيانات الهاتف';
+        return s.privacyNetworkCellular;
       default:
-        return 'غير معروف';
+        return s.privacyUnknown;
     }
   }
 
   String _dateWithDzTimezone(SecurityAudit audit) {
     final local = audit.timestampUtc.toLocal();
     final formatted = DateFormat('yyyy/MM/dd - HH:mm:ss').format(local);
-    return '$formatted (GMT+1 الجزائر)';
+    return '$formatted (GMT+1 ${S.of(context).algeriaLabel})';
   }
 
   String _compactAuditDate(SecurityAudit audit) {
@@ -693,7 +698,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
   Future<void> _showPasswordAuditDetails() async {
     final audit = _lastPasswordAudit;
     if (audit == null) {
-      _snack('لا توجد بيانات متاحة بعد');
+      _snack(S.of(context).privacyNoAuditDataYet);
       return;
     }
 
@@ -702,6 +707,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) {
+        final s = S.of(context);
         Widget detailRow(String title, String value) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
@@ -722,23 +728,23 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('آخر تغيير كلمة المرور', style: Theme.of(context).textTheme.titleLarge),
+              Text(s.privacyLastPasswordChangeTitle, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 16),
-              detailRow('التاريخ والوقت', _dateWithDzTimezone(audit)),
-              detailRow('الجهاز', [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ').isEmpty ? 'غير متوفر' : [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ')),
-              detailRow('الشركة المصنّعة', audit.deviceManufacturer?.trim().isNotEmpty == true ? audit.deviceManufacturer! : 'غير متوفر'),
-              detailRow('نظام التشغيل', '${audit.osName ?? 'غير متوفر'} ${audit.osVersion ?? ''}'.trim()),
-              detailRow('إصدار التطبيق', '${audit.appVersion ?? 'غير متوفر'} (${audit.buildNumber ?? '-'})'),
-              detailRow('نوع الاتصال', _networkLabel(audit.networkType)),
-              detailRow('الموقع التقريبي', audit.locationApprox?.trim().isNotEmpty == true ? audit.locationApprox! : 'غير متوفر'),
-              detailRow('عنوان IP', audit.maskedIp),
+              detailRow(s.privacyDateTimeLabel, _dateWithDzTimezone(audit)),
+              detailRow(s.privacyDeviceLabel, [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ').isEmpty ? s.privacyNotAvailable : [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ')),
+              detailRow(s.privacyManufacturerLabel, audit.deviceManufacturer?.trim().isNotEmpty == true ? audit.deviceManufacturer! : s.privacyNotAvailable),
+              detailRow(s.privacyOperatingSystemLabel, '${audit.osName ?? s.privacyNotAvailable} ${audit.osVersion ?? ''}'.trim()),
+              detailRow(s.privacyAppVersionLabel, '${audit.appVersion ?? s.privacyNotAvailable} (${audit.buildNumber ?? '-'})'),
+              detailRow(s.privacyConnectionTypeLabel, _networkLabel(audit.networkType)),
+              detailRow(s.privacyApproxLocationLabel, audit.locationApprox?.trim().isNotEmpty == true ? audit.locationApprox! : s.privacyNotAvailable),
+              detailRow(s.privacyIpAddressLabel, audit.maskedIp),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: _copyFullIpSecurely,
                   icon: const Icon(Icons.copy_outlined),
-                  label: const Text('نسخ IP الكامل'),
+                  label: Text(s.privacyCopyFullIp),
                 ),
               ),
               const SizedBox(height: 8),
@@ -747,7 +753,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                 child: FilledButton.tonalIcon(
                   onPressed: _handleThisWasNotMe,
                   icon: const Icon(Icons.warning_amber_rounded),
-                  label: const Text('هذا ليس أنا'),
+                  label: Text(s.privacyThisWasNotMe),
                 ),
               ),
             ],
@@ -761,7 +767,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     final audit = _lastPasswordAudit;
     final ip = audit?.ipAddress?.trim();
     if (ip == null || ip.isEmpty) {
-      _snack('عنوان IP غير متوفر');
+      _snack(S.of(context).privacyIpUnavailable);
       return;
     }
 
@@ -771,7 +777,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     await Clipboard.setData(ClipboardData(text: ip));
     if (!mounted) return;
     Navigator.of(context).pop();
-    _snack('تم نسخ IP الكامل بأمان');
+    _snack(S.of(context).privacyCopyIpSuccess);
   }
 
   Future<bool> _promptSensitiveReAuth() async {
@@ -780,7 +786,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       final canUseBiometric = await localAuth.canCheckBiometrics && await localAuth.isDeviceSupported();
       if (canUseBiometric) {
         final didAuth = await localAuth.authenticate(
-          localizedReason: 'تحقق من هويتك لنسخ IP الكامل',
+          localizedReason: S.of(context).privacyReauthCopyIpReason,
           options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
         );
         if (didAuth) return true;
@@ -793,15 +799,16 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
   }
 
   Future<void> _handleThisWasNotMe() async {
+    final s = S.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('تحذير أمني شديد'),
-          content: const Text('إذا لم تكن أنت من غيّر كلمة المرور، سنقوم بتسجيل الخروج من جميع الجلسات فوراً. هل تريد المتابعة؟'),
+          title: Text(s.privacySecurityAlertTitle),
+          content: Text(s.privacySecurityAlertBody),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('إلغاء')),
-            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('متابعة')),
+            TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(s.cancel)),
+            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(s.privacyContinueAction)),
           ],
         );
       },
@@ -822,14 +829,14 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       }
       if (!mounted) return;
       Navigator.of(context).pop();
-      _snack('تم إنهاء الجلسات الأخرى كإجراء احترازي.');
+      _snack(s.privacyOtherSessionsRevokedPrecaution);
     } catch (_) {
-      _snack('تعذر إنهاء جميع الجلسات حالياً. TODO: دعم كامل من الخادم.');
+      _snack(s.privacyRevokeSessionsFailed);
     }
 
     if (!mounted) return;
     setState(() => _passwordExpanded = true);
-    _snack('يرجى تغيير كلمة المرور فوراً. التحقق بخطوتين: قريباً');
+    _snack(s.privacyChangePasswordNowNote);
   }
 
   void _snack(String message) {
@@ -900,7 +907,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             child: ExpansionTile(
-              title: const Text('تغيير كلمة المرور', style: TextStyle(fontWeight: FontWeight.w700)),
+              title: Text(s.privacyChangePasswordTitle, style: const TextStyle(fontWeight: FontWeight.w700)),
               leading: const Icon(Icons.password_outlined),
               trailing: Icon(_passwordExpanded ? Icons.expand_less : Icons.expand_more),
               initiallyExpanded: _passwordExpanded,
@@ -916,8 +923,8 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                   onChanged: (_) => setState(() {}),
                   onSubmitted: (_) => _newPasswordFocusNode.requestFocus(),
                   decoration: InputDecoration(
-                    labelText: 'كلمة المرور الحالية',
-                    helperText: 'أدخل كلمة المرور الحالية لإثبات ملكية الحساب.',
+                    labelText: s.privacyCurrentPasswordLabel,
+                    helperText: s.privacyCurrentPasswordHelper,
                     suffixIcon: IconButton(
                       onPressed: () => setState(() => _showCurrentPassword = !_showCurrentPassword),
                       icon: Icon(_showCurrentPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
@@ -930,11 +937,11 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                     onPressed: _sendingReset ? null : _handleForgotPassword,
                     child: _sendingReset
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('نسيت كلمة المرور؟'),
+                        : Text(s.forgotPassword),
                   ),
                 ),
                 Text(
-                  'قد يصل البريد خلال دقيقة، وتأكد من مجلد الرسائل غير المرغوب فيها.',
+                  s.privacyResetEmailHint,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 14),
@@ -947,8 +954,8 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                   onChanged: (_) => setState(() => _newPasswordTouched = true),
                   onSubmitted: (_) => _confirmPasswordFocusNode.requestFocus(),
                   decoration: InputDecoration(
-                    labelText: 'كلمة المرور الجديدة',
-                    helperText: 'يجب أن تحتوي على 8 أحرف على الأقل.',
+                    labelText: s.privacyNewPasswordLabel,
+                    helperText: s.privacyNewPasswordHelper,
                     errorText: _newPasswordError,
                     suffixIcon: IconButton(
                       onPressed: () => setState(() => _showNewPassword = !_showNewPassword),
@@ -959,12 +966,12 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                 const SizedBox(height: 6),
                 Builder(
                   builder: (context) {
-                    final strength = _passwordStrength();
+                    final strength = _passwordStrength(s);
                     return Row(
                       children: [
                         const Icon(Icons.shield_outlined, size: 16),
                         const SizedBox(width: 6),
-                        Text('قوة كلمة المرور: ', style: Theme.of(context).textTheme.bodySmall),
+                        Text(s.privacyPasswordStrengthLabel, style: Theme.of(context).textTheme.bodySmall),
                         Text(
                           strength.label,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: strength.color, fontWeight: FontWeight.w700),
@@ -986,8 +993,8 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                     if (_canSubmitPasswordChange) _handleChangePassword();
                   },
                   decoration: InputDecoration(
-                    labelText: 'تأكيد كلمة المرور الجديدة',
-                    helperText: 'أعد إدخال كلمة المرور الجديدة للتأكيد.',
+                    labelText: s.privacyConfirmNewPasswordLabel,
+                    helperText: s.privacyConfirmNewPasswordHelper,
                     errorText: _confirmPasswordError,
                     suffixIcon: IconButton(
                       onPressed: () => setState(() => _showConfirmPassword = !_showConfirmPassword),
@@ -1006,8 +1013,8 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                     const SizedBox(width: 6),
                     Text(
                       _confirmPassword.isEmpty
-                          ? 'قم بإدخال التأكيد للتحقق من التطابق.'
-                          : (_isConfirmMatch ? 'كلمتا المرور متطابقتان' : 'كلمتا المرور غير متطابقتين'),
+                          ? s.privacyEnterConfirmToMatch
+                          : (_isConfirmMatch ? s.privacyPasswordsMatch : s.privacyPasswordMismatchError),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: _confirmPassword.isEmpty
                                 ? Colors.grey.shade700
@@ -1038,10 +1045,10 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                           children: [
                             Text(
                               _auditLoading
-                                  ? 'جارِ تحميل بيانات آخر تغيير...'
+                                  ? s.privacyLoadingLastChange
                                   : (_lastPasswordAudit == null
-                                      ? 'آخر تغيير كلمة المرور: غير متوفر'
-                                      : 'آخر تغيير كلمة المرور: ${_compactAuditDate(_lastPasswordAudit!)}'),
+                                      ? s.privacyLastPasswordChangeUnavailable
+                                      : s.privacyLastPasswordChangeAt(_compactAuditDate(_lastPasswordAudit!))),
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
@@ -1054,7 +1061,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                       ),
                       TextButton(
                         onPressed: _lastPasswordAudit == null ? null : _showPasswordAuditDetails,
-                        child: const Text('عرض التفاصيل ⌄'),
+                        child: Text(s.privacyViewDetails),
                       ),
                     ],
                   ),
@@ -1070,7 +1077,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                   ),
                   child: _updatingPassword
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('حفظ كلمة المرور الجديدة'),
+                      : Text(s.privacySaveNewPassword),
                 ),
               ],
             ),
