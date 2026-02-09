@@ -4,7 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import * as logger from "firebase-functions/logger";
+import { error as logError, info as logInfo, warn as logWarn } from "firebase-functions/logger";
 import sgMail from "@sendgrid/mail";
 
 initializeApp();
@@ -132,7 +132,7 @@ export const onSupportMessageCreate = onDocumentCreated(
   async (event) => {
     const data = event.data?.data() as SupportMessage | undefined;
     if (!data) {
-      logger.warn("Support message missing data payload.", {
+      logWarn("Support message missing data payload.", {
         document: event.params.docId,
       });
       return;
@@ -140,7 +140,7 @@ export const onSupportMessageCreate = onDocumentCreated(
 
     const messageText = data.message?.trim();
     if (!messageText) {
-      logger.warn("Support message missing required message field.", {
+      logWarn("Support message missing required message field.", {
         document: event.params.docId,
       });
       return;
@@ -148,7 +148,7 @@ export const onSupportMessageCreate = onDocumentCreated(
 
     const apiKey = process.env.SENDGRID_API_KEY;
     if (!apiKey) {
-      logger.error("SENDGRID_API_KEY is not configured.");
+      logError("SENDGRID_API_KEY is not configured.");
       return;
     }
 
@@ -164,9 +164,9 @@ export const onSupportMessageCreate = onDocumentCreated(
         text: emailBody,
         replyTo: data.email ?? undefined,
       });
-      logger.info("Support email sent.", { document: event.params.docId });
+      logInfo("Support email sent.", { document: event.params.docId });
     } catch (error) {
-      logger.error("Failed to send support email.", {
+      logError("Failed to send support email.", {
         document: event.params.docId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -283,7 +283,7 @@ export const startSignup = onCall(
         text: buildOtpEmailText(otp),
       });
     } catch (error) {
-      logger.error("Failed to send OTP email.", {
+      logError("Failed to send OTP email.", {
         error: error instanceof Error ? error.message : String(error),
       });
       await db.runTransaction(async (tx) => {
@@ -757,7 +757,7 @@ export const verifyOtpAndCreateAccount = onCall(async (request) => {
       });
     });
   } catch (error) {
-    logger.error("Failed to finalize signup session.", {
+    logError("Failed to finalize signup session.", {
       error: error instanceof Error ? error.message : String(error),
     });
     await auth.deleteUser(userId);
