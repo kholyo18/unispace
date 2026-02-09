@@ -326,6 +326,42 @@
   "twoFactorAuthHint": "Exiger un code OTP lors de la connexion.",
   "twoFactorEnabledToast": "Authentification à deux facteurs activée.",
   "twoFactorDisabledToast": "Authentification à deux facteurs désactivée.",
+  "twoFactorEnableConfirmTitle": "Activer l’authentification à deux facteurs ?",
+  "twoFactorEnableConfirmBody": "Un code à usage unique sera demandé après la connexion par mot de passe.",
+  "twoFactorOtpTitle": "Code de vérification par e-mail",
+  "twoFactorOtpDescription": "Saisissez le code à 6 chiffres envoyé à {email}.",
+  "@twoFactorOtpDescription": {
+    "placeholders": {
+      "email": {}
+    }
+  },
+  "twoFactorCodeLabel": "Code de vérification",
+  "twoFactorCodeHint": "Code à 6 chiffres",
+  "twoFactorConfirmButton": "Confirmer",
+  "twoFactorResendCode": "Renvoyer le code",
+  "twoFactorResendIn": "Renvoyer dans {seconds}s",
+  "@twoFactorResendIn": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "twoFactorBackToLogin": "Retour à la connexion",
+  "twoFactorCodeSent": "Code de vérification envoyé par e-mail.",
+  "twoFactorCodeExpired": "Code expiré. Demandez un nouveau code.",
+  "twoFactorCodeIncorrect": "Code incorrect. Réessayez.",
+  "twoFactorTooManyAttempts": "Trop de tentatives échouées. Réessayez plus tard.",
+  "twoFactorResendCooldown": "Veuillez patienter avant de renvoyer.",
+  "twoFactorVerifiedSuccess": "Vérification à deux facteurs terminée.",
+  "twoFactorCodeInvalidFormat": "Entrez un code valide à 6 chiffres.",
+  "twoFactorChallengeMissing": "Session de vérification introuvable. Reconnectez-vous.",
+  "twoFactorSendFailed": "Échec de l’envoi du code de vérification.",
+  "twoFactorGenericError": "Vérification impossible. Réessayez.",
+  "twoFactorAttemptsRemaining": "Tentatives restantes : {count}",
+  "@twoFactorAttemptsRemaining": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "manageDevicesTitle": "Gérer les appareils",
   "manageDevicesHint": "Consultez les sessions actives et les appareils.",
   "manageDevicesDescription": "Consultez les connexions et retirez l'accès si nécessaire.",

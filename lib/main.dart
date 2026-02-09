@@ -32,6 +32,7 @@ import 'package:timezone/timezone.dart' as tz;
 // Local
 import 'package:shared_preferences/shared_preferences.dart';
 import 'features/auth/verify_email_screen.dart';
+import 'ui/auth/two_factor_otp_screen.dart';
 
 // PDF / Printing
 import 'package:pdf/pdf.dart';
@@ -53,6 +54,7 @@ import 'ui/settings/security_privacy_screen.dart';
 import 'ui/settings/email_verification_service.dart';
 import 'ui/settings/user_profile_service.dart';
 import 'ui/settings/session_service.dart';
+import 'services/two_factor_service.dart';
 import 'features/auth/signup_flow.dart';
 import 'features/settings/about/about_screen.dart';
 import 'features/settings/privacy/privacy_policy_screen.dart';
@@ -1003,25 +1005,47 @@ class _DrawerLeading extends StatelessWidget {
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
+  Future<bool> _isTwoFactorRequired(User user) async {
+    final profile = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final enabled = profile.data()?['twoFactorEnabled'] as bool? ?? false;
+    if (!enabled) return false;
+    return !(await TwoFactorService.instance.isCurrentSessionVerified(user));
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-              body: Center(child: CircularProgressIndicator()));
-        }
-        if (!snap.hasData) return const SignInScreen();
-        final user = snap.data!;
-        final isPasswordUser =
-            user.providerData.any((info) => info.providerId == 'password');
-        if (isPasswordUser && !user.emailVerified) {
-          SessionService.instance.revokeCurrentSession(user.uid);
-          FirebaseAuth.instance.signOut();
-          return const SignInScreen();
-        }
-        return const HomeShell();
+    return ValueListenableBuilder<int>(
+      valueListenable: TwoFactorService.instance.authRefresh,
+      builder: (_, __, ___) {
+        return StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          builder: (ctx, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+            if (!snap.hasData) return const SignInScreen();
+            final user = snap.data!;
+            final isPasswordUser = user.providerData.any((info) => info.providerId == 'password');
+            if (isPasswordUser && !user.emailVerified) {
+              SessionService.instance.revokeCurrentSession(user.uid);
+              FirebaseAuth.instance.signOut();
+              return const SignInScreen();
+            }
+            if (!isPasswordUser) return const HomeShell();
+            return FutureBuilder<bool>(
+              future: _isTwoFactorRequired(user),
+              builder: (context, twoFactorSnap) {
+                if (twoFactorSnap.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(body: Center(child: CircularProgressIndicator()));
+                }
+                if (twoFactorSnap.data == true) {
+                  return TwoFactorOtpScreen(email: user.email ?? '');
+                }
+                return const HomeShell();
+              },
+            );
+          },
+        );
       },
     );
   }
@@ -1124,9 +1148,6 @@ class _SignInScreenState extends State<SignInScreen> {
       );
       final user = credential.user;
       if (user != null) {
-        await SessionService.instance.initSession(user.uid);
-      }
-      if (user != null) {
         final isPasswordUser =
             user.providerData.any((info) => info.providerId == 'password');
         if (isPasswordUser && !user.emailVerified) {
@@ -1134,6 +1155,14 @@ class _SignInScreenState extends State<SignInScreen> {
           await FirebaseAuth.instance.signOut();
           if (!mounted) return;
           await _showUnverifiedDialog(trimmedEmail, trimmedPassword);
+          return;
+        }
+      }
+      if (user != null) {
+        final profile = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final twoFactorEnabled = profile.data()?['twoFactorEnabled'] as bool? ?? false;
+        if (!twoFactorEnabled) {
+          await SessionService.instance.initSession(user.uid);
         }
       }
     } on FirebaseAuthException catch (e, stackTrace) {

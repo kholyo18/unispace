@@ -20,6 +20,11 @@ const OTP_RESEND_LIMIT = 3;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const USERNAME_RESERVE_MINUTES = 15;
 
+const LOGIN_2FA_TTL_MINUTES = 5;
+const LOGIN_2FA_ATTEMPT_LIMIT = 5;
+const LOGIN_2FA_RESEND_COOLDOWN_SECONDS = 30;
+const LOGIN_2FA_LOCK_MINUTES = 5;
+
 type SupportMessage = {
   name?: string;
   email?: string;
@@ -438,6 +443,220 @@ export const sendEmailVerificationOtp = onCall(
     };
   },
 );
+
+
+export const startLoginTwoFactor = onCall(
+  {
+    secrets: ["SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "auth_required");
+    }
+
+    const uid = request.auth.uid;
+    const email = String(request.auth.token.email ?? "").trim();
+    if (!email || !isValidEmail(email)) {
+      throw new HttpsError("failed-precondition", "invalid_email");
+    }
+
+    const challengeRef = db.doc(`login_2fa_challenges/${uid}`);
+    const now = Timestamp.now();
+    const snap = await challengeRef.get();
+    const existing = snap.data() as Record<string, unknown> | undefined;
+
+    const lockedUntil = existing?.lockedUntil as Timestamp | undefined;
+    if (lockedUntil && lockedUntil.toMillis() > now.toMillis()) {
+      throw new HttpsError("failed-precondition", "otp_attempts_exceeded");
+    }
+
+    const lastSentAt = existing?.lastSentAt as Timestamp | undefined;
+    if (
+      lastSentAt &&
+      now.toMillis() - lastSentAt.toMillis() <
+        LOGIN_2FA_RESEND_COOLDOWN_SECONDS * 1000
+    ) {
+      throw new HttpsError("failed-precondition", "cooldown_active");
+    }
+
+    const otp = String(randomInt(100000, 1000000));
+    const otpSalt = randomBytes(16).toString("hex");
+    const otpHash = hashOtp(otp, otpSalt);
+    const expiresAt = Timestamp.fromMillis(
+      now.toMillis() + LOGIN_2FA_TTL_MINUTES * 60 * 1000,
+    );
+
+    await challengeRef.set(
+      {
+        uid,
+        email,
+        otpHash,
+        otpSalt,
+        expiresAt,
+        attempts: 0,
+        lastSentAt: now,
+        createdAt: now,
+        verifiedAt: FieldValue.delete(),
+        lockedUntil: FieldValue.delete(),
+      },
+      { merge: true },
+    );
+
+    try {
+      const fromEmail = ensureSendgridConfigured();
+      await sgMail.send({
+        to: email,
+        from: fromEmail,
+        subject: OTP_EMAIL_SUBJECT,
+        text: buildOtpEmailText(otp),
+      });
+    } catch (_error) {
+      throw new HttpsError("internal", "otp_send_failed");
+    }
+
+    return {
+      ok: true,
+      cooldownSeconds: LOGIN_2FA_RESEND_COOLDOWN_SECONDS,
+      expiresInSeconds: LOGIN_2FA_TTL_MINUTES * 60,
+      remainingAttempts: LOGIN_2FA_ATTEMPT_LIMIT,
+      lockedForSeconds: 0,
+    };
+  },
+);
+
+export const resendLoginTwoFactor = onCall(
+  {
+    secrets: ["SENDGRID_API_KEY", "SENDGRID_FROM_EMAIL"],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "auth_required");
+    }
+
+    const uid = request.auth.uid;
+    const challengeRef = db.doc(`login_2fa_challenges/${uid}`);
+    const now = Timestamp.now();
+    const snap = await challengeRef.get();
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "challenge_not_found");
+    }
+
+    const data = snap.data() as Record<string, unknown>;
+    const lockedUntil = data.lockedUntil as Timestamp | undefined;
+    if (lockedUntil && lockedUntil.toMillis() > now.toMillis()) {
+      throw new HttpsError("failed-precondition", "otp_attempts_exceeded");
+    }
+
+    const lastSentAt = data.lastSentAt as Timestamp | undefined;
+    if (
+      lastSentAt &&
+      now.toMillis() - lastSentAt.toMillis() <
+        LOGIN_2FA_RESEND_COOLDOWN_SECONDS * 1000
+    ) {
+      throw new HttpsError("failed-precondition", "cooldown_active");
+    }
+
+    const email = String(data.email ?? request.auth.token.email ?? "").trim();
+    if (!email || !isValidEmail(email)) {
+      throw new HttpsError("failed-precondition", "invalid_email");
+    }
+
+    const otp = String(randomInt(100000, 1000000));
+    const otpSalt = randomBytes(16).toString("hex");
+    const otpHash = hashOtp(otp, otpSalt);
+    const expiresAt = Timestamp.fromMillis(
+      now.toMillis() + LOGIN_2FA_TTL_MINUTES * 60 * 1000,
+    );
+
+    await challengeRef.set(
+      {
+        otpHash,
+        otpSalt,
+        expiresAt,
+        attempts: 0,
+        lastSentAt: now,
+        verifiedAt: FieldValue.delete(),
+      },
+      { merge: true },
+    );
+
+    try {
+      const fromEmail = ensureSendgridConfigured();
+      await sgMail.send({
+        to: email,
+        from: fromEmail,
+        subject: OTP_EMAIL_SUBJECT,
+        text: buildOtpEmailText(otp),
+      });
+    } catch (_error) {
+      throw new HttpsError("internal", "otp_send_failed");
+    }
+
+    return {
+      ok: true,
+      cooldownSeconds: LOGIN_2FA_RESEND_COOLDOWN_SECONDS,
+      expiresInSeconds: LOGIN_2FA_TTL_MINUTES * 60,
+      remainingAttempts: LOGIN_2FA_ATTEMPT_LIMIT,
+      lockedForSeconds: 0,
+    };
+  },
+);
+
+export const verifyLoginTwoFactor = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "auth_required");
+  }
+
+  const code = String(request.data?.code ?? "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    throw new HttpsError("invalid-argument", "otp_invalid");
+  }
+
+  const uid = request.auth.uid;
+  const challengeRef = db.doc(`login_2fa_challenges/${uid}`);
+  const now = Timestamp.now();
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(challengeRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "challenge_not_found");
+    }
+
+    const data = snap.data() as Record<string, unknown>;
+    const lockedUntil = data.lockedUntil as Timestamp | undefined;
+    if (lockedUntil && lockedUntil.toMillis() > now.toMillis()) {
+      throw new HttpsError("failed-precondition", "otp_attempts_exceeded");
+    }
+
+    const expiresAt = data.expiresAt as Timestamp | undefined;
+    if (!expiresAt || expiresAt.toMillis() <= now.toMillis()) {
+      throw new HttpsError("failed-precondition", "otp_expired");
+    }
+
+    const attempts = (data.attempts as number | undefined) ?? 0;
+    const otpSalt = String(data.otpSalt ?? "");
+    const otpHash = String(data.otpHash ?? "");
+
+    if (hashOtp(code, otpSalt) !== otpHash) {
+      const nextAttempts = attempts + 1;
+      if (nextAttempts >= LOGIN_2FA_ATTEMPT_LIMIT) {
+        tx.update(challengeRef, {
+          attempts: nextAttempts,
+          lockedUntil: Timestamp.fromMillis(
+            now.toMillis() + LOGIN_2FA_LOCK_MINUTES * 60 * 1000,
+          ),
+        });
+        throw new HttpsError("failed-precondition", "otp_attempts_exceeded");
+      }
+      tx.update(challengeRef, { attempts: nextAttempts });
+      throw new HttpsError("permission-denied", "otp_invalid");
+    }
+
+    tx.delete(challengeRef);
+  });
+
+  return { ok: true };
+});
 
 export const verifyOtpAndCreateAccount = onCall(async (request) => {
   const sessionId = String(request.data?.sessionId ?? "").trim();

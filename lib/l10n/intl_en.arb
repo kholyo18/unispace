@@ -327,6 +327,42 @@
   "twoFactorAuthHint": "Require OTP verification on sign-in.",
   "twoFactorEnabledToast": "Two-factor authentication enabled.",
   "twoFactorDisabledToast": "Two-factor authentication disabled.",
+  "twoFactorEnableConfirmTitle": "Enable two-factor authentication?",
+  "twoFactorEnableConfirmBody": "You will be asked for a one-time code sent to your email after password login.",
+  "twoFactorOtpTitle": "Email verification code",
+  "twoFactorOtpDescription": "Enter the 6-digit code sent to {email}.",
+  "@twoFactorOtpDescription": {
+    "placeholders": {
+      "email": {}
+    }
+  },
+  "twoFactorCodeLabel": "Verification code",
+  "twoFactorCodeHint": "6-digit code",
+  "twoFactorConfirmButton": "Confirm",
+  "twoFactorResendCode": "Resend code",
+  "twoFactorResendIn": "Resend in {seconds}s",
+  "@twoFactorResendIn": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "twoFactorBackToLogin": "Back to login",
+  "twoFactorCodeSent": "Verification code sent to your email.",
+  "twoFactorCodeExpired": "Code expired. Request a new code.",
+  "twoFactorCodeIncorrect": "Incorrect code. Try again.",
+  "twoFactorTooManyAttempts": "Too many failed attempts. Try again later.",
+  "twoFactorResendCooldown": "Please wait before resending.",
+  "twoFactorVerifiedSuccess": "Two-factor verification completed.",
+  "twoFactorCodeInvalidFormat": "Enter a valid 6-digit code.",
+  "twoFactorChallengeMissing": "Verification session not found. Sign in again.",
+  "twoFactorSendFailed": "Failed to send verification code.",
+  "twoFactorGenericError": "Unable to complete verification. Try again.",
+  "twoFactorAttemptsRemaining": "Attempts remaining: {count}",
+  "@twoFactorAttemptsRemaining": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "manageDevicesTitle": "Manage devices",
   "manageDevicesHint": "Review active sessions and devices.",
   "manageDevicesDescription": "See where your account is signed in and remove access if needed.",
