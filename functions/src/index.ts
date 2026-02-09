@@ -2,9 +2,9 @@ import { randomBytes, randomInt, randomUUID, createHash } from "crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { logger } from "firebase-functions/logger";
+import * as logger from "firebase-functions/logger";
 import sgMail from "@sendgrid/mail";
 
 initializeApp();
@@ -19,6 +19,10 @@ const OTP_ATTEMPT_LIMIT = 5;
 const OTP_RESEND_LIMIT = 3;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const USERNAME_RESERVE_MINUTES = 15;
+
+export const helloWorld = onRequest((req, res) => {
+  res.send("Hello from Firebase!");
+});
 
 const LOGIN_2FA_TTL_MINUTES = 5;
 const LOGIN_2FA_ATTEMPT_LIMIT = 5;
