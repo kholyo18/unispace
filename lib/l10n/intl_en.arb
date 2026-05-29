@@ -729,5 +729,6 @@
   "sessionLoginDateLabel": "Login date",
   "sessionLastActivityLabel": "Last activity",
   "sessionNetworkLabel": "Network",
-  "dangerZone": "Danger zone"
+  "dangerZone": "Danger zone",
+  "gpu": "Calculating the academic average"
 }

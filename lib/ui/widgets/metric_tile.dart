@@ -25,10 +25,10 @@ class MetricTile extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(16),border: Border.all(color: theme.colorScheme.onSurface ),
             boxShadow: [
               if (theme.brightness == Brightness.light)
                 BoxShadow(
@@ -52,7 +52,7 @@ class MetricTile extends StatelessWidget {
                       label,
                       style: theme.textTheme.bodyMedium,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 0),
                     Directionality(
                       textDirection: TextDirection.ltr,
                       child: Text(

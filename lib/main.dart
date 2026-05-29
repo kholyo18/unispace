@@ -75,6 +75,7 @@ import 'dart:io';
 import 'package:image_cropper/image_cropper.dart';
 //import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter/rendering.dart';
 
 Future<void> openPdf(String filePath) async {
   final result = await OpenFilex.open(filePath);
@@ -440,102 +441,52 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     ],
                   ),
                 ),
-                //_sectionHeader(context, S.of(context).drawerSectionAccount),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.person_outline,
-                //   title: S.of(context).editProfile,
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (_) => const ProfileScreen(),
-                //       ),
-                //     );
-                //   },
-                // ),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.notifications_outlined,
-                //   title: S.of(context).notificationsSettingsTitle,
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (_) => const NotificationsSettingsScreen(),
-                //       ),
-                //     );
-                //   },
-                // ),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.privacy_tip_outlined,
-                //   title: S.of(context).privacySettingsTitle,
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (_) => const PrivacySettingsScreen(),
-                //       ),
-                //     );
-                //   },
-                // ),
-                //if (user != null)
-                  // _drawerItem(
-                  //   context,
-                  //   icon: Icons.lock_reset,
-                  //   title: S.of(context).resetPassword,
-                  //   onTap: () async {
-                  //     try {
-                  //       await FirebaseAuth.instance
-                  //           .sendPasswordResetEmail(email: user.email!);
-                  //       if (context.mounted) {
-                  //         ScaffoldMessenger.of(context).showSnackBar(
-                  //           SnackBar(
-                  //             content: Text(S.of(context).resetSent),
-                  //           ),
-                  //         );
-                  //       }
-                  //     } catch (e) {
-                  //       if (context.mounted) {
-                  //         ScaffoldMessenger.of(context).showSnackBar(
-                  //           SnackBar(
-                  //             content:
-                  //                 Text(S.of(context).resetFailed(e.toString())),
-                  //           ),
-                  //         );
-                  //       }
-                  //     }
-                  //   },
-                  // ),
-                _sectionHeader(context, S.of(context).drawerSectionStudent),
+                _sectionHeader(context, S.of(context).drawerSectionAccount),
                 _drawerItem(
                   context,
-                  icon: Icons.school_outlined,
-                  title: S.of(context).academicSettingsTitle,
+                  icon: Icons.person_outline,
+                  title: S.of(context).editProfile,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const AcademicSettingsScreen(),
+                        builder: (_) => const ProfileScreen(),
                       ),
                     );
                   },
                 ),
+
+
+                _sectionHeader(context, S.of(context).drawerSectionStudent),
+                _drawerItem(
+                  context,
+                  icon: Icons.school_outlined,
+                  title: S.of(context).gpu,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const HomeLandingScreen(),
+                      ),
+                    );
+                  },
+                ),
+
+
                 _sectionHeader(context, S.of(context).drawerSectionContent),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.download_outlined,
-                //   title: S.of(context).downloadsTitle,
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (_) => const DownloadsScreen(),
-                //       ),
-                //     );
-                //   },
-                // ),
+                _drawerItem(
+                  context,
+                  icon: Icons.download_outlined,
+                  title: S.of(context).downloadsTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DownloadsScreen(),
+                      ),
+                    );
+                  },
+                ),
                 // _drawerItem(
                 //   context,
                 //   icon: Icons.star_border,
@@ -549,32 +500,20 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                 //     );
                 //   },
                 // ),
+
                 _drawerItem(
                   context,
-                  icon: Icons.calculate_outlined,
-                  title: S.of(context).quickCalc2,
+                  icon: Icons.note_alt_outlined,
+                  title: S.of(context).clipboard,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const QuickAverageScreen(),
+                        builder: (_) => const NotesScreen(),
                       ),
                     );
                   },
                 ),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.note_alt_outlined,
-                //   title: S.of(context).clipboard,
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(
-                //         builder: (_) => const NotesScreen(),
-                //       ),
-                //     );
-                //   },
-                // ),
                 _drawerItem(
                   context,
                   icon: Icons.psychology_outlined,
@@ -657,18 +596,31 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                       ).then((_) => _loadPrivacyDrawerVisibility());
                     },
                   ),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.star_rate_outlined,
-                //   title: S.of(context).rateApp,
-                //   onTap: _rateApp,
-                // ),
-                // _drawerItem(
-                //   context,
-                //   icon: Icons.share_outlined,
-                //   title: S.of(context).shareApp,
-                //   onTap: () => Share.share(AppLinks.shareMessage),
-                // ),
+                _drawerItem(
+                  context,
+                  icon: Icons.notifications_outlined,
+                  title: S.of(context).notificationsSettingsTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsSettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.star_rate_outlined,
+                  title: S.of(context).rateApp,
+                  onTap: _rateApp,
+                ),
+                _drawerItem(
+                  context,
+                  icon: Icons.share_outlined,
+                  title: S.of(context).shareApp,
+                  onTap: () => Share.share(AppLinks.shareMessage),
+                ),
                 if (_showPrivacyAndContactInDrawer)
                   _drawerItem(
                     context,
@@ -935,43 +887,6 @@ Future<String> translateSubject(BuildContext context, String subject) async {
     return subject;
   }
 }
-// class _LanguageSheet extends StatelessWidget {
-//   final _UniSpaceAppState app;
-//   const _LanguageSheet({required this.app});
-//
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return SafeArea(
-//       child: Column(mainAxisSize: MainAxisSize.min, children: [
-//         const ListTile(title: Text('اختر اللغة')),
-//         RadioListTile<String>(
-//           value: 'ar',
-//           groupValue: app._locale.languageCode,
-//           title: const Text('العربية'),
-//           onChanged: (_) => _apply(context, const Locale('ar')),
-//         ),
-//         RadioListTile<String>(
-//           value: 'fr',
-//           groupValue: app._locale.languageCode,
-//           title: const Text('Français'),
-//           onChanged: (_) => _apply(context, const Locale('fr')),
-//         ),
-//         RadioListTile<String>(
-//           value: 'en',
-//           groupValue: app._locale.languageCode,
-//           title: const Text('English'),
-//           onChanged: (_) => _apply(context, const Locale('en')),
-//         ),
-//       ]),
-//     );
-//   }
-//
-//   void _apply(BuildContext context, Locale l) {
-//     app.setLocale(l);
-//     Navigator.pop(context);
-//   }
-// }
 
 class _DrawerLeading extends StatelessWidget {
   final bool showBack;
@@ -1705,183 +1620,46 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
 // ============================================================================
 // HomeShell — الشريط السفلي الجديد + سحب/انزلاق بين الصفحات
 // ============================================================================
-class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
-  @override
-  State<HomeShell> createState() => _HomeShellState();
-}
-
-class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, WidgetsBindingObserver {
-  // 0 = Home(الكليات), 1 = Community, 2 = Notes
-  int _current = 0;
-  late final PageController _page;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _page = PageController(initialPage: 0);
-    _initializeCurrentSession();
-  }
-
-  Future<void> _initializeCurrentSession() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    await SessionService.instance.initSession(user.uid);
-  }
-
-  Future<void> _touchCurrentSession() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    final revoked = await SessionService.instance.isCurrentSessionRevoked(user.uid);
-    if (revoked) {
-      if (kDebugMode) {
-        debugPrint('[Auth] session revoked -> signOut');
-      }
-      await AuthSessionService.signOutFully();
-      return;
-    }
-    await SessionService.instance.updateLastSeen(user.uid);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _touchCurrentSession();
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _page.dispose();
-    super.dispose();
-  }
-
-  void _go(int i) {
-    setState(() => _current = i);
-    _page.animateToPage(
-      i,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeInOut,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      endDrawer: const AppEndDrawer(),
-      body: PageView(
-        controller: _page,
-        onPageChanged: (i) => setState(() => _current = i),
-        children: const [
-          // الصفحة الرئيسية: كروت كليات + زر يدخل للدراسة الكاملة
-          HomeLandingScreen(),
-          // المجتمع بأسلوب Reddit
-          CommunityScreen(),
-          // الملاحظات الاحترافية
-          //NotesScreen(),
-        ],
-      ),
-      bottomNavigationBar: _BottomBar(
-        index: _current,
-        controller: _page,
-        pageCount: 3,
-        onTap: _go,
-      ),
-      //floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      //floatingActionButton: _NoteFab(onTap: () => _go(2)),
-    );
-  }
-}
 
 
-
-// شريط سفلي مع شكل احترافي
-class _BottomBar extends StatefulWidget {
+// ────────────────────────────── الشريط السفلي (الوحيد) ──────────────────────────────
+class _BottomBar extends StatelessWidget {
   final int index;
   final void Function(int) onTap;
-  final PageController controller;
-  final int pageCount;
+  final double hideProgress;
+
   const _BottomBar({
+    super.key,
     required this.index,
-    required this.onTap,
-    required this.controller,
-    this.pageCount = 3,
-  });
-
-  @override
-  State<_BottomBar> createState() => _BottomBarState();
-}
-
-class _BottomBarState extends State<_BottomBar> {
-  double _dragExtent = 0;
-  double _startPixels = 0;
-  bool _isDragging = false;
-
-  void _handlePanEnd([DragEndDetails? details]) {
-    if (!_isDragging || !widget.controller.hasClients) {
-      _dragExtent = 0;
-      _isDragging = false;
-      return;
-    }
-
-    _isDragging = false;
-    final currentPage = widget.controller.page ?? widget.index.toDouble();
-    int target = currentPage.round();
-    final velocityX = details?.velocity.pixelsPerSecond.dx ?? 0;
-    if (velocityX <= -200 && target < widget.pageCount - 1) {
-      target += 1;
-    } else if (velocityX >= 200 && target > 0) {
-      target -= 1;
-    }
-    target = target.clamp(0, widget.pageCount - 1);
-    _dragExtent = 0;
-    widget.onTap(target);
-  }
+    this.hideProgress = 0.0,
+    required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanStart: (_) {
-        _dragExtent = 0;
-        _isDragging = true;
-        if (widget.controller.hasClients) {
-          _startPixels = widget.controller.position.pixels;
-        }
-      },
-      onPanUpdate: (details) {
-        if (!widget.controller.hasClients) return;
-        _dragExtent += details.delta.dx;
-        final position = widget.controller.position;
-        final target = (_startPixels - _dragExtent)
-            .clamp(position.minScrollExtent, position.maxScrollExtent);
-        position.jumpTo(target);
-      },
-      onPanEnd: _handlePanEnd,
-      onPanCancel: () => _handlePanEnd(),
-      child: BottomAppBar(
-        height: 60,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8,
+    final scheme = Theme.of(context).colorScheme;
+
+    return BottomAppBar(
+      color: scheme.background,
+      height: 20,
+      shape: const CircularNotchedRectangle(),
+      notchMargin: 0,
+      child: Opacity(                    // ← الأيقونات فقط تتلاشى
+        opacity: 1 - hideProgress,
         child: Row(
           children: [
             Expanded(
               child: _BarItem(
-                icon: Icons.home_outlined,
-                label: S.of(context).home,
-                selected: widget.index == 0,
-                onTap: () => widget.onTap(0),
+                icon: Icons.home,
+                selected: index == 0,
+                onTap: () => onTap(0),
               ),
             ),
             const SizedBox(width: 56),
             Expanded(
               child: _BarItem(
                 icon: Icons.public_outlined,
-                label: S.of(context).community,
-                selected: widget.index == 1,
-                onTap: () => widget.onTap(1),
+                selected: index == 1,
+                onTap: () => onTap(1),
               ),
             ),
           ],
@@ -1891,14 +1669,15 @@ class _BottomBarState extends State<_BottomBar> {
   }
 }
 
+// ────────────────────────────── _BarItem (أبيض/رمادي) ──────────────────────────────
 class _BarItem extends StatelessWidget {
   final IconData icon;
-  final String label;
   final bool selected;
   final VoidCallback onTap;
+
   const _BarItem({
+    super.key,
     required this.icon,
-    required this.label,
     required this.selected,
     required this.onTap,
   });
@@ -1906,24 +1685,22 @@ class _BarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final c = selected ? scheme.primary : scheme.onSurfaceVariant;
+    final Color c = selected ? Colors.white : scheme.onSurfaceVariant.withOpacity(0.3);
+
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
-        decoration: BoxDecoration(
-          color:
-              selected ? scheme.primary.withOpacity(.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: SizedBox(
+          height: 1000,                    // ← لا تغيّره (مهم لمساحة النقر)
+          width: 1000,
+          child: Align(
+            alignment: Alignment.topCenter,   // ← يرفع الأيقونة لأعلى
+            child: Padding(
+                // ← هنا التحكم
+              child: Icon(icon, color: c, size: 25),
+              padding: const EdgeInsets.only(bottom: 10),
+            ),
         ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: c),
-          const SizedBox(height: 0),
-          Text(label, style: TextStyle(color: c, fontSize: 10)),
-        ]),
       ),
     );
   }
@@ -2147,65 +1924,34 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
     return AppScaffold(
         // endDrawer:  AppEndDrawer(),
         appBar: AppBar(
-          automaticallyImplyLeading: false,
-          titleSpacing: 0, // حتى يلتصق المحتوى باليسار
+          automaticallyImplyLeading: true,
+
           title: Row(
-            textDirection: TextDirection.ltr,
-            //mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () {
-                  Scaffold.of(context).openEndDrawer(); // لأنك تستخدم endDrawer
-                },
-              ),
               const SizedBox(width: 4),
               Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: Alignment.center,
                   child: Text(
-                    'UniSpace',
-                    style: GoogleFonts.pacifico(
-                      textStyle: Theme.of(context).textTheme.displayLarge,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.teal[900],
+                    S.of(context).gpu,
+                    style: TextStyle(
+
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+
+
                     ),
                   )),
             ],
           ),
         ),
         padding: EdgeInsets.zero,
-        body: CustomScrollView(
+        body:
+        CustomScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           slivers: [
+
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-              sliver: SliverToBoxAdapter(
-                child: Material(
-                  color: Colors.transparent, // للحفاظ على خلفية InfoCard
-                  child: Theme(
-                    data: Theme.of(context).copyWith(
-                      textTheme: Theme.of(context).textTheme.apply(
-                            bodyColor: Colors.white, // لون النصوص
-                            displayColor: Colors.white,
-                          ),
-                    ),
-                    child: InfoCard(
-                      backgroundColor: Theme.of(context)
-                          .colorScheme
-                          .onPrimaryFixedVariant
-                          .withOpacity(0.8),
-                      leadingIcon: Icons.school_outlined,
-                      title: S.of(context).welcomeEmoji,
-                      subtitle: S.of(context).homeSubtitle,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(1, 12, 1, 1),
+              padding: const EdgeInsets.fromLTRB(1, 20, 10, 30),
               sliver: SliverToBoxAdapter(
                 child: Container(
 
@@ -2255,9 +2001,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                   final specialtyId =
                       settings.academicSpecialtyId.trim();
                   if (!settings.hasAcademicShortcut) {
-                    if (settings.hasCreatedAcademicShortcut) {
-                      return const SizedBox.shrink();
-                    }
+
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Container(
@@ -2266,8 +2010,8 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           color: theme.colorScheme.surface,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: theme.colorScheme.outlineVariant
-                                .withOpacity(0.4),
+                            color: theme.colorScheme.onSurface
+                                //.withOpacity(0.4),
                           ),
                           boxShadow: [
                             BoxShadow(
@@ -2497,84 +2241,31 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                 },
               ),
             ),
+
             if (quickFaculty != null) ...[
+
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                sliver: SliverToBoxAdapter(
-                  child: SectionHeader(
-                    title: S.of(context).faculties,
-                    trailing: TextButton(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => FacultiesScreen(
-                              faculties: getDemoFaculties(context)),
-                        ),
-                      ),
-                      child: Text(S.of(context).viewAll),
-                    ),
-                  ),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                sliver: SliverToBoxAdapter(child:
+                       Container(
+                         decoration: BoxDecoration(borderRadius: BorderRadius.circular(16),
+
+                             border: Border.all(color:Theme.of(context).colorScheme.onSurface
+                             )),
+                          child: TextButton(onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const QuickAverageScreen(),
+                              ),
+                            );
+                          },
+                              child: Text(S.of(context).quickCalc2)),
+                        )
+
                 ),
               ),
-              // SliverPadding(
-              //   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              //   sliver: SliverToBoxAdapter(
-              //     child: Column(
-              //       children: [
-              //         // الحاوية السوداء: الحساب السريع
-              //         InkWell(
-              //           onTap: () {
-              //             Navigator.push(
-              //               context,
-              //               MaterialPageRoute(builder: (_) => const QuickAverageScreen()),
-              //             );
-              //           },
-              //           borderRadius: BorderRadius.circular(12),
-              //           child: Container(
-              //             width: 350,
-              //             height: 60,
-              //             padding: const EdgeInsets.symmetric(horizontal: 16),
-              //             alignment: Alignment.centerLeft,
-              //             decoration: BoxDecoration(
-              //               color: Theme.of(context).colorScheme.surface, // لون الحاوية أسود
-              //               borderRadius: BorderRadius.circular(12),
-              //               boxShadow: [
-              //                 BoxShadow(
-              //                   color: Theme.of(context).colorScheme.onSurface,
-              //                   blurRadius: 10,
-              //                   offset: const Offset(0, 1),
-              //                 ),
-              //               ],
-              //             ),
-              //             child: Row(
-              //               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              //               children:  [Row(
-              //                   children: [
-              //                 Icon(Icons.calculate_outlined,
-              //                     color: Theme.of(context).colorScheme.onSurface, size: 28),
-              //                 SizedBox(width: 12),
-              //                 Text(S.of(context).quickCalc,
-              //                   style: TextStyle(
-              //                     color: Theme.of(context).colorScheme.onSurface,
-              //                     fontSize: 18,
-              //                     fontWeight: FontWeight.bold,
-              //                   ),
-              //                 )]),
-              //                 Icon(
-              //                    Icons.arrow_forward_ios,
-              //                    color: Theme.of(context).colorScheme.onSurface,
-              //                    size: 20,    )
-              //               ],
-              //             ),
-              //
-              //           ),
-              //         ),
-              //
-              //
-              //       ],
-              //     ),
-              //   ),
-              // ),
+
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 sliver: SliverList(
@@ -2625,7 +2316,6 @@ class _FacultyQuickCard extends StatelessWidget {
             color: theme.colorScheme.onSecondary,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              //if (theme.brightness == Brightness.light)
               BoxShadow(
                 color: theme.colorScheme.onSurface.withOpacity(.08),
                 blurRadius: 18,
@@ -2640,7 +2330,7 @@ class _FacultyQuickCard extends StatelessWidget {
               Row(
                 children: [
                   CircleAvatar(
-                    radius: 26,
+                    radius: 15,
                     backgroundColor: theme.colorScheme.primary.withOpacity(.2),
                     foregroundColor: theme.colorScheme.primary,
                     child: const Icon(Icons.apartment_outlined),
@@ -2992,12 +2682,517 @@ class _NoteEditorState extends State<_NoteEditor> {
 }
 
 // ============================================================================
+// Notes — واجهة الجامعة احترافية (إنشاء/بحث/تثبيت/أرشفة)
+// ============================================================================
+
+class UnispaceScreen extends StatefulWidget {
+  const UnispaceScreen({super.key});
+
+  @override
+  State<UnispaceScreen> createState() => _UnispaceScreenState();
+}
+
+class _UnispaceScreenState extends State<UnispaceScreen> {
+  final List<_Post> _posts = [
+    _Post(
+      author: 'CREATOR',
+      title: 'Coming soon',
+      body: 'A communication platform for only and all university students\n'
+          '\n'
+          'BE READY FOR IT🔥',
+      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 5)),
+      votes: 100000000,
+      tags: const [
+        'communications',
+        'students',
+        'universities',
+      ],
+    ),
+    _Post(
+      author: 'CREATOR',
+      title: 'Concept of the app',
+      body: 'An app for calculating university GPAs for students\n'
+          '\nلا تتردد في مراسلتنا في حالة كانت لديك مطالب او اراء في ما يتعلق بالتطبيق '
+          '\n'
+          '\n'
+          'contact us on IG: @klause_ds\n',
+      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 3)),
+      votes: 100000000,
+      tags: const [
+        'Concept',
+        'students',
+        'GPA',
+      ],
+    ),
+    _Post(
+      author: 'CREATOR',
+      title: 'Directions to use',
+      body:
+      'بسبب اختلافات تقييم المواد من جامعة لاخرى ومن سنة دراسية لاخرى قد يجد بعض مستخدمينا اختلافات عن طريقتم في التقييم لدلك فيمكنكم تعديل اعدادات تقييم المواد ودالك من خلال علامة التعجب كما هو موضح في الصورة  \n'
+          ':حيث \n'
+          ' W.TD: معامل نقطة الاعمال الموجهة\n'
+          'W.EXAM: معامل نقطة الاختبار\n'
+          'W.TP: معامل نقطة الاعمال التطبيقية\n',
+      imagePaths: [
+        'assets/images/5917864502214986758.jpg',
+        'assets/images/5917864502214986759.jpg',
+      ],
+      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+      votes: 0,
+      tags: const [
+        'directions',
+        'app',
+      ],
+    ),
+    _Post(
+      author: 'CREATOR',
+      title: 'Directions to use',
+      body:
+      'في حالة تسائلكم عن مكان تواجد نسب المواد فيمكنكم الاطلاع عليها من خلال تطبيق بروغرس كما هو موضح في الصور\n'
+          'ففي حالة عدم وجود معلومات تخصصكم داخل التطبيق يمكنكم حساب المعدل من خلال خاصية الحساب السريع في القائمة او ارسال المعلومات الينا مباشرة ',
+      imagePaths: [
+        'assets/images/progress2.jpeg',
+        'assets/images/progress.jpeg',
+      ],
+      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+      votes: 0,
+      tags: const [
+        'directions',
+        'app',
+      ],
+    ),
+  ];
+  @override
+  Widget build(BuildContext context) {
+    return AppScaffold(
+      // appBar: AppBar(
+      //   automaticallyImplyLeading: false,
+      //   titleSpacing: 0,
+      //   title: Row(
+      //     textDirection: TextDirection.ltr,
+      //     children: [
+      //       IconButton(
+      //         icon: const Icon(Icons.menu),
+      //         onPressed: () {
+      //           Scaffold.of(context).openEndDrawer();
+      //         },
+      //       ),
+      //       const SizedBox(width: 4),
+      //       Text(
+      //         'Community',
+      //         style: GoogleFonts.pacifico(
+      //           textStyle: Theme.of(context).textTheme.displayLarge,
+      //           fontSize: 30,
+      //           fontWeight: FontWeight.w500,
+      //           fontStyle: FontStyle.italic,
+      //         ),
+      //       ),
+      //       const Spacer(),
+      //       IconButton(
+      //         icon: const Icon(Icons.add_circle_outline),
+      //         onPressed:_newPost,
+      //       ),
+      //       IconButton(
+      //           icon: const Icon(Icons.search),
+      //           onPressed: () {
+      //             // وظيفة البحث
+      //           }),
+      //       IconButton(
+      //         icon: const Icon(Icons.account_circle),
+      //         onPressed:
+      //             () {
+      //           Navigator.push(
+      //             context,
+      //             MaterialPageRoute(
+      //               builder: (_) => const ProfileScreen(),
+      //             ),
+      //           );
+      //         },
+      //       ),
+      //     ],
+      //   ),
+      // ),
+      padding: EdgeInsets.zero,
+      body:  ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 80, 16, 120),
+        itemCount: _posts.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 16),
+        itemBuilder: (_, i) => _PostCard(
+          post: _posts[i],
+          onVote: (delta) => setState(() => _posts[i].votes += delta),
+          onComment: () async {
+            final txt = await showDialog<String>(
+              context: context,
+              builder: (_) => const _CommentDialog(),
+            );
+            if (txt != null && txt.trim().isNotEmpty) {
+              setState(() => _posts[i].comments.insert(
+                0,
+                _Comment(
+                  id: UniqueKey().toString(),
+                  author: 'you',
+                  text: txt,
+                  createdAt: DateTime.now(),
+                ),
+              ));
+            }
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Notes — واجهة المحيط احترافية (إنشاء/بحث/تثبيت/أرشفة)
+// ============================================================================
+
+// ============================================================================
 // عنصر EmptyHint (لازم لرسائل الفراغ)
 // ============================================================================
 
 // ============================================================================
 // PART 2/3 — Community (Reddit-like) + Studies Navigator + Table Calculator
 // ============================================================================
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, WidgetsBindingObserver {
+  int _current = 0;
+  late final PageController _page;
+  late final AnimationController _bottomBarController;
+  final GlobalKey<_CommunityScreenState> _communityKey = GlobalKey<_CommunityScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _page = PageController(initialPage: 0);
+
+    _bottomBarController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+
+    _initializeCurrentSession();
+  }
+
+  // ───── باقي الدوال (لا تغيرها) ─────
+  Future<void> _initializeCurrentSession() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await SessionService.instance.initSession(user.uid);
+  }
+
+  Future<void> _touchCurrentSession() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final revoked = await SessionService.instance.isCurrentSessionRevoked(user.uid);
+    if (revoked) {
+      if (kDebugMode) debugPrint('[Auth] session revoked -> signOut');
+      await AuthSessionService.signOutFully();
+      return;
+    }
+    await SessionService.instance.updateLastSeen(user.uid);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _touchCurrentSession();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _page.dispose();
+    _bottomBarController.dispose();
+    super.dispose();
+  }
+
+  void _go(int i) {
+    setState(() => _current = i);
+    _page.animateToPage(i, duration: const Duration(milliseconds: 260), curve: Curves.easeInOut);
+  }
+  void _openEndDrawer() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Material(
+            elevation: 8,
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.85,
+              height: MediaQuery.of(context).size.height,
+              child: const AppEndDrawer(),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOut,
+          )),
+          child: child,
+        );
+      },
+    );
+  }
+  void _newPost() async {
+    final result = await showModalBottomSheet<List<PostItem>>(
+      isScrollControlled: true,
+      context: context,
+      builder: (_) => const _CreatePostSheet(),
+    );
+
+    if (result == null || result.isEmpty) return;
+
+    String title = '';
+    String body = '';
+    final List<String> videoPaths = [];
+    List<PollData> pollDataList = [];
+    final List<Uint8List> imageBytesList = [];
+    final List<String> directImagePaths = [];
+
+    for (final item in result) {
+      switch (item.type) {
+        case PostItemType.text:
+          if (title.isEmpty) {
+            title = item.title;
+          } else {
+            body = item.title;
+          }
+          break;
+        case PostItemType.image:
+          if (item.imageBytes != null) {
+            imageBytesList.add(item.imageBytes!);
+          } else if (item.mediaPath != null) {
+            directImagePaths.add(item.mediaPath!);
+          }
+          break;
+        case PostItemType.video:
+          if (item.mediaPath != null) videoPaths.add(item.mediaPath!);
+          break;
+        case PostItemType.poll:
+          pollDataList = item.pollDataList ?? [];
+          break;
+      }
+    }
+
+    final List<String> finalImagePaths = List.from(directImagePaths);
+    if (imageBytesList.isNotEmpty) {
+      final tempDir = await getTemporaryDirectory();
+      for (int i = 0; i < imageBytesList.length; i++) {
+        final file = File(
+          '${tempDir.path}/post_${DateTime.now().millisecondsSinceEpoch}_$i.png',
+        );
+        await file.writeAsBytes(imageBytesList[i]);
+        finalImagePaths.add(file.path);
+      }
+    }
+
+    final newPost = _Post(
+      author: 'current_user',
+      title: title,
+      body: body,
+      createdAt: DateTime.now(),
+      imagePaths: finalImagePaths,
+      videoPaths: videoPaths,
+      pollDataList: pollDataList,
+      tags: const [],
+    );
+
+    // ✅ هذا هو الحل — أضف مباشرة لـ CommunityScreen عبر GlobalKey
+    _communityKey.currentState?.addPost(newPost);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).post)),
+      );
+    }
+  }
+
+  Widget _buildAppBarForCurrentPage() {
+    return Builder(          // ← هذا الـ Builder هو الحل السحري
+      builder: (context) {
+        switch (_current) {
+          case 0: // Home
+            return AppBar(
+              automaticallyImplyLeading: false,
+              titleSpacing: 0,
+              title: Row(
+                textDirection: TextDirection.ltr,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.menu),
+
+                    onPressed: _openEndDrawer,   // ← استدعاء دالة داخل HomeShell
+                  ),
+                  const SizedBox(width: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'UniSpace',
+                      style: GoogleFonts.pacifico(
+                        textStyle: Theme.of(context).textTheme.displayLarge,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.teal[500],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+          case 1: // ← CommunityScreen (غيّر حسب ما تريد)
+            return  AppBar(
+              automaticallyImplyLeading: false,
+              titleSpacing: 0,
+              title: Row(
+                textDirection: TextDirection.ltr,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.menu),
+
+                    onPressed: _openEndDrawer,   // ← استدعاء دالة داخل HomeShell
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Community',
+                    style: GoogleFonts.pacifico(
+                      textStyle: Theme.of(context).textTheme.displayLarge,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w500,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+
+                    onPressed:_newPost,
+                  ),
+                  IconButton(
+                      icon: const Icon(Icons.search),
+
+                      onPressed: () {
+                        // وظيفة البحث
+                      }),
+                  IconButton(
+                    icon: const Icon(Icons.account_circle),
+
+                    onPressed:
+                        () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfileScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
+
+          default: // Notes أو أي صفحة أخرى
+            return AppBar(
+              automaticallyImplyLeading: false,
+              title: const Text('الملاحظات'),
+              centerTitle: true,
+            );
+        }
+      },
+    );
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      //endDrawer: const AppEndDrawer(),
+      body: Stack(
+        children: [
+          // كشف التمرير
+          NotificationListener<UserScrollNotification>(
+            onNotification: (notification) {
+              if (notification.direction == ScrollDirection.reverse) {
+                _bottomBarController.forward();
+              } else if (notification.direction == ScrollDirection.forward) {
+                _bottomBarController.reverse();
+              }
+              return false;
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 68),
+              child: PageView(
+                controller: _page,
+                onPageChanged: (i) => setState(() => _current = i),
+                children: [
+                  //HomeLandingScreen(),
+                  UnispaceScreen(),
+                  CommunityScreen(key: _communityKey),
+
+                  //NotesScreen(),
+                ],
+              ),
+            ),
+          ),
+
+          // الشريط العلوي المتحرك (ديناميكي حسب الصفحة)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: AnimatedBuilder(
+              animation: _bottomBarController,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(0, -80 * _bottomBarController.value),
+                child: Opacity(
+                  opacity: 1 - _bottomBarController.value,
+                  child: child!,
+                ),
+              ),
+              child: _buildAppBarForCurrentPage(),
+            ),
+          ),
+
+          // الشريط السفلي (كما هو)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: AnimatedBuilder(
+              animation: _bottomBarController,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(0, 80 * _bottomBarController.value),
+                child: Opacity(
+                  opacity: 1 - _bottomBarController.value,
+                  child: child!,
+                ),
+              ),
+              child: _BottomBar(
+                index: _current,
+                onTap: _go,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 // ========================= Community (Reddit-like) ===========================
 class CommunityScreen extends StatefulWidget {
@@ -3078,69 +3273,145 @@ class _CommunityScreenState extends State<CommunityScreen> {
   ];
 
   void _newPost() async {
-    final p = await showModalBottomSheet<_Post>(
+    final result = await showModalBottomSheet<List<PostItem>>(
       isScrollControlled: true,
       context: context,
-      builder: (_) => _CreatePostSheet(),
+      builder: (_) => const _CreatePostSheet(),
     );
-    if (p != null) {
-      setState(() => _posts.insert(0, p));
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(S.of(context).post)));
+
+    if (result == null || result.isEmpty) return;
+
+    // ✅ جمع البيانات أولاً بدون await
+    String title = '';
+    String body = '';
+    final List<String> imagePaths = [];
+    final List<String> videoPaths = [];
+    List<PollData> pollDataList = [];
+
+    // ✅ افصل الـ imageBytes items عن الباقي
+    final List<MapEntry<int, Uint8List>> imageByteItems = [];
+
+    for (int idx = 0; idx < result.length; idx++) {
+      final item = result[idx];
+      switch (item.type) {
+        case PostItemType.text:
+          if (title.isEmpty) {
+            title = item.title;
+          } else {
+            body = item.title;
+          }
+          break;
+        case PostItemType.image:
+          if (item.mediaPath != null) {
+            imagePaths.add(item.mediaPath!);
+          } else if (item.imageBytes != null) {
+            // نحفظ للمعالجة لاحقاً
+            imageByteItems.add(MapEntry(idx, item.imageBytes!));
+          }
+          break;
+        case PostItemType.video:
+          if (item.mediaPath != null) {
+            videoPaths.add(item.mediaPath!);
+          }
+          break;
+        case PostItemType.poll:
+          pollDataList = item.pollDataList ?? [];
+          break;
+      }
+    }
+
+    // ✅ اكتب ملفات الصور إذا وجدت bytes
+    if (imageByteItems.isNotEmpty) {
+      final tempDir = await getTemporaryDirectory();
+      for (final entry in imageByteItems) {
+        final file = File(
+          '${tempDir.path}/post_${DateTime.now().millisecondsSinceEpoch}_${entry.key}.png',
+        );
+        await file.writeAsBytes(entry.value);
+        imagePaths.add(file.path);
+      }
+    }
+
+    // ✅ setState مباشرة بدون فحص mounted — نحن في نفس الـ State
+    setState(() {
+      _posts.insert(
+        0,
+        _Post(
+          author: 'current_user',
+          title: title,
+          body: body,
+          createdAt: DateTime.now(),
+          imagePaths: List.from(imagePaths),
+          videoPaths: List.from(videoPaths),
+          pollDataList: List.from(pollDataList),
+          tags: const [],
+        ),
+      );
+    });
+
+    debugPrint('Post added: title=$title, images=${imagePaths.length}, videos=${videoPaths.length}, polls=${pollDataList.length}');
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).post)),
+      );
     }
   }
-
+  void addPost(_Post post) {
+    setState(() {
+      _posts.insert(0, post);
+    });
+  }
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        titleSpacing: 0,
-        title: Row(
-          textDirection: TextDirection.ltr,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () {
-                Scaffold.of(context).openEndDrawer();
-              },
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'Community',
-              style: GoogleFonts.pacifico(
-                textStyle: Theme.of(context).textTheme.displayLarge,
-                fontSize: 30,
-                fontWeight: FontWeight.w500,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-            const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              onPressed:null,
-              //_newPost,
-            ),
-            IconButton(
-                icon: const Icon(Icons.search),
-                onPressed: () {
-                  // وظيفة البحث
-                }),
-            IconButton(
-              icon: const Icon(Icons.account_circle),
-              onPressed:null,
-              //     () {
-              //   Navigator.push(
-              //     context,
-              //     MaterialPageRoute(
-              //       builder: (_) => const ProfileScreen(),
-              //     ),
-              //   );
-              // },
-            ),
-          ],
-        ),
-      ),
+      // appBar: AppBar(
+      //   automaticallyImplyLeading: false,
+      //   titleSpacing: 0,
+      //   title: Row(
+      //     textDirection: TextDirection.ltr,
+      //     children: [
+      //       IconButton(
+      //         icon: const Icon(Icons.menu),
+      //         onPressed: () {
+      //           Scaffold.of(context).openEndDrawer();
+      //         },
+      //       ),
+      //       const SizedBox(width: 4),
+      //       Text(
+      //         'Community',
+      //         style: GoogleFonts.pacifico(
+      //           textStyle: Theme.of(context).textTheme.displayLarge,
+      //           fontSize: 30,
+      //           fontWeight: FontWeight.w500,
+      //           fontStyle: FontStyle.italic,
+      //         ),
+      //       ),
+      //       const Spacer(),
+      //       IconButton(
+      //         icon: const Icon(Icons.add_circle_outline),
+      //         onPressed:_newPost,
+      //       ),
+      //       IconButton(
+      //           icon: const Icon(Icons.search),
+      //           onPressed: () {
+      //             // وظيفة البحث
+      //           }),
+      //       IconButton(
+      //         icon: const Icon(Icons.account_circle),
+      //         onPressed:
+      //             () {
+      //           Navigator.push(
+      //             context,
+      //             MaterialPageRoute(
+      //               builder: (_) => const ProfileScreen(),
+      //             ),
+      //           );
+      //         },
+      //       ),
+      //     ],
+      //   ),
+      // ),
       padding: EdgeInsets.zero,
       body: _posts.isEmpty
           ? EmptyState(
@@ -3154,7 +3425,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              padding: const EdgeInsets.fromLTRB(16, 80, 16, 120),
               itemCount: _posts.length,
               separatorBuilder: (_, __) => const SizedBox(height: 16),
               itemBuilder: (_, i) => _PostCard(
@@ -3183,531 +3454,15 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 }
 
-
-
-
-class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
-
-  @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  final ImagePicker _picker = ImagePicker();
-
-  File? profileImage;
-  File? coverImage;
-
-  String userName = 'KAOSU DS';
-  String email = 'kaosu@email.com';
-  String mood = '🚀 Feeling motivated';
-
-  String uni = '';
-  String fac = '';
-  String clas = '';
-  String section = '';
-  final List<String> followingUsers = [];
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  // =======================
-  // اختيار صورة الحساب
-  // =======================
-  Future<void> _pickProfileImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-
-    if (image == null) return;
-
-    setState(() {
-      profileImage = File(image.path);
-    });
-  }
-
-  // =======================
-  // اختيار صورة الغلاف
-  // =======================
-  Future<void> _pickCoverImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-
-    if (image == null) return;
-
-    setState(() {
-      coverImage = File(image.path);
-    });
-  }
-
-  // =======================
-  // تعديل البيانات النصية
-  // =======================
-  void _editProfile() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _EditProfileSheet(
-        name: userName,
-        mood: mood,
-        uni: uni,
-        fac: fac,
-        clas: clas,
-        section: section,
-        onSave: (n, m, u, f, c, s) {
-          setState(() {
-            userName = n;
-            mood = m;
-            uni = u;
-            fac = f;
-            clas = c;
-            section = s;
-          });
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final user = FirebaseAuth.instance.currentUser;
-    final emailText = user?.email ?? email;
-
-    return Scaffold(
-      drawer: _buildProfileDrawer(context),
-      body: NestedScrollView(
-        headerSliverBuilder: (_, __) {
-          return [
-            SliverAppBar(
-              title: Text(S.of(context).profile),
-              expandedHeight: 260,
-              pinned: true,
-              backgroundColor: theme.colorScheme.surface,
-              leading: Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.line_style),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: _editProfile,
-                ),
-              ],
-              flexibleSpace: FlexibleSpaceBar(
-                background: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // ===== صورة الغلاف =====
-                    GestureDetector(
-                      onTap: _pickCoverImage,
-                      child: coverImage == null
-                          ? Container(
-                              color: Colors.grey[400],
-                              alignment: Alignment.center,
-                              child: const Icon(Icons.image,
-                                  size: 60, color: Colors.white),
-                            )
-                          : Image.file(
-                              coverImage!,
-                              fit: BoxFit.cover,
-                            ),
-                    ),
-
-                    // ===== التدرج =====
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: 120,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [
-                              theme.colorScheme.surface.withOpacity(0.85),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // ===== الحساب متداخل =====
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 20,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          GestureDetector(
-                            onTap: _pickProfileImage,
-                            child: CircleAvatar(
-                              radius: 42,
-                              backgroundColor: theme.scaffoldBackgroundColor,
-                              child: CircleAvatar(
-                                radius: 38,
-                                backgroundImage: profileImage != null
-                                    ? FileImage(profileImage!)
-                                    : null,
-                                child: profileImage == null
-                                    ? const Icon(Icons.person, size: 40)
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  userName,
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                ValueListenableBuilder<UserProfileData>(
-                                  valueListenable:
-                                      UserProfileService.instance.notifier,
-                                  builder: (context, profile, _) {
-                                    return Text(
-                                      profile.showEmailInProfile
-                                          ? emailText
-                                          : S.of(context).emailHidden,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                      ),
-                                    );
-                                  },
-                                ),
-                                Text(mood,
-                                    style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                        fontStyle: FontStyle.italic)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ];
-        },
-        body: Column(
-          children: [
-            const SizedBox(height: 12),
-            const SizedBox(height: 8),
-            TabBar(
-              controller: _tabController,
-              tabs: [
-                Tab(text: S.of(context).posts),
-                Tab(text: S.of(context).comments),
-              ],
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _UserPosts(),
-                  _UserComments(),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Drawer _buildProfileDrawer(BuildContext context) {
-    return Drawer(
-      width: MediaQuery.of(context).size.width * 0.78,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ===== رأس القائمة =====
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                S.of(context).userInfo,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-
-            // ===== معلومات الدراسة =====
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  _infoRow(Icons.school, S.of(context).university, uni),
-                  _infoRow(Icons.account_balance, S.of(context).faculty, fac),
-                  _infoRow(Icons.apartment, S.of(context).department, clas),
-                  _infoRow(Icons.menu_book, S.of(context).major, section),
-                ],
-              ),
-            ),
-
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(thickness: 1),
-            ),
-
-            // ===== المتابعون =====
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                S.of(context).following,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Expanded(
-              child: ListView.builder(
-                itemCount: followingUsers.length,
-                itemBuilder: (context, index) {
-                  final user = followingUsers[index];
-                  return ListTile(
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.person),
-                    ),
-                    title: Text(user),
-                    onTap: () {
-                      // افتح بروفايل المستخدم
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ================= INFO ROW =================
-  Widget _infoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: Colors.grey),
-          const SizedBox(width: 10),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
-                children: [
-                  TextSpan(
-                    text: '$label: ',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  TextSpan(text: value),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EditProfileSheet extends StatefulWidget {
-  final String name;
-  final String mood;
-  final String uni;
-  final String fac;
-  final String clas;
-  final String section;
-  final Function(String, String, String, String, String, String) onSave;
-
-  const _EditProfileSheet(
-      {required this.name,
-      required this.mood,
-      required this.uni,
-      required this.fac,
-      required this.clas,
-      required this.section,
-      required this.onSave});
-
-  @override
-  State<_EditProfileSheet> createState() => _EditProfileSheetState();
-}
-
-class _EditProfileSheetState extends State<_EditProfileSheet> {
-  late TextEditingController nameCtrl;
-  late TextEditingController moodCtrl;
-  late TextEditingController uniCtrl;
-  late TextEditingController facCtrl;
-  late TextEditingController clasCtrl;
-  late TextEditingController sectionCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    nameCtrl = TextEditingController(text: widget.name);
-    moodCtrl = TextEditingController(text: widget.mood);
-    uniCtrl = TextEditingController(text: widget.uni);
-    facCtrl = TextEditingController(text: widget.fac);
-    clasCtrl = TextEditingController(text: widget.clas);
-    sectionCtrl = TextEditingController(text: widget.section);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-        top: 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('تعديل الحساب',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(labelText: S.of(context).name)),
-          SizedBox(
-            height: 15,
-          ),
-          TextField(
-              controller: moodCtrl,
-              decoration: InputDecoration(labelText: S.of(context).mood)),
-          SizedBox(
-            height: 15,
-          ),
-          TextField(
-              controller: uniCtrl,
-              decoration: InputDecoration(labelText: S.of(context).university)),
-          SizedBox(
-            height: 15,
-          ),
-          TextField(
-              controller: facCtrl,
-              decoration: InputDecoration(labelText: S.of(context).faculty)),
-          SizedBox(
-            height: 15,
-          ),
-          TextField(
-              controller: clasCtrl,
-              decoration: InputDecoration(labelText: S.of(context).department)),
-          SizedBox(
-            height: 15,
-          ),
-          TextField(
-              controller: sectionCtrl,
-              decoration: InputDecoration(labelText: S.of(context).major)),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () {
-              widget.onSave(nameCtrl.text, moodCtrl.text, uniCtrl.text,
-                  facCtrl.text, clasCtrl.text, sectionCtrl.text);
-              Navigator.pop(context);
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const InfoRow({
-    super.key,
-    required this.icon,
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.grey),
-          const SizedBox(width: 8),
-          Text(text),
-        ],
-      ),
-    );
-  }
-}
-
-class _UserPosts extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: 0,
-      itemBuilder: (_, i) {
-        return Card(
-          child: ListTile(
-            title: Text('منشور رقم ${i + 1}'),
-            subtitle: const Text('هذا مثال على منشور المستخدم'),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _UserComments extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: 0,
-      itemBuilder: (_, i) {
-        return Card(
-          child: ListTile(
-            title: Text('تعليق رقم ${i + 1}'),
-            subtitle: const Text('هذا مثال على تعليق المستخدم'),
-          ),
-        );
-      },
-    );
-  }
-}
-
+//=========================================================
 class _Post {
   final String author;
   final String title;
   final String body;
   final DateTime createdAt;
   final List<String> imagePaths;
+  final List<String> videoPaths;
+  final List<PollData> pollDataList;
   final List<String> tags;
   final String? mediaUrl;
   int votes;
@@ -3721,6 +3476,8 @@ class _Post {
     required this.body,
     required this.createdAt,
     this.imagePaths = const [],
+    this.videoPaths = const [],
+    this.pollDataList = const [],
     this.tags = const [],
     this.mediaUrl,
     this.votes = 0,
@@ -3732,28 +3489,18 @@ class _Post {
   String get timeAgo {
     final now = DateTime.now();
     final difference = now.difference(createdAt);
-
-    if (difference.inSeconds < 60) {
-      return '${difference.inSeconds}s';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d';
-    } else if (difference.inDays < 30) {
-      final weeks = (difference.inDays / 7).floor();
-      return '${weeks}w';
-    } else if (difference.inDays < 365) {
-      final months = (difference.inDays / 30).floor();
-      return '${months}mo';
-    } else {
-      final years = (difference.inDays / 365).floor();
-      return '${years}y';
-    }
+    if (difference.inSeconds < 60) return '${difference.inSeconds}s';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m';
+    if (difference.inHours < 24) return '${difference.inHours}h';
+    if (difference.inDays < 7) return '${difference.inDays}d';
+    if (difference.inDays < 30) return '${(difference.inDays / 7).floor()}w';
+    if (difference.inDays < 365) return '${(difference.inDays / 30).floor()}mo';
+    return '${(difference.inDays / 365).floor()}y';
   }
 }
 
+// ==================== PostCard ====================
+// ==================== PostCard ====================
 class _PostCard extends StatefulWidget {
   final _Post post;
   final void Function(int delta) onVote;
@@ -3777,7 +3524,6 @@ class _PostCardState extends State<_PostCard> {
   @override
   void initState() {
     super.initState();
-    // تحديث الوقت كل دقيقة
     _updateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -3792,25 +3538,70 @@ class _PostCardState extends State<_PostCard> {
   void _openComments() async {
     if (_isNavigating) return;
     _isNavigating = true;
-
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => CommentsScreen(post: widget.post),
-      ),
+      MaterialPageRoute(builder: (_) => CommentsScreen(post: widget.post)),
     );
-
     _isNavigating = false;
   }
 
-  Widget _bottomSheetItem(
-    BuildContext context, {
-    required IconData icon,
-    required String text,
-    VoidCallback? onTap,
-  }) {
-    final theme = Theme.of(context);
+  // ===== دوال بناء الشرائح =====
+  Widget _buildImageSlide(String path) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FullscreenImageViewer(
+            images: [path],
+            initialIndex: 0,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: path.startsWith('assets/')
+            ? Image.asset(
+          path,
+          fit: BoxFit.cover,
+          width: double.infinity,
+        )
+            : Image.file(
+          File(path),
+          fit: BoxFit.cover,
+          width: double.infinity,
+          errorBuilder: (_, __, ___) => Container(
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.broken_image)),
+          ),
+        ),
+      ),
+    );
+  }
 
+  Widget _buildVideoSlide(String path) {
+    return _VideoSlideWidget(videoPath: path);
+  }
+
+  Widget _buildPollSlide(PollData poll) {
+    return GestureDetector(
+      onTap: () {},
+      child: SizedBox(
+        height: 200,
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: PollPostWidget(polls: [poll]),
+        ),
+      ),
+    );
+  }
+
+  Widget _bottomSheetItem(
+      BuildContext context, {
+        required IconData icon,
+        required String text,
+        VoidCallback? onTap,
+      }) {
+    final theme = Theme.of(context);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap ?? () => Navigator.pop(context),
@@ -3820,17 +3611,13 @@ class _PostCardState extends State<_PostCard> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: theme.colorScheme.onSurface.withOpacity(0.15),
-          ),
+              color: theme.colorScheme.onSurface.withOpacity(0.15)),
         ),
         child: Row(
           children: [
             Icon(icon, size: 22),
             const SizedBox(width: 14),
-            Text(
-              text,
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text(text, style: theme.textTheme.bodyMedium),
           ],
         ),
       ),
@@ -3839,7 +3626,6 @@ class _PostCardState extends State<_PostCard> {
 
   Widget _postMediaWidget(String? url) {
     if (url == null || url.isEmpty) return const SizedBox.shrink();
-
     final isImage = url.endsWith('.png') ||
         url.endsWith('.jpg') ||
         url.endsWith('.jpeg') ||
@@ -3856,14 +3642,12 @@ class _PostCardState extends State<_PostCard> {
             height: 190,
             width: double.infinity,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                height: 190,
-                width: double.infinity,
-                color: Colors.grey[300],
-                child: const Center(child: Icon(Icons.broken_image)),
-              );
-            },
+            errorBuilder: (context, error, stackTrace) => Container(
+              height: 190,
+              width: double.infinity,
+              color: Colors.grey[300],
+              child: const Center(child: Icon(Icons.broken_image)),
+            ),
           ),
         ),
       );
@@ -3871,9 +3655,8 @@ class _PostCardState extends State<_PostCard> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: GestureDetector(
-          onTap: () {
-            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-          },
+          onTap: () =>
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -3924,14 +3707,15 @@ class _PostCardState extends State<_PostCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ===== Header =====
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor:
-                            theme.colorScheme.primary.withOpacity(.12),
-                        foregroundColor: theme.colorScheme.primary,
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor:
+                        theme.colorScheme.onPrimary.withOpacity(.5),
                         child: const Icon(Icons.person),
                       ),
                       const SizedBox(width: 12),
@@ -3948,7 +3732,7 @@ class _PostCardState extends State<_PostCard> {
                               post.timeAgo,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurface
-                                    .withOpacity(0.6),
+                                    .withOpacity(0.5),
                               ),
                             ),
                           ],
@@ -3957,203 +3741,230 @@ class _PostCardState extends State<_PostCard> {
                       const Spacer(),
                       GestureDetector(
                         onTap: () {
-                        //   showModalBottomSheet(
-                        //     context: context,
-                        //     isScrollControlled: true,
-                        //     backgroundColor: Colors.transparent,
-                        //     builder: (context) {
-                        //       return DraggableScrollableSheet(
-                        //         initialChildSize: 0.5,
-                        //         minChildSize: 0.5,
-                        //         maxChildSize: 0.85,
-                        //         builder: (context, scrollController) {
-                        //           return Container(
-                        //             decoration: BoxDecoration(
-                        //               color:
-                        //                   Theme.of(context).colorScheme.surface,
-                        //               borderRadius: const BorderRadius.vertical(
-                        //                   top: Radius.circular(16)),
-                        //             ),
-                        //             child: Column(
-                        //               children: [
-                        //                 Container(
-                        //                   margin: const EdgeInsets.symmetric(
-                        //                       vertical: 12),
-                        //                   width: 40,
-                        //                   height: 4,
-                        //                   decoration: BoxDecoration(
-                        //                     color: Colors.grey,
-                        //                     borderRadius:
-                        //                         BorderRadius.circular(10),
-                        //                   ),
-                        //                 ),
-                        //                 SingleChildScrollView(
-                        //                   scrollDirection: Axis.horizontal,
-                        //                   child: Row(
-                        //                     mainAxisAlignment:
-                        //                         MainAxisAlignment.spaceAround,
-                        //                     children: [
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/repost.png',
-                        //                           color: Theme.of(context)
-                        //                               .colorScheme
-                        //                               .onSurface,
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/instagram.png',
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/link.png',
-                        //                           color: Theme.of(context)
-                        //                               .colorScheme
-                        //                               .onSurface,
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/whatsapp.png',
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/Facebook_f_logo_(2019).svg.png',
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/messenger.png',
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/Logo_of_Twitter.svg.png',
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/discord.png',
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/email.png',
-                        //                           color: Theme.of(context)
-                        //                               .colorScheme
-                        //                               .onSurface,
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                       GestureDetector(
-                        //                         onTap: () => Share.share(
-                        //                             'Check out this post: ${post.title}'),
-                        //                         child: Image.asset(
-                        //                           'assets/icons/more.png',
-                        //                           color: Theme.of(context)
-                        //                               .colorScheme
-                        //                               .onSurface,
-                        //                           width: 50,
-                        //                           height: 50,
-                        //                         ),
-                        //                       ),
-                        //                       const SizedBox(width: 10),
-                        //                     ],
-                        //                   ),
-                        //                 ),
-                        //                 const SizedBox(height: 0),
-                        //                 Expanded(
-                        //                   child: ListView(
-                        //                     controller: scrollController,
-                        //                     padding: const EdgeInsets.all(12),
-                        //                     children: [
-                        //                       const SizedBox(height: 5),
-                        //                       _bottomSheetItem(context,
-                        //                           icon: Icons.bookmark_border,
-                        //                           text: S.of(context).savePost),
-                        //                       _bottomSheetItem(context,
-                        //                           icon: Icons
-                        //                               .report_gmailerrorred,
-                        //                           text: S
-                        //                               .of(context)
-                        //                               .blockAccount),
-                        //                       _bottomSheetItem(context,
-                        //                           icon: Icons.flag_outlined,
-                        //                           text: S.of(context).report),
-                        //                       _bottomSheetItem(context,
-                        //                           icon: Icons
-                        //                               .visibility_off_outlined,
-                        //                           text: S.of(context).hide),
-                        //                     ],
-                        //                   ),
-                        //                 ),
-                        //               ],
-                        //             ),
-                        //           );
-                        //         },
-                        //       );
-                        //     },
-                        //   );
-                         },
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) {
+                              return DraggableScrollableSheet(
+                                initialChildSize: 0.5,
+                                minChildSize: 0.5,
+                                maxChildSize: 0.85,
+                                builder: (context, scrollController) {
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .surface,
+                                      borderRadius:
+                                      const BorderRadius.vertical(
+                                          top: Radius.circular(16)),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          margin: const EdgeInsets.symmetric(
+                                              vertical: 12),
+                                          width: 40,
+                                          height: 4,
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .surface,
+                                            borderRadius:
+                                            BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: Row(
+                                            children: [
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/repost.png',
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/instagram.png',
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/link.png',
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/whatsapp.png',
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/Facebook_f_logo_(2019).svg.png',
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/messenger.png',
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/Logo_of_Twitter.svg.png',
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/discord.png',
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/email.png',
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              GestureDetector(
+                                                onTap: () => Share.share(
+                                                    'Check out this post: ${post.title}'),
+                                                child: Image.asset(
+                                                  'assets/icons/more.png',
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                                  width: 50,
+                                                  height: 50,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: ListView(
+                                            controller: scrollController,
+                                            padding:
+                                            const EdgeInsets.all(12),
+                                            children: [
+                                              const SizedBox(height: 5),
+                                              _bottomSheetItem(context,
+                                                  icon:
+                                                  Icons.bookmark_border,
+                                                  text: S
+                                                      .of(context)
+                                                      .savePost),
+                                              _bottomSheetItem(context,
+                                                  icon: Icons
+                                                      .report_gmailerrorred,
+                                                  text: S
+                                                      .of(context)
+                                                      .blockAccount),
+                                              _bottomSheetItem(context,
+                                                  icon:
+                                                  Icons.flag_outlined,
+                                                  text: S
+                                                      .of(context)
+                                                      .report),
+                                              _bottomSheetItem(context,
+                                                  icon: Icons
+                                                      .visibility_off_outlined,
+                                                  text:
+                                                  S.of(context).hide),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
                         child: const Icon(Icons.more_vert),
                       ),
                     ],
                   ),
                 ),
+
                 const SizedBox(height: 12),
-                Text(
-                  post.title,
-                  style: theme.textTheme.titleMedium,
-                  textDirection: TextDirection.ltr,
-                ),
+
+                // ===== العنوان =====
+                if (post.title.trim().isNotEmpty)
+                  Directionality(
+                    textDirection:
+                    RegExp(r'[\u0600-\u06FF]').hasMatch(post.title)
+                        ? TextDirection.rtl
+                        : TextDirection.ltr,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        post.title,
+                        style: theme.textTheme.titleMedium,
+                        textAlign:
+                        RegExp(r'[\u0600-\u06FF]').hasMatch(post.title)
+                            ? TextAlign.right
+                            : TextAlign.left,
+                      ),
+                    ),
+                  ),
+
+                // ===== الجسم =====
                 if (post.body.trim().isNotEmpty) ...[
                   const SizedBox(height: 8),
                   ExpandableText(
@@ -4162,11 +3973,45 @@ class _PostCardState extends State<_PostCard> {
                     maxLines: 2,
                   ),
                 ],
-                const SizedBox(height: 5),
+
+                const SizedBox(height: 8),
+
+                // ===== Media URL =====
                 _postMediaWidget(post.mediaUrl),
-                if (post.imagePaths.isNotEmpty)
-                  PostImagesSlider(images: post.imagePaths),
-                const SizedBox(height: 20),
+
+                // ✅ ===== المحتوى الوسائطي — كل شيء في carousel واحد =====
+                Builder(builder: (context) {
+                  final List<Widget> slides = [];
+
+                  for (final path in post.imagePaths) {
+                    slides.add(_buildImageSlide(path));
+                  }
+
+                  for (final path in post.videoPaths) {
+                    slides.add(_buildVideoSlide(path));
+                  }
+
+                  for (final poll in post.pollDataList) {
+                    slides.add(_buildPollSlide(poll));
+                  }
+
+                  if (slides.isEmpty) return const SizedBox.shrink();
+
+                  return Column(
+                    children: [
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        // ✅ يمنع النقر من فتح التعليقات عند التفاعل مع الوسائط
+                        onTap: () {},
+                        child: _MediaCarousel(slides: slides),
+                      ),
+                    ],
+                  );
+                }),
+
+                const SizedBox(height: 12),
+
+                // ===== أزرار التفاعل =====
                 Directionality(
                   textDirection: TextDirection.rtl,
                   child: Row(
@@ -4179,18 +4024,8 @@ class _PostCardState extends State<_PostCard> {
                             decoration: BoxDecoration(
                               color: Colors.transparent,
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.grey, width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withOpacity(0.09),
-                                  offset: const Offset(0, 40),
-                                  blurRadius: 20,
-                                  spreadRadius: 3,
-                                ),
-                              ],
+                              border: Border.all(
+                                  color: Colors.grey, width: 1),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -4198,10 +4033,12 @@ class _PostCardState extends State<_PostCard> {
                                 Material(
                                   color: Colors.transparent,
                                   child: InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    splashColor: Colors.teal.withOpacity(0.3),
+                                    borderRadius:
+                                    BorderRadius.circular(20),
+                                    splashColor:
+                                    Colors.teal.withOpacity(0.3),
                                     highlightColor:
-                                        Colors.teal.withOpacity(0.15),
+                                    Colors.teal.withOpacity(0.15),
                                     onTap: () {
                                       setState(() {
                                         if (post.upvoted) {
@@ -4218,52 +4055,53 @@ class _PostCardState extends State<_PostCard> {
                                       });
                                     },
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(
+                                      padding:
+                                      const EdgeInsets.symmetric(
                                           horizontal: 8, vertical: 2),
                                       child: Icon(
                                         Icons.arrow_upward_outlined,
                                         size: 20,
                                         color: post.upvoted
                                             ? Colors.teal[700]
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .onSurface,
+                                            : theme
+                                            .colorScheme.onSurface,
                                       ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 0),
                                 AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 180),
-                                  transitionBuilder: (child, animation) =>
+                                  duration:
+                                  const Duration(milliseconds: 180),
+                                  transitionBuilder: (child,
+                                      animation) =>
                                       ScaleTransition(
                                           scale: animation, child: child),
                                   child: Text(
                                     formatVotes(post.votes),
                                     key: ValueKey(
                                         '${post.votes}-${post.upvoted}-${post.downvoted}'),
-                                    style:
-                                        theme.textTheme.titleMedium?.copyWith(
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
                                       color: post.upvoted
                                           ? Colors.teal[600]
                                           : post.downvoted
-                                              ? Colors.red
-                                              : Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurface,
+                                          ? Colors.red
+                                          : theme
+                                          .colorScheme.onSurface,
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 0),
                                 Material(
                                   color: Colors.transparent,
                                   child: InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    splashColor: Colors.red.withOpacity(0.3),
+                                    borderRadius:
+                                    BorderRadius.circular(20),
+                                    splashColor:
+                                    Colors.red.withOpacity(0.3),
                                     highlightColor:
-                                        Colors.red.withOpacity(0.15),
+                                    Colors.red.withOpacity(0.15),
                                     onTap: () {
                                       setState(() {
                                         if (post.downvoted) {
@@ -4280,16 +4118,16 @@ class _PostCardState extends State<_PostCard> {
                                       });
                                     },
                                     child: Padding(
-                                      padding: const EdgeInsets.symmetric(
+                                      padding:
+                                      const EdgeInsets.symmetric(
                                           horizontal: 8, vertical: 5),
                                       child: Icon(
                                         Icons.arrow_downward_outlined,
                                         size: 20,
                                         color: post.downvoted
                                             ? Colors.red
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .onSurface,
+                                            : theme
+                                            .colorScheme.onSurface,
                                       ),
                                     ),
                                   ),
@@ -4305,18 +4143,8 @@ class _PostCardState extends State<_PostCard> {
                             decoration: BoxDecoration(
                               color: Colors.transparent,
                               borderRadius: BorderRadius.circular(25),
-                              border: Border.all(color: Colors.grey, width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withOpacity(0.09),
-                                  offset: const Offset(0, 40),
-                                  blurRadius: 20,
-                                  spreadRadius: 3,
-                                ),
-                              ],
+                              border: Border.all(
+                                  color: Colors.grey, width: 1),
                             ),
                             child: Row(
                               children: [
@@ -4324,8 +4152,7 @@ class _PostCardState extends State<_PostCard> {
                                   onPressed: _openComments,
                                   icon: Icon(
                                     Icons.chat_bubble_outline_outlined,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,
+                                    color: theme.colorScheme.onSurface,
                                     size: 18,
                                   ),
                                 ),
@@ -4335,8 +4162,7 @@ class _PostCardState extends State<_PostCard> {
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.bold,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,
+                                    color: theme.colorScheme.onSurface,
                                   ),
                                 ),
                               ],
@@ -4352,22 +4178,27 @@ class _PostCardState extends State<_PostCard> {
                             barrierLabel: 'Dismiss',
                             barrierColor: Colors.transparent,
                             transitionDuration:
-                                const Duration(milliseconds: 300),
+                            const Duration(milliseconds: 300),
                             pageBuilder: (context, anim1, anim2) {
                               return Center(
                                 child: Material(
                                   color: Colors.transparent,
                                   child: Container(
-                                    width: MediaQuery.of(context).size.width *
+                                    width: MediaQuery.of(context)
+                                        .size
+                                        .width *
                                         0.95,
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
                                       color:
-                                          Theme.of(context).colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(16),
+                                      theme.colorScheme.surface,
+                                      borderRadius:
+                                      BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                                          color: theme
+                                              .colorScheme.onSurface
+                                              .withOpacity(0.2),
                                           offset: const Offset(0, 10),
                                           blurRadius: 20,
                                           spreadRadius: 1,
@@ -4379,10 +4210,10 @@ class _PostCardState extends State<_PostCard> {
                                       runSpacing: 8,
                                       children: post.tags
                                           .map((tag) => Chip(
-                                                label: Text('c/$tag'),
-                                                backgroundColor:
-                                                    Colors.transparent,
-                                              ))
+                                        label: Text('c/$tag'),
+                                        backgroundColor:
+                                        Colors.transparent,
+                                      ))
                                           .toList(),
                                     ),
                                   ),
@@ -4397,16 +4228,8 @@ class _PostCardState extends State<_PostCard> {
                           decoration: BoxDecoration(
                             color: Colors.transparent,
                             borderRadius: BorderRadius.circular(25),
-                            border: Border.all(color: Colors.grey, width: 1),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Theme.of(context).colorScheme.onSurface.
-                                withOpacity(0.09),
-                                offset: const Offset(0, 40),
-                                blurRadius: 20,
-                                spreadRadius: 3,
-                              ),
-                            ],
+                            border: Border.all(
+                                color: Colors.grey, width: 1),
                           ),
                           child: const Text('Tags #'),
                         ),
@@ -4423,109 +4246,209 @@ class _PostCardState extends State<_PostCard> {
   }
 }
 
-
-class ExpandableText extends StatefulWidget {
-  final String text;
-  final TextStyle? style;
-  final int maxLines;
-
-  const ExpandableText({
-    super.key,
-    required this.text,
-    this.style,
-    this.maxLines = 2,
-  });
+// ==================== MediaCarousel ====================
+class _MediaCarousel extends StatefulWidget {
+  final List<Widget> slides;
+  const _MediaCarousel({required this.slides});
 
   @override
-  State<ExpandableText> createState() => _ExpandableTextState();
+  State<_MediaCarousel> createState() => _MediaCarouselState();
 }
 
-class _ExpandableTextState extends State<ExpandableText> {
-  bool _expanded = false;
-  bool _isArabic(String text) {
-    final arabicRegex = RegExp(r'[\u0600-\u06FF]');
-    return arabicRegex.hasMatch(text);
+class _MediaCarouselState extends State<_MediaCarousel> {
+  int _current = 0;
+  late final PageController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = PageController();
   }
 
-  String _normalizeNewLines(String text) {
-    return text.replaceAll('\r\n', '\n');
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // التحقق مما إذا كان النص طويل
-        final span = TextSpan(text: widget.text, style: widget.style);
-        final tp = TextPainter(
-          text: span,
-          maxLines: widget.maxLines,
-          textDirection: TextDirection.ltr,
-        );
-        tp.layout(maxWidth: constraints.maxWidth);
-        final isOverflowing = tp.didExceedMaxLines;
-        final isArabic = _isArabic(widget.text);
-        final normalizedText = _normalizeNewLines(widget.text);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              normalizedText,
-              softWrap: true, // 🔴 مهم
-              textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
-              textAlign: isArabic ? TextAlign.right : TextAlign.left,
-              maxLines: _expanded ? null : widget.maxLines,
-              overflow:
-                  _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
-              ),
-
-              style: widget.style,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 250,
+          child: PageView.builder(
+            controller: _ctrl,
+            itemCount: widget.slides.length,
+            onPageChanged: (i) => setState(() => _current = i),
+            itemBuilder: (_, i) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: widget.slides[i],
             ),
-            if (isOverflowing)
-              GestureDetector(
-                onTap: () => setState(() => _expanded = !_expanded),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    _expanded ? 'Show less' : 'Show more',
-                    style: widget.style?.copyWith(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                        ) ??
-                        const TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
+          ),
+        ),
+        if (widget.slides.length > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(widget.slides.length, (i) {
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _current == i ? 10 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: _current == i
+                      ? Colors.teal[900]
+                      : Colors.teal.shade900.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ),
-          ],
-        );
-      },
+              );
+            }),
+          ),
+        ],
+      ],
     );
   }
 }
 
+// ==================== VideoSlideWidget ====================
+class _VideoSlideWidget extends StatefulWidget {
+  final String videoPath;
+  const _VideoSlideWidget({required this.videoPath});
 
+  @override
+  State<_VideoSlideWidget> createState() => _VideoSlideWidgetState();
+}
 
+class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
+  late VideoPlayerController _ctrl;
+  bool _ready = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = VideoPlayerController.file(File(widget.videoPath))
+      ..setLooping(true);
+    _ctrl.initialize().then((_) {
+      if (mounted) setState(() => _ready = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        color: Colors.black,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (_ready)
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _ctrl.value.size.width,
+                  height: _ctrl.value.size.height,
+                  child: VideoPlayer(_ctrl),
+                ),
+              )
+            else
+              const CircularProgressIndicator(color: Colors.white),
+
+            // زر fullscreen
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        FullscreenVideoViewer(controller: _ctrl),
+                  ),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(Icons.fullscreen,
+                      color: Colors.white, size: 18),
+                ),
+              ),
+            ),
+
+            // زر تشغيل / إيقاف
+            GestureDetector(
+              onTap: () => setState(() {
+                _ctrl.value.isPlaying ? _ctrl.pause() : _ctrl.play();
+              }),
+              child: AnimatedOpacity(
+                opacity: !_ctrl.value.isPlaying ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: const BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow,
+                      color: Colors.white, size: 30),
+                ),
+              ),
+            ),
+
+            // شريط التقدم
+            if (_ready)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: VideoProgressIndicator(
+                  _ctrl,
+                  allowScrubbing: true,
+                  colors: const VideoProgressColors(
+                    playedColor: Colors.teal,
+                    bufferedColor: Colors.white38,
+                    backgroundColor: Colors.white24,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+//==============================================================
 enum PostItemType { text, image, video, poll }
 
 class PostItem {
   final PostItemType type;
   final String title;
-  final String? mediaPath; // image أو video
+  final String? mediaPath;
+  final Uint8List? imageBytes;          // ✅ جديد
   final List<String>? pollOptions;
+  final List<PollData>? pollDataList;
 
   PostItem({
     required this.type,
     required this.title,
     this.mediaPath,
+    this.imageBytes,                    // ✅
     this.pollOptions,
+    this.pollDataList,
   });
 }
 
@@ -4545,56 +4468,81 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
   List<String> _tags = [];
   List<PostItem> _pollItems = [];
   List<PostBlock> _blocks = [];
+  List<PollData> _pollDataList = [];
 
   PollData? _poll;
   int currentPage = 0;
-  int get totalPages => _blocks.length + (_poll != null ? 1 : 0);
+  int get totalPages => _blocks.length + (_pollDataList.isNotEmpty ? 1 : 0);
   final List<String> _suggestedTags = [];
   List<File> _pickedVideos = [];
   int _currentVideoIndex = 0;
   List<VideoPlayerController> _videoControllers = [];
-  List<Uint8List> _pickedImages = []; // الصور المختارة كـ bytes
+  List<Uint8List> _pickedImages = [];
 
   void _addTag(String tag) {
     if (tag.trim().isEmpty) return;
     if (!_tags.contains(tag.trim())) {
-      setState(() {
-        _tags.add(tag.trim());
-      });
+      setState(() => _tags.add(tag.trim()));
     }
-  }
-
-  void _submitPost() async {
-    final List<PostBlock> blocks = [];
-
-    // نص (العنوان + الجسم كنص واحد)
-    blocks.add(
-      PostBlock.text()..textController!.text = _titleController.text,
-    );
-
-    blocks.add(
-      PostBlock.text()..textController!.text = _bodyController.text,
-    );
-
-    // الصور
-    final tempDir = await getTemporaryDirectory();
-    for (int i = 0; i < _pickedImages.length; i++) {
-      final file = File('${tempDir.path}/image_$i.png');
-      await file.writeAsBytes(_pickedImages[i]);
-
-      final block = PostBlock.image();
-      block.image = file;
-      block.textController!.text = _titleController.text;
-      blocks.add(block);
-    }
-
-    _savePostWithBlocks(blocks);
   }
 
   void _removeTag(String tag) {
-    setState(() {
-      _tags.remove(tag);
-    });
+    setState(() => _tags.remove(tag));
+  }
+
+  void _submitPost() {
+    // ✅ لا async هنا — كل شيء synchronous
+    final List<PostItem> items = [];
+
+    // Poll
+    if (_pollDataList.isNotEmpty) {
+      items.add(PostItem(
+        type: PostItemType.poll,
+        title: '',
+        pollDataList: _pollDataList,
+      ));
+    }
+
+    // النصوص
+    if (_titleController.text.trim().isNotEmpty) {
+      items.add(PostItem(
+        type: PostItemType.text,
+        title: _titleController.text.trim(),
+      ));
+    }
+    if (_bodyController.text.trim().isNotEmpty) {
+      items.add(PostItem(
+        type: PostItemType.text,
+        title: _bodyController.text.trim(),
+      ));
+    }
+
+    // ✅ الصور — نحفظها كـ bytes مباشرة بدون كتابة ملفات
+    for (int i = 0; i < _pickedImages.length; i++) {
+      items.add(PostItem(
+        type: PostItemType.image,
+        title: '',
+        imageBytes: _pickedImages[i], // ✅ bytes مباشرة
+      ));
+    }
+
+    // الفيديوهات
+    for (int i = 0; i < _pickedVideos.length; i++) {
+      items.add(PostItem(
+        type: PostItemType.video,
+        title: '',
+        mediaPath: _pickedVideos[i].path,
+      ));
+    }
+
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يوجد محتوى للنشر')),
+      );
+      return;
+    }
+
+    Navigator.pop(context, items);
   }
 
   Future<void> _pickImages() async {
@@ -4604,13 +4552,10 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
       maxHeight: 1200,
       imageQuality: 80,
     );
-
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
       for (var pickedFile in pickedFiles) {
         final bytes = await pickedFile.readAsBytes();
-        setState(() {
-          _pickedImages.add(bytes);
-        });
+        setState(() => _pickedImages.add(bytes));
       }
     }
   }
@@ -4619,97 +4564,44 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
     final picker = ImagePicker();
     final picked = await picker.pickVideo(source: ImageSource.gallery);
     if (picked == null) return;
-
     final file = File(picked.path);
-    final controller = VideoPlayerController.file(file)
-      ..setLooping(true); // تكرار الفيديو
-
-    await controller.initialize(); // تهيئة قبل العرض
-
+    final controller = VideoPlayerController.file(file)..setLooping(true);
+    await controller.initialize();
     setState(() {
       _pickedVideos.add(file);
-      _videoControllers.add(controller); // حفظ الـ Controller
+      _videoControllers.add(controller);
     });
   }
 
-
-
-
-  void _savePostWithBlocks(List<PostBlock> blocks) async {
-    final List<PostItem> items = [];
-
-    // ✅ أضف الـ Poll إن وجد
-    if (_poll != null) {
-      items.add(
-        PostItem(
-          type: PostItemType.poll,
-          title: _poll!.question,
-          pollOptions: _poll!.options,
-        ),
-      );
-    }
-
-    for (final block in blocks) {
-      switch (block.type) {
-        case BlockType.text:
-          if ((block.textController?.text ?? '').trim().isNotEmpty) {
-            items.add(
-              PostItem(
-                type: PostItemType.text,
-                title: block.textController!.text.trim(),
-              ),
-            );
-          }
-          break;
-
-        case BlockType.image:
-          if (block.image != null) {
-            items.add(
-              PostItem(
-                type: PostItemType.image,
-                title: block.textController?.text ?? '',
-                mediaPath: block.image!.path,
-              ),
-            );
-          }
-          break;
-
-        case BlockType.video:
-          if (block.video != null) {
-            items.add(
-              PostItem(
-                type: PostItemType.video,
-                title: block.textController?.text ?? '',
-                mediaPath: block.video!.path,
-              ),
-            );
-          }
-          break;
-      }
-    }
-
-    Navigator.pop(context, items);
+  // ✅ هذا هو سبب عدم النشر — دالة للتحقق هل يمكن النشر
+  bool get _canPost {
+    final hasTitle = _titleController.text.trim().isNotEmpty;
+    final hasImages = _pickedImages.isNotEmpty;
+    final hasVideos = _pickedVideos.isNotEmpty;
+    final hasPoll = _pollDataList.isNotEmpty;
+    final hasBlocks = _blocks.isNotEmpty;
+    return hasTitle || hasImages || hasVideos || hasPoll || hasBlocks;
   }
-
+  bool _isPosting = false;
 
 
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
+
     return Padding(
       padding: EdgeInsets.only(
-          bottom: mediaQuery.viewInsets.bottom, left: 16, right: 16, top: 16),
+          bottom: mediaQuery.viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 16),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // معلومات المستخدم
             Row(
               children: [
-                const CircleAvatar(
-                  radius: 25,
-                  //backgroundImage: AssetImage('assets/images/user_avatar.png'),
-                ),
+                const CircleAvatar(radius: 25),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -4724,16 +4616,15 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            // حقل العنوان
             TextField(
               controller: _titleController,
+              onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
                 labelText: 'Title',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
-            // حقل المضمون
             TextField(
               controller: _bodyController,
               decoration: const InputDecoration(
@@ -4745,6 +4636,7 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
             ),
             const SizedBox(height: 0),
 
+            // أزرار الإضافة
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -4753,27 +4645,20 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                     final result = await Navigator.push<List<PostItem>>(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => PollBuilderScreen(
-                          initialItems:
-                              _pollItems, // ✅ تمرير الـ Poll الحالي للتعديل
-                        ),
+                        builder: (_) => PollBuilderScreen(initialItems: _pollItems),
                       ),
                     );
-
                     if (result == null || result.isEmpty) return;
-
                     setState(() {
                       _pollItems = List.from(result);
                       _blocks.clear();
+                      _poll = null;
                       for (var item in result) {
                         switch (item.type) {
                           case PostItemType.text:
-                            _blocks.add(
-                              PostBlock.text()
-                                ..textController!.text = item.title,
-                            );
+                            _blocks.add(PostBlock.text()
+                              ..textController!.text = item.title);
                             break;
-
                           case PostItemType.image:
                             if (item.mediaPath != null) {
                               final block = PostBlock.image()
@@ -4782,29 +4667,25 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                               _blocks.add(block);
                             }
                             break;
-
                           case PostItemType.video:
                             if (item.mediaPath != null) {
                               final block = PostBlock.video()
                                 ..video = File(item.mediaPath!)
                                 ..textController!.text = item.title;
-
-                              final controller =
-                                  VideoPlayerController.file(block.video!);
-
+                              final controller = VideoPlayerController.file(block.video!);
                               controller.initialize().then((_) {
-                                setState(() {});
                                 controller.setLooping(true);
+                                setState(() {});
                               });
-
                               block.videoController = controller;
                               _blocks.add(block);
                             }
                             break;
-
                           case PostItemType.poll:
-                            // ✅ هنا التعديل الحقيقي
-
+                            if (item.pollDataList != null &&
+                                item.pollDataList!.isNotEmpty) {
+                              _pollDataList = item.pollDataList!;
+                            }
                             break;
                         }
                       }
@@ -4814,45 +4695,32 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                   tooltip: 'Poll',
                 ),
                 IconButton(
-                  onPressed: _pickVideo, // ✅ بدون async، بدون await
+                  onPressed: _pickVideo,
                   icon: const Icon(Icons.video_collection),
                   tooltip: 'Add video',
                 ),
-
                 IconButton(
                   onPressed: _pickImages,
-                  icon: const Icon(
-                    Icons.photo_library,
-                    size: 20, // يمكنك تغيير الحجم حسب رغبتك
-                  ),
-                  tooltip: 'Add Images', // يظهر عند الضغط مطولاً
+                  icon: const Icon(Icons.photo_library, size: 20),
+                  tooltip: 'Add Images',
                 ),
               ],
             ),
-
             const SizedBox(height: 8),
-// عرض الصور في Slider
+
+            // ===== عرض الصور + الفيديوهات (الشكل القديم) =====
             if (_pickedImages.isNotEmpty || _pickedVideos.isNotEmpty)
               SizedBox(
                 height: 220,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-
-                    /// دمج الصور والفيديوهات في PageView واحد
                     PageView.builder(
                       itemCount: _pickedImages.length + _pickedVideos.length,
-                      onPageChanged: (i) {
-                        setState(() => _currentImageIndex = i);
-                      },
+                      onPageChanged: (i) => setState(() => _currentImageIndex = i),
                       itemBuilder: (context, index) {
-
-                        // --------------------
-                        // عرض الصور
-                        // --------------------
                         if (index < _pickedImages.length) {
                           final imageBytes = _pickedImages[index];
-
                           return Stack(
                             children: [
                               Container(
@@ -4862,16 +4730,13 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                                   borderRadius: BorderRadius.circular(12),
                                   child: GestureDetector(
                                     onTap: () async {
-                                      // تحويل صورة Uint8List إلى ملف مؤقت
                                       final tempDir = await getTemporaryDirectory();
                                       final tempFile = await File('${tempDir.path}/image_$index.png')
                                           .writeAsBytes(_pickedImages[index]);
-
-                                      Navigator.push(
-                                        context,
+                                      Navigator.of(context, rootNavigator: true).push(
                                         MaterialPageRoute(
                                           builder: (_) => FullscreenImageViewer(
-                                            images: [tempFile.path], // النوع الصحيح List<String>
+                                            images: [tempFile.path],
                                             initialIndex: 0,
                                           ),
                                         ),
@@ -4886,17 +4751,11 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                                   ),
                                 ),
                               ),
-
-                              /// زر الحذف
                               Positioned(
                                 top: 5,
                                 right: 5,
                                 child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _pickedImages.removeAt(index);
-                                    });
-                                  },
+                                  onTap: () => setState(() => _pickedImages.removeAt(index)),
                                   child: const CircleAvatar(
                                     radius: 12,
                                     backgroundColor: Colors.black54,
@@ -4906,32 +4765,21 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                               ),
                             ],
                           );
-                        }
-
-                        // --------------------
-                        // عرض الفيديوهات
-                        // --------------------
-                        else {
+                        } else {
                           final videoIndex = index - _pickedImages.length;
-                          final controller = _videoControllers[videoIndex]; // استخدم الـ controller الموجود
-
+                          final controller = _videoControllers[videoIndex];
                           return ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Stack(
                               children: [
-                                // الفيديو نفسه
                                 GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            FullscreenVideoViewer(controller: controller),
-                                      ),
-                                    );
-                                  },
+                                  onTap: () => Navigator.of(context, rootNavigator: true).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => FullscreenVideoViewer(controller: controller),
+                                    ),
+                                  ),
                                   child: Container(
-                                    height: 180, // ارتفاع الفيديو
+                                    height: 180,
                                     width: double.infinity,
                                     color: Colors.black,
                                     child: Stack(
@@ -4948,8 +4796,6 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                                           )
                                         else
                                           const Center(child: CircularProgressIndicator()),
-
-                                        // زر التشغيل / الإيقاف
                                         IconButton(
                                           iconSize: 56,
                                           color: Colors.white,
@@ -4958,31 +4804,25 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                                                 ? Icons.pause_circle
                                                 : Icons.play_circle,
                                           ),
-                                          onPressed: () {
-                                            setState(() {
-                                              controller.value.isPlaying
-                                                  ? controller.pause()
-                                                  : controller.play();
-                                            });
-                                          },
+                                          onPressed: () => setState(() {
+                                            controller.value.isPlaying
+                                                ? controller.pause()
+                                                : controller.play();
+                                          }),
                                         ),
                                       ],
                                     ),
                                   ),
                                 ),
-
-                                // زر الحذف أعلى الفيديو
                                 Positioned(
                                   top: 5,
                                   right: 5,
                                   child: GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        controller.dispose();
-                                        _pickedVideos.removeAt(videoIndex);
-                                        _videoControllers.removeAt(videoIndex);
-                                      });
-                                    },
+                                    onTap: () => setState(() {
+                                      controller.dispose();
+                                      _pickedVideos.removeAt(videoIndex);
+                                      _videoControllers.removeAt(videoIndex);
+                                    }),
                                     child: const CircleAvatar(
                                       radius: 12,
                                       backgroundColor: Colors.black54,
@@ -4990,8 +4830,6 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                                     ),
                                   ),
                                 ),
-
-                                // شريط التقدم أسفل الفيديو
                                 if (controller.value.isInitialized)
                                   Positioned(
                                     bottom: 30,
@@ -5014,12 +4852,8 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                             ),
                           );
                         }
-
-
                       },
                     ),
-
-                    /// شريط النقاط السفلية للتحريك
                     if ((_pickedImages.length + _pickedVideos.length) > 1)
                       Positioned(
                         bottom: 10,
@@ -5045,67 +4879,13 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                 ),
               ),
 
-
-
-
-
-
-            const SizedBox(height: 8),
-
-            if (totalPages > 0)
-              GestureDetector(
-                onHorizontalDragEnd: (details) {
-                  if (details.primaryVelocity == null) return;
-
-                  // 👉 سحب لليسار (التالي)
-                  if (details.primaryVelocity! < 0 &&
-                      currentPage < totalPages - 1) {
-                    setState(() => currentPage++);
-                  }
-
-                  // 👉 سحب لليمين (السابق)
-                  if (details.primaryVelocity! > 0 && currentPage > 0) {
-                    setState(() => currentPage--);
-                  }
-                },
-                child: Center(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: SizedBox(
-                      key: ValueKey<int>(currentPage), // المفتاح مهم للتغيير
-                      child: currentPage < _blocks.length
-                          ? _buildBlock(_blocks[currentPage])
-                          : (_poll != null
-                              ? PollPostWidget(poll: _poll!)
-                              : const SizedBox()),
-                    ),
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  totalPages,
-                  (i) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: currentPage == i ? 14 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      color: currentPage == i
-                          ? Colors.teal[900]
-                          : Colors.grey.withOpacity(0.25),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            // ===== عرض البول (منفصل تماماً) =====
+            if (_pollDataList.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              PollPostWidget(polls: _pollDataList),
+            ],
 
             const SizedBox(height: 20),
-            // حقل إضافة Tag
             TextField(
               controller: _tagController,
               decoration: InputDecoration(
@@ -5125,7 +4905,6 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
               },
             ),
             const SizedBox(height: 8),
-            // Tags مقترحة
             Wrap(
               spacing: 6,
               children: _suggestedTags.map((tag) {
@@ -5133,53 +4912,51 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                 return ChoiceChip(
                   label: Text(tag),
                   selected: isAdded,
-                  onSelected: (_) {
-                    if (isAdded) {
-                      _removeTag(tag);
-                    } else {
-                      _addTag(tag);
-                    }
-                  },
+                  onSelected: (_) => isAdded ? _removeTag(tag) : _addTag(tag),
                 );
               }).toList(),
             ),
             const SizedBox(height: 8),
-            // Tags مضافة
             if (_tags.isNotEmpty)
               Wrap(
                 spacing: 6,
                 children: _tags
                     .map((tag) => Chip(
-                          label: Text(tag),
-                          deleteIcon: const Icon(Icons.close),
-                          onDeleted: () => _removeTag(tag),
-                        ))
+                  label: Text(tag),
+                  deleteIcon: const Icon(Icons.close),
+                  onDeleted: () => _removeTag(tag),
+                ))
                     .toList(),
               ),
             const SizedBox(height: 12),
 
             // زر Post
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context); // يغلق الـ Bottom Sheet بدون حفظ
-                },
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.red),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.red)),
                 ),
-              ),
-              const SizedBox(width: 8), // مسافة صغيرة بين الزرين
-              ElevatedButton(
-                onPressed: () {
-                  if (_titleController.text.isNotEmpty &&
-                      _bodyController.text.isNotEmpty) {
-                    _submitPost();
-                  }
-                },
-                child: const Text('Post'),
-              ),
-            ]),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: (_canPost && !_isPosting) ? _submitPost : null,
+                  style: ElevatedButton.styleFrom(
+                    disabledBackgroundColor: Colors.grey.shade300,
+                  ),
+                  child: _isPosting
+                      ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                      : const Text('Post'),
+                ),
+              ],
+            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -5196,78 +4973,44 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // النص/الوصف لكل بلوك
             if ((block.textController?.text ?? '').isNotEmpty)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                ),
                 child: Text(
                   block.textController!.text,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
-
-            const SizedBox(height: 0),
-
-            // IMAGE
             if (block.type == BlockType.image && block.image != null)
               GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => FullscreenImageViewer(
-                        images: [block.image!.path],
-                        initialIndex: 0,
-                      ),
-                    ),
-                  );
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(
-                    block.image!,
-                    height: 200,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+                onTap: () => Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute(
+                    builder: (_) => FullscreenImageViewer(
+                        images: [block.image!.path], initialIndex: 0),
                   ),
                 ),
-              ),
-
-            // VIDEO
-            if (block.type == BlockType.video && block.videoController != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // وصف الفيديو - يظهر مرة واحدة فقط
-                  if ((block.textController?.text ?? '').isNotEmpty)
-                    Container(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(block.image!,
+                      height: 200,
                       width: double.infinity,
-                      padding: const EdgeInsets.all(0),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-
-                  const SizedBox(height: 0),
-
-                  // الفيديو نفسه
+                      fit: BoxFit.cover),
+                ),
+              ),
+            if (block.type == BlockType.video &&
+                block.videoController != null)
+              Column(
+                children: [
                   GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => FullscreenVideoViewer(
-                              controller: block.videoController!),
+                    onTap: () =>
+                        Navigator.of(context, rootNavigator: true).push(
+                          MaterialPageRoute(
+                            builder: (_) => FullscreenVideoViewer(
+                                controller: block.videoController!),
+                          ),
                         ),
-                      );
-                    },
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
@@ -5280,18 +5023,13 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                             FittedBox(
                               fit: BoxFit.cover,
                               child: SizedBox(
-                                width: block.videoController!.value.size.width,
+                                width:
+                                block.videoController!.value.size.width,
                                 height:
-                                    block.videoController!.value.size.height,
-                                child: InteractiveViewer(
-                                  maxScale: 2.5,
-                                  minScale: 1.0,
-                                  child: VideoPlayer(block.videoController!),
-                                ),
+                                block.videoController!.value.size.height,
+                                child: VideoPlayer(block.videoController!),
                               ),
                             ),
-
-                            // زر تشغيل / إيقاف
                             IconButton(
                               iconSize: 56,
                               color: Colors.white,
@@ -5300,23 +5038,18 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                                     ? Icons.pause_circle
                                     : Icons.play_circle,
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  block.videoController!.value.isPlaying
-                                      ? block.videoController!.pause()
-                                      : block.videoController!.play();
-                                });
-                              },
+                              onPressed: () => setState(() {
+                                block.videoController!.value.isPlaying
+                                    ? block.videoController!.pause()
+                                    : block.videoController!.play();
+                              }),
                             ),
                           ],
                         ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 6),
-
-                  // شريط تقدم الفيديو
                   VideoProgressIndicator(
                     block.videoController!,
                     allowScrubbing: true,
@@ -5339,61 +5072,1426 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
     _titleController.dispose();
     _bodyController.dispose();
     _tagController.dispose();
-
+    for (final c in _videoControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 }
 
 //=================================================================
 
-class PollPostWidget extends StatelessWidget {
-  final PollData poll;
+class PollPostWidget extends StatefulWidget {
+  final List<PollData> polls;
+  const PollPostWidget({super.key, required this.polls});
 
-  const PollPostWidget({
-    super.key,
-    required this.poll,
-  });
+  @override
+  State<PollPostWidget> createState() => _PollPostWidgetState();
+}
+
+class _PollPostWidgetState extends State<PollPostWidget> {
+  // نستخدم Map منفصلة لكل نوع لتجنب مشاكل الـ casting
+  final Map<int, Set<int>> _setSelections = {};        // checkbox / multipleChoice
+  final Map<int, List<List<bool>>> _gridSelections = {}; // grid / checkboxGrid
+  final Map<int, Map<int, Set<int>>> _dateSelections = {}; // date
+  final Map<int, TimeOfDay> _timeSelections = {};       // time
+  final Map<int, dynamic> _simpleSelections = {};       // scale / dropdown / text
+  final Map<int, TextEditingController> _textControllers = {};
+
+  late final PageController _pageController;
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    // تنظيف الـ controllers
+    for (final ctrl in _textControllers.values) {
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+
+    for (int i = 0; i < widget.polls.length; i++) {
+      final poll = widget.polls[i];
+      switch (poll.type) {
+        case PollQuestionType.checkbox:
+        case PollQuestionType.multipleChoice:
+          _setSelections[i] = <int>{};
+          break;
+        case PollQuestionType.grid:
+        case PollQuestionType.checkboxGrid:
+          if (poll.gridRows.isNotEmpty && poll.gridColumns.isNotEmpty) {
+            _gridSelections[i] = List.generate(
+              poll.gridRows.length,
+                  (_) => List<bool>.filled(poll.gridColumns.length, false),
+            );
+          }
+          break;
+        case PollQuestionType.date:
+          _dateSelections[i] = <int, Set<int>>{};
+          if (poll.dateConfig != null) {
+            for (final m in poll.dateConfig!.months) {
+              _dateSelections[i]![m] = <int>{};
+            }
+          }
+          break;
+        case PollQuestionType.time:
+          if (poll.selectedTime != null) {
+            _timeSelections[i] = poll.selectedTime!;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  // أضفها داخل _PollPostWidgetState
+  bool _isArabic(String text) =>
+      RegExp(r'[\u0600-\u06FF]').hasMatch(text);
 
   @override
   Widget build(BuildContext context) {
-    if (poll.options.isEmpty) {
-      return const Center(child: Text('Empty poll'));
-    }
+    if (widget.polls.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // السؤال
-          Text(
-            poll.question,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
+    // ✅ استخدم Column مع Expanded بدل SizedBox ثابت
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ✅ بدل SizedBox(height:220) استخدم ConstrainedBox
+        ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: 150,
+            maxHeight: 220,
+          ),
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: widget.polls.length,
+            onPageChanged: (i) => setState(() => _currentPage = i),
+            itemBuilder: (context, i) {
+              final poll = widget.polls[i];
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 0),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.polls.length > 1)
+                      Text(
+                        '${i + 1} / ${widget.polls.length}',
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade500),
+                      ),
+                    if (poll.question.isNotEmpty) ...[
+                      Directionality(
+                        textDirection:
+                        RegExp(r'[\u0600-\u06FF]').hasMatch(poll.question)
+                            ? TextDirection.rtl
+                            : TextDirection.ltr,
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            poll.question,
+                            textAlign:
+                            RegExp(r'[\u0600-\u06FF]').hasMatch(poll.question)
+                                ? TextAlign.right
+                                : TextAlign.left,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SingleChildScrollView(
+                          child: _buildInput(i, poll),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+
+        // نقاط المؤشر
+        if (widget.polls.length > 1) ...[
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(widget.polls.length, (i) {
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: _currentPage == i ? 14 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: _currentPage == i
+                      ? Colors.teal.shade900
+                      : Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              );
+            }),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildInput(int i, PollData poll) {
+    switch (poll.type) {
+
+    // ===== نص قصير =====
+      case PollQuestionType.shortText:
+        _textControllers.putIfAbsent(i, () {
+          final ctrl = TextEditingController(
+            text: _simpleSelections[i] as String? ?? '',
+          );
+          return ctrl;
+        });
+        final shortCtrl = _textControllers[i]!;
+        final shortConfirmed = (_simpleSelections[i] as String?)?.isNotEmpty ?? false;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            TextField(
+              controller: shortCtrl,
+              maxLines: 1,
+              onChanged: (v) => setState(() => _simpleSelections[i] = v),
+              decoration: InputDecoration(
+                hintText: 'اكتب إجابتك هنا...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                filled: true,
+                fillColor: Colors.teal.withOpacity(0.04),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.teal, width: 1.5),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // زر التأكيد
+            Row(
+              children: [
+                if (shortConfirmed) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Colors.teal.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle,
+                            color: Colors.teal, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          'تم الحفظ',
+                          style: TextStyle(
+                            color: Colors.teal.shade700,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                ] else
+                  const Spacer(),
+                // ElevatedButton(
+                //   onPressed: shortCtrl.text.trim().isEmpty
+                //       ? null
+                //       : () {
+                //     setState(() {
+                //       _simpleSelections[i] = shortCtrl.text.trim();
+                //     });
+                //     FocusScope.of(context).unfocus();
+                //   },
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.teal,
+                //     foregroundColor: Colors.white,
+                //     disabledBackgroundColor: Colors.grey.shade200,
+                //     disabledForegroundColor: Colors.grey.shade400,
+                //     elevation: 0,
+                //     padding: const EdgeInsets.symmetric(
+                //         horizontal: 24, vertical: 10),
+                //     shape: RoundedRectangleBorder(
+                //       borderRadius: BorderRadius.circular(10),
+                //     ),
+                //   ),
+                //   child: const Text(
+                //     'تأكيد',
+                //     style: TextStyle(
+                //         fontWeight: FontWeight.w600, fontSize: 14),
+                //   ),
+                // ),
+              ],
+            ),
+          ],
+        );
+
+// ===== نص طويل =====
+      case PollQuestionType.longText:
+        _textControllers.putIfAbsent(i, () {
+          final ctrl = TextEditingController(
+            text: _simpleSelections[i] as String? ?? '',
+          );
+          return ctrl;
+        });
+        final longCtrl = _textControllers[i]!;
+        final longConfirmed = (_simpleSelections[i] as String?)?.isNotEmpty ?? false;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            TextField(
+              controller: longCtrl,
+              maxLines: 5,
+              onChanged: (v) => setState(() => _simpleSelections[i] = v),
+              decoration: InputDecoration(
+                hintText: 'اكتب إجابتك هنا...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                filled: true,
+                fillColor: Colors.teal.withOpacity(0.04),
+                alignLabelWithHint: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.teal, width: 1.5),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // عداد الأحرف
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${longCtrl.text.length} حرف',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade400,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (longConfirmed) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Colors.teal.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle,
+                            color: Colors.teal, size: 14),
+                        const SizedBox(width: 6),
+                        Text(
+                          'تم الحفظ',
+                          style: TextStyle(
+                            color: Colors.teal.shade700,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                ] else
+                  const Spacer(),
+                // ElevatedButton(
+                //   onPressed: longCtrl.text.trim().isEmpty
+                //       ? null
+                //       : () {
+                //     setState(() {
+                //       _simpleSelections[i] = longCtrl.text.trim();
+                //     });
+                //     FocusScope.of(context).unfocus();
+                //   },
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.teal,
+                //     foregroundColor: Colors.white,
+                //     disabledBackgroundColor: Colors.grey.shade200,
+                //     disabledForegroundColor: Colors.grey.shade400,
+                //     elevation: 0,
+                //     padding: const EdgeInsets.symmetric(
+                //         horizontal: 24, vertical: 10),
+                //     shape: RoundedRectangleBorder(
+                //       borderRadius: BorderRadius.circular(10),
+                //     ),
+                //   ),
+                //   child: const Text(
+                //     'تأكيد',
+                //     style: TextStyle(
+                //         fontWeight: FontWeight.w600, fontSize: 14),
+                //   ),
+                // ),
+              ],
+            ),
+          ],
+        );
+
+// ===== Checkbox — اختيار واحد فقط =====
+      case PollQuestionType.checkbox:
+        return SizedBox(
+          height: 150,
+          child: Scrollbar(
+            child: ListView.builder(
+              itemCount: poll.options.length,
+              itemBuilder: (context, index) {
+                final isChecked = _setSelections[i]?.contains(index) ?? false;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _setSelections[i] = {index};
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isChecked
+                          ? Colors.teal.withOpacity(0.07)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isChecked
+                            ? Colors.teal
+                            : Colors.grey.shade300,
+                        width: isChecked ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // مربع الاختيار
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: isChecked ? Colors.teal : Colors.transparent,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: isChecked
+                                  ? Colors.teal
+                                  : Colors.grey.shade400,
+                              width: 2,
+                            ),
+                          ),
+                          child: isChecked
+                              ? const Icon(
+                            Icons.check,
+                            size: 14,
+                            color: Colors.white,
+                          )
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            poll.options[index],
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isChecked
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: isChecked
+                                  ? Colors.teal.shade800
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-          const SizedBox(height: 12),
+        );
 
-          // الخيارات
-          ...poll.options.map(
-            (option) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+// ===== Multiple Choice — اختيار متعدد =====
+      case PollQuestionType.multipleChoice:
+        return SizedBox(
+          height: 150,
+          child: Scrollbar(
+            child: ListView.builder(
+              itemCount: poll.options.length,
+              itemBuilder: (context, index) {
+                final isSelected = _setSelections[i]?.contains(index) ?? false;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _setSelections[i] ??= <int>{};
+                      if (isSelected) {
+                        _setSelections[i]!.remove(index);
+                      } else {
+                        _setSelections[i]!.add(index);
+                      }
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.teal.withOpacity(0.07)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.teal
+                            : Colors.grey.shade300,
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // دائرة الاختيار
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isSelected ? Colors.teal : Colors.transparent,
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.teal
+                                  : Colors.grey.shade400,
+                              width: 2,
+                            ),
+                          ),
+                          child: Center(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              width: isSelected ? 10 : 0,
+                              height: isSelected ? 10 : 0,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            poll.options[index],
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: isSelected
+                                  ? Colors.teal.shade800
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+
+    // ===== Dropdown =====
+      case PollQuestionType.dropdown:
+        final currentVal = _simpleSelections[i] as String?;
+        final validVal = poll.options.contains(currentVal) ? currentVal : null;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 30),
+            DropdownButtonFormField<String>(
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.teal, width: 1.5),
+                ),
+                filled: true,
+                fillColor: Colors.teal.withOpacity(0.04),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                hintText: 'اختر خياراً...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              ),
+              value: validVal,
+              // مهم: isExpanded يمنع overflow
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                  color: Colors.teal),
+              dropdownColor: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              items: poll.options.map((o) {
+                return DropdownMenuItem<String>(
+                  value: o,
+                  child: Text(
+                    o,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                );
+              }).toList(),
+              onChanged: (v) {
+                setState(() => _simpleSelections[i] = v);
+              },
+              // عرض القيمة المختارة بشكل مميز
+              selectedItemBuilder: (context) {
+                return poll.options.map((o) {
+                  return Text(
+                    o,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.teal,
+                    ),
+                  );
+                }).toList();
+              },
+            ),
+            // مؤشر الاختيار
+            if (validVal != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.teal, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      validVal,
+                      style: TextStyle(
+                        color: Colors.teal.shade700,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+
+    // ===== Linear Scale =====
+      case PollQuestionType.linearScale:
+        return _buildScale(i, poll);
+
+    // ===== Grid =====
+      case PollQuestionType.grid:
+        return _buildGrid(i, poll, multiSelect: false);
+
+    // ===== Checkbox Grid =====
+      case PollQuestionType.checkboxGrid:
+        return _buildGrid(i, poll, multiSelect: true);
+
+    // ===== Date =====
+      case PollQuestionType.date:
+        return _buildDateView(i, poll);
+
+    // ===== Time =====
+      case PollQuestionType.time:
+        return _buildTimeView(i);
+    }
+  }
+
+  // ==================== Scale ====================
+  Widget _buildScale(int i, PollData poll) {
+    final size = poll.scaleSize ?? 5;
+    final style = poll.scaleStyle ?? LinearScaleStyle.numbers;
+
+    switch (style) {
+
+    // ===== Numbers =====
+      case LinearScaleStyle.numbers:
+        final selected = _simpleSelections[i] as int?;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 20),
+            Center(
+                child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: List.generate(size, (j) {
+                final isSelected = selected == j;
+                return GestureDetector(
+                  onTap: () => setState(() => _simpleSelections[i] = j),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected
+                          ? Colors.teal
+                          : Colors.teal.withOpacity(0.06),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.teal
+                            : Colors.teal.withOpacity(0.25),
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${j + 1}',
+                        style: TextStyle(
+                          fontSize: isSelected ? 15 : 13,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? Colors.white
+                              : Colors.teal.shade700,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            )),
+            const SizedBox(height: 16),
+            AnimatedOpacity(
+              opacity: selected != null ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  selected != null ? '${selected + 1} / $size' : '-',
+                  style: const TextStyle(
+                    color: Colors.teal,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        );
+
+    // ===== Line =====
+      case LinearScaleStyle.line:
+        final raw = _simpleSelections[i];
+        final val = raw is int ? raw.toDouble() : 1.0;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 16),
+            // أرقام فوق الـ Slider
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(size, (j) {
+                  final isActive = val.round() == j + 1;
+                  return SizedBox(
+                    width: 24,
+                    child: Center(
+                      child: Text(
+                        '${j + 1}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isActive
+                              ? Colors.teal
+                              : Colors.grey.shade400,
+                          fontWeight: isActive
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Slider
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 6,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 13,
+                  elevation: 2,
+                ),
+                overlayShape:
+                const RoundSliderOverlayShape(overlayRadius: 22),
+                activeTrackColor: Colors.teal,
+                inactiveTrackColor: Colors.teal.withOpacity(0.15),
+                thumbColor: Colors.white,
+                overlayColor: Colors.teal.withOpacity(0.12),
+                valueIndicatorColor: Colors.teal.shade700,
+                valueIndicatorShape:
+                const PaddleSliderValueIndicatorShape(),
+                valueIndicatorTextStyle: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+                showValueIndicator: ShowValueIndicator.always,
+              ),
+              child: Slider(
+                value: val,
+                min: 1,
+                max: size.toDouble(),
+                divisions: size - 1,
+                label: val.round().toString(),
+                onChanged: (v) =>
+                    setState(() => _simpleSelections[i] = v.round()),
+              ),
+            ),
+            // Low / High
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(Icons.circle_outlined, size: 14),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(option)),
+                  Text('Low',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade500)),
+                  Text('High',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade500)),
                 ],
               ),
             ),
+            const SizedBox(height: 0),
+            // القيمة في دائرة بالمنتصف
+            Center(
+              child: Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.teal,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.teal.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    val.round().toString(),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+
+    // ===== Emoji =====
+      case LinearScaleStyle.emoji:
+        final emojis = ['😡', '😕', '😐', '🙂', '😄'];
+        final selected = _simpleSelections[i] as int?;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: List.generate(size, (j) {
+                final isSelected = selected == j;
+                return GestureDetector(
+                  onTap: () => setState(() => _simpleSelections[i] = j),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.teal.withOpacity(0.12)
+                              : Colors.transparent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.teal.withOpacity(0.5)
+                                : Colors.transparent,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: AnimatedScale(
+                          scale: isSelected ? 1.3 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.elasticOut,
+                          child: Text(
+                            emojis[j % emojis.length],
+                            style: const TextStyle(fontSize: 28),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: isSelected ? 6 : 0,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Colors.teal,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 24),
+          ],
+        );
+
+    // ===== Emoji 1 =====
+      case LinearScaleStyle.emoji1:
+        final emojis = ['😭', '😢', '😐', '🙂', '😄'];
+        final selected = _simpleSelections[i] as int?;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: List.generate(size, (j) {
+                final isSelected = selected == j;
+                return GestureDetector(
+                  onTap: () => setState(() => _simpleSelections[i] = j),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.teal.withOpacity(0.12)
+                              : Colors.transparent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.teal.withOpacity(0.5)
+                                : Colors.transparent,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: AnimatedScale(
+                          scale: isSelected ? 1.3 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.elasticOut,
+                          child: Text(
+                            emojis[j % emojis.length],
+                            style: const TextStyle(fontSize: 28),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: isSelected ? 6 : 0,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Colors.teal,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 24),
+          ],
+        );
+    }
+  }
+  // ==================== Grid ====================
+  Widget _buildGrid(int i, PollData poll, {required bool multiSelect}) {
+    if (poll.gridRows.isEmpty || poll.gridColumns.isEmpty) {
+      return const Center(child: Text('لا توجد بيانات للشبكة'));
+    }
+
+    // تأكد من تهيئة صحيحة الأبعاد
+    final existing = _gridSelections[i];
+    if (existing == null ||
+        existing.length != poll.gridRows.length ||
+        existing[0].length != poll.gridColumns.length) {
+      _gridSelections[i] = List.generate(
+        poll.gridRows.length,
+            (_) => List<bool>.filled(poll.gridColumns.length, false),
+      );
+    }
+
+    final sel = _gridSelections[i]!;
+
+    if (!multiSelect) {
+      // ===== Grid — يطابق PollGridWidget تماماً =====
+      return SizedBox(
+        height: 200,
+        child: Scrollbar(
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: Scrollbar(
+              thumbVisibility: true,
+              notificationPredicate: (n) => n.depth == 1,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: (poll.gridColumns.length + 1) * 110.0,
+                  child: DataTable(
+                    columnSpacing: 24,
+                    headingRowColor: MaterialStateProperty.all(
+                      Theme.of(context).colorScheme.surfaceVariant,
+                    ),
+                    columns: [
+                      const DataColumn(label: Text('')),
+                      ...poll.gridColumns.map(
+                            (c) => DataColumn(
+                          label: Text(
+                            c,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ),
+                    ],
+                    rows: List.generate(poll.gridRows.length, (ri) {
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(
+                            poll.gridRows[ri],
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          )),
+                          ...List.generate(poll.gridColumns.length, (ci) {
+                            final isSelected = sel[ri][ci];
+                            return DataCell(
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    // ✅ grid: toggle حر — يمكن اختيار أكثر من عمود
+                                    sel[ri][ci] = !sel[ri][ci];
+                                  });
+                                },
+                                child: AnimatedScale(
+                                  scale: isSelected ? 1.12 : 1.0,
+                                  duration:
+                                  const Duration(milliseconds: 180),
+                                  curve: Curves.easeOut,
+                                  child: AnimatedContainer(
+                                    duration:
+                                    const Duration(milliseconds: 220),
+                                    width: 25,
+                                    height: 25,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: isSelected
+                                          ? Colors.teal.withOpacity(0.10)
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Colors.teal.shade900
+                                            : Theme.of(context)
+                                            .colorScheme
+                                            .outline
+                                            .withOpacity(0.6),
+                                        width: isSelected ? 2.2 : 1.5,
+                                      ),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: AnimatedContainer(
+                                      duration:
+                                      const Duration(milliseconds: 180),
+                                      width: isSelected ? 10 : 0,
+                                      height: isSelected ? 10 : 0,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.teal.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ],
-      ),
+        ),
+      );
+    } else {
+      // ===== Checkbox Grid — يطابق PollCheckboxGridWidget تماماً =====
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final minTableWidth = constraints.maxWidth;
+          final columnWidth =
+          (minTableWidth / (poll.gridColumns.length + 1))
+              .clamp(90, 140)
+              .toDouble();
+
+          return SizedBox(
+            height: 180,
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: minTableWidth),
+                    child: DataTable(
+                      columnSpacing: 0,
+                      headingRowHeight: 44,
+                      dataRowHeight: 52,
+                      headingRowColor: MaterialStateProperty.all(
+                        Theme.of(context).colorScheme.surfaceVariant,
+                      ),
+                      columns: [
+                        DataColumn(
+                          label: SizedBox(
+                              width: columnWidth, child: const Text('')),
+                        ),
+                        ...poll.gridColumns.map(
+                              (c) => DataColumn(
+                            label: SizedBox(
+                              width: columnWidth,
+                              child: Center(
+                                child: Text(
+                                  c,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      rows: List.generate(poll.gridRows.length, (ri) {
+                        return DataRow(cells: [
+                          DataCell(SizedBox(
+                            width: columnWidth,
+                            child: Text(poll.gridRows[ri]),
+                          )),
+                          ...List.generate(poll.gridColumns.length, (ci) {
+                            final isSelected = sel[ri][ci];
+                            return DataCell(
+                              SizedBox(
+                                width: columnWidth,
+                                child: Center(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () {
+                                      setState(() {
+                                        // ✅ checkboxGrid: صف واحد → عمود واحد فقط
+                                        for (int c = 0; c < sel[ri].length; c++) {
+                                          sel[ri][c] = false;
+                                        }
+                                        sel[ri][ci] = true;
+                                      });
+                                    },
+                                    child: AnimatedContainer(
+                                      duration:
+                                      const Duration(milliseconds: 200),
+                                      width: 22,
+                                      height: 22,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        borderRadius:
+                                        BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? Colors.teal.shade900
+                                              : Theme.of(context)
+                                              .colorScheme
+                                              .outline,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: AnimatedScale(
+                                        scale: isSelected ? 1.0 : 0.0,
+                                        duration: const Duration(
+                                            milliseconds: 150),
+                                        curve: Curves.easeInOut,
+                                        child: Icon(
+                                          Icons.check,
+                                          size: 18,
+                                          color: Colors.teal,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ]);
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  // ==================== Date ====================
+  Widget _buildDateView(int i, PollData poll) {
+    if (poll.dateConfig == null) {
+      return const Center(child: Text('لم يُحدَّد تاريخ'));
+    }
+
+    final config = poll.dateConfig!;
+    final monthNames = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+    ];
+
+    // تأكد من وجود Map للتاريخ
+    _dateSelections[i] ??= <int, Set<int>>{};
+    for (final m in config.months) {
+      _dateSelections[i]!.putIfAbsent(m, () => <int>{});
+    }
+
+    final monthsList = List<int>.from(config.months)..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          ' ${config.year}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            //color: Colors.teal,
+          ),
+        ),
+        const SizedBox(height: 0),
+        ...monthsList.map((m) {
+          final days = _dateSelections[i]![m]!;
+          final daysInMonth = DateTime(config.year, m + 1, 0).day;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                monthNames[m - 1],
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  //color: Colors.teal,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: List.generate(daysInMonth, (d) {
+                  final day = d + 1;
+                  final isSelected = days.contains(day);
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          days.remove(day);
+                        } else {
+                          days.add(day);
+                        }
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected ? Colors.teal : Colors.grey.shade100,
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.teal
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$day',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color:
+                            isSelected ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 14),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  // ==================== Time ====================
+  Widget _buildTimeView(int i) {
+    final selected = _timeSelections[i];
+
+    return Column(
+
+      children: [
+        const SizedBox(height: 0),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          decoration: BoxDecoration(
+            //color: Colors.teal.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.teal.withOpacity(0.3)),
+          ),
+          child: Text(
+            selected != null
+                ? '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}'
+                : '--:--',
+            style: const TextStyle(
+              fontSize: 25,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 4,
+              color: Colors.teal,
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Row(
+
+            children: [
+             SizedBox(width:180 ,),
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            //backgroundColor: Colors.teal,
+            //foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          onPressed: () async {
+            final picked = await showTimePicker(
+              context: context,
+              initialTime: selected ?? TimeOfDay.now(),
+            );
+            if (picked != null) {
+              setState(() => _timeSelections[i] = picked);
+            }
+          },
+          icon: const Icon(Icons.access_time),
+          label: Text(selected != null ? 'تغيير الوقت' : 'اختيار وقت'),
+        )]),
+      ],
     );
   }
 }
@@ -5415,6 +6513,7 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
   late TabController _tabController;
   bool _showFab = true;
   final List<PollQuestion> _pollQuestions = [];
+  List<PollData> _pollDataList = [];
 
   final TextEditingController titleCtrl = TextEditingController();
   final List<TextEditingController> options = [
@@ -5428,48 +6527,49 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
   void _savePoll() {
     final List<PostItem> items = [];
 
-    // تحويل كل البلوكات إلى PostItem كما في كودك الحالي
     for (final block in _blocks) {
       switch (block.type) {
         case BlockType.text:
           if ((block.textController?.text ?? '').trim().isNotEmpty) {
             items.add(PostItem(
-                type: PostItemType.text,
-                title: block.textController!.text.trim()));
+              type: PostItemType.text,
+              title: block.textController!.text.trim(),
+            ));
           }
           break;
         case BlockType.image:
           if (block.image != null) {
             items.add(PostItem(
-                type: PostItemType.image,
-                title: block.textController?.text ?? '',
-                mediaPath: block.image!.path));
+              type: PostItemType.image,
+              title: block.textController?.text ?? '',
+              mediaPath: block.image!.path,
+            ));
           }
           break;
         case BlockType.video:
           if (block.video != null) {
             items.add(PostItem(
-                type: PostItemType.video,
-                title: block.textController?.text ?? '',
-                mediaPath: block.video!.path));
+              type: PostItemType.video,
+              title: block.textController?.text ?? '',
+              mediaPath: block.video!.path,
+            ));
           }
           break;
       }
     }
 
-    // إضافة Poll إن وجد
-    if (titleCtrl.text.trim().isNotEmpty ||
-        options.any((c) => c.text.trim().isNotEmpty)) {
-      final validOptions =
-          options.map((c) => c.text.trim()).where((o) => o.isNotEmpty).toList();
+    // ✅ تحويل كل _pollQuestions إلى PollData مع الحفاظ على نوع كل سؤال
+    if (_pollQuestions.isNotEmpty) {
       items.add(PostItem(
         type: PostItemType.poll,
-        title: titleCtrl.text.trim(), // ✅ صححت الاسم
-        pollOptions: validOptions,
+        title: '',
+        pollDataList: _pollQuestions
+            .map((q) => PollData.fromQuestion(q))
+            .toList(),
       ));
     }
 
-    Navigator.pop(context, items); // ✅ إعادة PostItems إلى شاشة إنشاء المنشور
+    Navigator.pop(context, items);
   }
 
   @override
@@ -5484,13 +6584,15 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
         switch (item.type) {
           case PostItemType.text:
             _blocks.add(
-              PostBlock.text()..textController!.text = item.title,
+              PostBlock.text()
+                ..textController!.text = item.title,
             );
             break;
 
           case PostItemType.image:
             if (item.mediaPath != null) {
-              final block = PostBlock.image()..image = File(item.mediaPath!);
+              final block = PostBlock.image()
+                ..image = File(item.mediaPath!);
               block.textController!.text = item.title;
               _blocks.add(block);
             }
@@ -5515,10 +6617,14 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
             break;
 
           case PostItemType.poll:
-            // 🔕 تجاهل مؤقتًا — لا شيء هنا
-            break;
+            if (item.pollDataList != null && item.pollDataList!.isNotEmpty) {
+              // ✅ أعد بناء _pollQuestions من PollData المحفوظة
+              for (final data in item.pollDataList!) {
+                _pollQuestions.add(PollQuestion.fromPollData(data));
+              }
+            }
+            break;}
         }
-      }
     }
   }
 
@@ -7752,12 +8858,54 @@ class PollDateConfig {
 
 class PollData {
   final String question;
+  final PollQuestionType type;
+
+  // checkbox / multipleChoice / dropdown
   final List<String> options;
+
+  // grid / checkboxGrid
+  final List<String> gridRows;
+  final List<String> gridColumns;
+
+  // linearScale
+  final LinearScaleStyle? scaleStyle;
+  final int? scaleSize;
+
+  // date
+  final PollDateConfig? dateConfig;
+
+  // time
+  final TimeOfDay? selectedTime;
 
   PollData({
     required this.question,
-    required this.options,
+    required this.type,
+    this.options = const [],
+    this.gridRows = const [],
+    this.gridColumns = const [],
+    this.scaleStyle,
+    this.scaleSize,
+    this.dateConfig,
+    this.selectedTime,
   });
+
+  // تحويل من PollQuestion إلى PollData
+  factory PollData.fromQuestion(PollQuestion q) {
+    return PollData(
+      question: q.questionCtrl.text.trim(),
+      type: q.type,
+      options: q.options
+          .map((c) => c.text.trim())
+          .where((o) => o.isNotEmpty)
+          .toList(),
+      gridRows: List.from(q.gridRows),
+      gridColumns: List.from(q.gridColumns),
+      scaleStyle: q.scaleStyle,
+      scaleSize: q.scaleSize,
+      dateConfig: q.dateConfig,
+      selectedTime: q.selectedTime,
+    );
+  }
 }
 
 class DatePollWidget extends StatefulWidget {
@@ -8020,7 +9168,47 @@ enum LinearScaleStyle { numbers, line, emoji, emoji1 }
 
 class PollQuestion {
   PollQuestionType type;
+// أضفه داخل class PollQuestion
+  factory PollQuestion.fromPollData(PollData data) {
+    final q = PollQuestion(data.type);
+    q.questionCtrl.text = data.question;
 
+    // options
+    if (data.options.isNotEmpty) {
+      q.options = data.options
+          .map((o) => TextEditingController(text: o))
+          .toList();
+      q.selectedOptions = List.filled(q.options.length, false);
+    }
+
+    // grid
+    if (data.gridRows.isNotEmpty) {
+      q.gridRows = List.from(data.gridRows);
+      q.gridColumns = List.from(data.gridColumns);
+      q.gridConfirmed = true;
+      q.initGrid();
+    }
+
+    // linearScale
+    if (data.scaleStyle != null) {
+      q.scaleStyle = data.scaleStyle!;
+      q.scaleSize = data.scaleSize ?? 5;
+      q.scaleConfirmed = true;
+    }
+
+    // date
+    if (data.dateConfig != null) {
+      q.dateConfig = data.dateConfig;
+    }
+
+    // time
+    if (data.selectedTime != null) {
+      q.selectedTime = data.selectedTime;
+      q.timeController ??= TextEditingController();
+    }
+
+    return q;
+  }
   // ===== عام =====
   TextEditingController questionCtrl = TextEditingController();
   bool confirmed = false;
@@ -8188,7 +9376,6 @@ Widget _placeholder({required IconData icon, required String text}) {
 //=====================================================================
 class PostImagesSlider extends StatefulWidget {
   final List<String> images;
-
   const PostImagesSlider({super.key, required this.images});
 
   @override
@@ -8211,6 +9398,23 @@ class _PostImagesSliderState extends State<PostImagesSlider> {
     super.dispose();
   }
 
+  // ✅ يدعم assets وfile paths معاً
+  Widget _buildImage(String path) {
+    if (path.startsWith('assets/')) {
+      return Image.asset(path, fit: BoxFit.cover, width: double.infinity);
+    } else {
+      final file = File(path);
+      if (file.existsSync()) {
+        return Image.file(file, fit: BoxFit.cover, width: double.infinity);
+      } else {
+        return Container(
+          color: Colors.grey[300],
+          child: const Center(child: Icon(Icons.broken_image)),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -8220,33 +9424,24 @@ class _PostImagesSliderState extends State<PostImagesSlider> {
           child: PageView.builder(
             controller: _pageController,
             itemCount: widget.images.length,
-            onPageChanged: (index) {
-              setState(() => _currentIndex = index);
-            },
+            onPageChanged: (i) => setState(() => _currentIndex = i),
             itemBuilder: (context, index) {
               final path = widget.images[index];
-              Widget imageWidget = path.startsWith('assets/')
-                  ? Image.asset(path, fit: BoxFit.cover, width: double.infinity)
-                  : Image.file(File(path),
-                      fit: BoxFit.cover, width: double.infinity);
-
               return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => FullscreenImageViewer(
-                        images: widget.images,
-                        initialIndex: index,
-                      ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => FullscreenImageViewer(
+                      images: widget.images,
+                      initialIndex: index,
                     ),
-                  );
-                },
+                  ),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: imageWidget,
+                    child: _buildImage(path),
                   ),
                 ),
               );
@@ -8254,27 +9449,24 @@ class _PostImagesSliderState extends State<PostImagesSlider> {
           ),
         ),
         const SizedBox(height: 8),
-        // النقاط indicators
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(widget.images.length, (index) {
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.symmetric(
-                  horizontal: 2), // المسافة بين النقاط أقل
-              width: _currentIndex == index
-                  ? 14
-                  : 8, // حجم النقطة أكبر قليلاً من الأخرى
-              height: _currentIndex == index ? 6 : 4,
-              decoration: BoxDecoration(
-                color: _currentIndex == index
-                    ? Colors.teal[900]
-                    : Colors.grey[400],
-                borderRadius: BorderRadius.circular(4),
-              ),
-            );
-          }),
-        ),
+        if (widget.images.length > 1)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(widget.images.length, (index) {
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                width: _currentIndex == index ? 14 : 8,
+                height: _currentIndex == index ? 6 : 4,
+                decoration: BoxDecoration(
+                  color: _currentIndex == index
+                      ? Colors.teal[900]
+                      : Colors.grey[400],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              );
+            }),
+          ),
       ],
     );
   }
@@ -8420,8 +9612,168 @@ class _VideoPreviewTileState extends State<VideoPreviewTile> {
   }
 }
 
+class _VideoListWidget extends StatefulWidget {
+  final List<String> videoPaths;
+  const _VideoListWidget({required this.videoPaths});
 
+  @override
+  State<_VideoListWidget> createState() => _VideoListWidgetState();
+}
 
+class _VideoListWidgetState extends State<_VideoListWidget> {
+  late final List<VideoPlayerController> _controllers;
+  int _currentIndex = 0;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _controllers = widget.videoPaths.map((path) {
+      final ctrl = VideoPlayerController.file(File(path))..setLooping(true);
+      ctrl.initialize().then((_) {
+        if (mounted) setState(() {});
+      });
+      return ctrl;
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 200,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _controllers.length,
+            onPageChanged: (i) => setState(() => _currentIndex = i),
+            itemBuilder: (context, index) {
+              final ctrl = _controllers[index];
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  color: Colors.black,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (ctrl.value.isInitialized)
+                        FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: ctrl.value.size.width,
+                            height: ctrl.value.size.height,
+                            child: VideoPlayer(ctrl),
+                          ),
+                        )
+                      else
+                        const CircularProgressIndicator(color: Colors.white),
+                      // زر fullscreen
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  FullscreenVideoViewer(controller: ctrl),
+                            ),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black45,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.fullscreen,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // زر تشغيل / إيقاف
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          ctrl.value.isPlaying ? ctrl.pause() : ctrl.play();
+                        }),
+                        child: AnimatedOpacity(
+                          opacity: !ctrl.value.isPlaying ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: const BoxDecoration(
+                              color: Colors.black45,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow,
+                              color: Colors.white,
+                              size: 32,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        // شريط التقدم
+        if (_controllers.isNotEmpty &&
+            _controllers[_currentIndex].value.isInitialized)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: VideoProgressIndicator(
+              _controllers[_currentIndex],
+              allowScrubbing: true,
+              colors: const VideoProgressColors(
+                playedColor: Colors.teal,
+                bufferedColor: Colors.white38,
+                backgroundColor: Colors.white24,
+              ),
+            ),
+          ),
+        // نقاط المؤشر
+        if (_controllers.length > 1) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(_controllers.length, (i) {
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _currentIndex == i ? 10 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: _currentIndex == i
+                      ? Colors.teal
+                      : Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              );
+            }),
+          ),
+        ],
+      ],
+    );
+  }
+}
 // ==================== Comments Screen ====================
 
 class _Comment {
@@ -9132,7 +10484,610 @@ class __CommentDialogState extends State<_CommentDialog> {
     super.dispose();
   }
 }
+//================================================
+class ExpandableText extends StatefulWidget {
+  final String text;
+  final TextStyle? style;
+  final int maxLines;
 
+  const ExpandableText({
+    super.key,
+    required this.text,
+    this.style,
+    this.maxLines = 2,
+  });
+
+  @override
+  State<ExpandableText> createState() => _ExpandableTextState();
+}
+
+class _ExpandableTextState extends State<ExpandableText> {
+  bool _expanded = false;
+  bool _isArabic(String text) {
+    final arabicRegex = RegExp(r'[\u0600-\u06FF]');
+    return arabicRegex.hasMatch(text);
+  }
+
+  String _normalizeNewLines(String text) {
+    return text.replaceAll('\r\n', '\n');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // التحقق مما إذا كان النص طويل
+        final span = TextSpan(text: widget.text, style: widget.style);
+        final tp = TextPainter(
+          text: span,
+          maxLines: widget.maxLines,
+          textDirection: TextDirection.ltr,
+        );
+        tp.layout(maxWidth: constraints.maxWidth);
+        final isOverflowing = tp.didExceedMaxLines;
+        final isArabic = _isArabic(widget.text);
+        final normalizedText = _normalizeNewLines(widget.text);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              normalizedText,
+              softWrap: true, // 🔴 مهم
+              textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+              textAlign: isArabic ? TextAlign.right : TextAlign.left,
+              maxLines: _expanded ? null : widget.maxLines,
+              overflow:
+              _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+              textHeightBehavior: const TextHeightBehavior(
+                applyHeightToFirstAscent: false,
+                applyHeightToLastDescent: false,
+              ),
+
+              style: widget.style,
+            ),
+            if (isOverflowing)
+              GestureDetector(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    _expanded ? 'Show less' : 'Show more',
+                    style: widget.style?.copyWith(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ) ??
+                        const TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+//=============================================================
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  final ImagePicker _picker = ImagePicker();
+
+  File? profileImage;
+  File? coverImage;
+
+  String userName = 'KAOSU DS';
+  String email = 'kaosu@email.com';
+  String mood = '🚀 Feeling motivated';
+
+  String uni = '';
+  String fac = '';
+  String clas = '';
+  String section = '';
+  final List<String> followingUsers = [];
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // =======================
+  // اختيار صورة الحساب
+  // =======================
+  Future<void> _pickProfileImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image == null) return;
+
+    setState(() {
+      profileImage = File(image.path);
+    });
+  }
+
+  // =======================
+  // اختيار صورة الغلاف
+  // =======================
+  Future<void> _pickCoverImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image == null) return;
+
+    setState(() {
+      coverImage = File(image.path);
+    });
+  }
+
+  // =======================
+  // تعديل البيانات النصية
+  // =======================
+  void _editProfile() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _EditProfileSheet(
+        name: userName,
+        mood: mood,
+        uni: uni,
+        fac: fac,
+        clas: clas,
+        section: section,
+        onSave: (n, m, u, f, c, s) {
+          setState(() {
+            userName = n;
+            mood = m;
+            uni = u;
+            fac = f;
+            clas = c;
+            section = s;
+          });
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final user = FirebaseAuth.instance.currentUser;
+    final emailText = user?.email ?? email;
+
+    return Scaffold(
+      drawer: _buildProfileDrawer(context),
+      body: NestedScrollView(
+        headerSliverBuilder: (_, __) {
+          return [
+            SliverAppBar(
+              title: Text(S.of(context).profile),
+              expandedHeight: 260,
+              pinned: true,
+              backgroundColor: theme.colorScheme.surface,
+              leading: Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.line_style),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _editProfile,
+                ),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                background: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // ===== صورة الغلاف =====
+                    GestureDetector(
+                      onTap: _pickCoverImage,
+                      child: coverImage == null
+                          ? Container(
+                        color: Colors.grey[400],
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.image,
+                            size: 60, color: Colors.white),
+                      )
+                          : Image.file(
+                        coverImage!,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+
+                    // ===== التدرج =====
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 120,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              theme.colorScheme.surface.withOpacity(0.85),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // ===== الحساب متداخل =====
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 20,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          GestureDetector(
+                            onTap: _pickProfileImage,
+                            child: CircleAvatar(
+                              radius: 42,
+                              backgroundColor: theme.scaffoldBackgroundColor,
+                              child: CircleAvatar(
+                                radius: 38,
+                                backgroundImage: profileImage != null
+                                    ? FileImage(profileImage!)
+                                    : null,
+                                child: profileImage == null
+                                    ? const Icon(Icons.person, size: 40)
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  userName,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                ValueListenableBuilder<UserProfileData>(
+                                  valueListenable:
+                                  UserProfileService.instance.notifier,
+                                  builder: (context, profile, _) {
+                                    return Text(
+                                      profile.showEmailInProfile
+                                          ? emailText
+                                          : S.of(context).emailHidden,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                Text(mood,
+                                    style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ];
+        },
+        body: Column(
+          children: [
+            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            TabBar(
+              controller: _tabController,
+              tabs: [
+                Tab(text: S.of(context).posts),
+                Tab(text: S.of(context).comments),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _UserPosts(),
+                  _UserComments(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Drawer _buildProfileDrawer(BuildContext context) {
+    return Drawer(
+      width: MediaQuery.of(context).size.width * 0.78,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ===== رأس القائمة =====
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                S.of(context).userInfo,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+
+            // ===== معلومات الدراسة =====
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  _infoRow(Icons.school, S.of(context).university, uni),
+                  _infoRow(Icons.account_balance, S.of(context).faculty, fac),
+                  _infoRow(Icons.apartment, S.of(context).department, clas),
+                  _infoRow(Icons.menu_book, S.of(context).major, section),
+                ],
+              ),
+            ),
+
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(thickness: 1),
+            ),
+
+            // ===== المتابعون =====
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                S.of(context).following,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Expanded(
+              child: ListView.builder(
+                itemCount: followingUsers.length,
+                itemBuilder: (context, index) {
+                  final user = followingUsers[index];
+                  return ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.person),
+                    ),
+                    title: Text(user),
+                    onTap: () {
+                      // افتح بروفايل المستخدم
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ================= INFO ROW =================
+  Widget _infoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
+                children: [
+                  TextSpan(
+                    text: '$label: ',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextSpan(text: value),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditProfileSheet extends StatefulWidget {
+  final String name;
+  final String mood;
+  final String uni;
+  final String fac;
+  final String clas;
+  final String section;
+  final Function(String, String, String, String, String, String) onSave;
+
+  const _EditProfileSheet(
+      {required this.name,
+        required this.mood,
+        required this.uni,
+        required this.fac,
+        required this.clas,
+        required this.section,
+        required this.onSave});
+
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  late TextEditingController nameCtrl;
+  late TextEditingController moodCtrl;
+  late TextEditingController uniCtrl;
+  late TextEditingController facCtrl;
+  late TextEditingController clasCtrl;
+  late TextEditingController sectionCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    nameCtrl = TextEditingController(text: widget.name);
+    moodCtrl = TextEditingController(text: widget.mood);
+    uniCtrl = TextEditingController(text: widget.uni);
+    facCtrl = TextEditingController(text: widget.fac);
+    clasCtrl = TextEditingController(text: widget.clas);
+    sectionCtrl = TextEditingController(text: widget.section);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('تعديل الحساب',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          TextField(
+              controller: nameCtrl,
+              decoration: InputDecoration(labelText: S.of(context).name)),
+          SizedBox(
+            height: 15,
+          ),
+          TextField(
+              controller: moodCtrl,
+              decoration: InputDecoration(labelText: S.of(context).mood)),
+          SizedBox(
+            height: 15,
+          ),
+          TextField(
+              controller: uniCtrl,
+              decoration: InputDecoration(labelText: S.of(context).university)),
+          SizedBox(
+            height: 15,
+          ),
+          TextField(
+              controller: facCtrl,
+              decoration: InputDecoration(labelText: S.of(context).faculty)),
+          SizedBox(
+            height: 15,
+          ),
+          TextField(
+              controller: clasCtrl,
+              decoration: InputDecoration(labelText: S.of(context).department)),
+          SizedBox(
+            height: 15,
+          ),
+          TextField(
+              controller: sectionCtrl,
+              decoration: InputDecoration(labelText: S.of(context).major)),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: () {
+              widget.onSave(nameCtrl.text, moodCtrl.text, uniCtrl.text,
+                  facCtrl.text, clasCtrl.text, sectionCtrl.text);
+              Navigator.pop(context);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const InfoRow({
+    super.key,
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey),
+          const SizedBox(width: 8),
+          Text(text),
+        ],
+      ),
+    );
+  }
+}
+
+class _UserPosts extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: 0,
+      itemBuilder: (_, i) {
+        return Card(
+          child: ListTile(
+            title: Text('منشور رقم ${i + 1}'),
+            subtitle: const Text('هذا مثال على منشور المستخدم'),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _UserComments extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: 0,
+      itemBuilder: (_, i) {
+        return Card(
+          child: ListTile(
+            title: Text('تعليق رقم ${i + 1}'),
+            subtitle: const Text('هذا مثال على تعليق المستخدم'),
+          ),
+        );
+      },
+    );
+  }
+}
+
+//======================================================================
 class FullscreenImageViewer extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
@@ -9297,9 +11252,6 @@ class _FullscreenVideoViewerState extends State<FullscreenVideoViewer> {
     );
   }
 }
-
-
-
 
 // =========================== Calculator Hub (Quick) ==========================
 
@@ -12386,125 +14338,6 @@ Widget buildInfoCard(String title, double value, IconData icon) {
       ));
 }
 
-// class _NoteField extends StatelessWidget {
-//   const _NoteField({
-//     required this.label,
-//     required this.enabled,
-//     required this.value,
-//     required this.onChanged,
-//     this.padding = const EdgeInsetsDirectional.only(start: 8),
-//   });
-//
-//   final String label;
-//   final bool enabled;
-//   final double? value;
-//   final ValueChanged<double?> onChanged;
-//   final EdgeInsetsGeometry padding;
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final content = _NumField(
-//       value: value,
-//       onChanged: onChanged,
-//       width: 64,
-//       decimalPlaces: 2,
-//       inputRangePattern: RegExp(r'^(?:|[0-1]?\d(?:[.]\d{0,2})?|20(?:[.]0{0,2})?)$'),
-//     );
-//     final field = enabled
-//         ? content
-//         : IgnorePointer(child: Opacity(opacity: 0.35, child: content));
-//
-//     return Padding(
-//       padding: padding,
-//       child: Column(
-//         mainAxisSize: MainAxisSize.min,
-//         children: [
-//           Text(label, style: Theme.of(context).textTheme.bodySmall),
-//           const SizedBox(height: 4),
-//           field,
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-// class _LabeledValueField extends StatelessWidget {
-//   const _LabeledValueField({
-//     required this.label,
-//     required this.value,
-//     required this.onChanged,
-//   });
-//
-//   final String label;
-//   final double value;
-//   final ValueChanged<double?> onChanged;
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Column(
-//       mainAxisSize: MainAxisSize.min,
-//       crossAxisAlignment: CrossAxisAlignment.start,
-//       children: [
-//         Text(label, style: Theme.of(context).textTheme.bodySmall),
-//         const SizedBox(height: 4),
-//         _NumField(
-//           value: value,
-//           width: 72,
-//           decimalPlaces: 2,
-//           onChanged: onChanged,
-//         ),
-//       ],
-//     );
-//   }
-// }
-
-// class _WeightField extends StatelessWidget {
-//   const _WeightField({
-//     required this.label,
-//     required this.enabled,
-//     required this.value,
-//     required this.onChanged,
-//     this.padding = const EdgeInsetsDirectional.only(start: 8),
-//   });
-//
-//   final String label;
-//   final bool enabled;
-//   final double value;
-//   final ValueChanged<double?> onChanged;
-//   final EdgeInsetsGeometry padding;
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     final content = _NumField(
-//       value: value,
-//       width: 72,
-//       decimalPlaces: 4,
-//       onChanged: onChanged,
-//     );
-//     final field = enabled
-//         ? content
-//         : IgnorePointer(child: Opacity(opacity: 0.35, child: content));
-//
-//     return Padding(
-//       padding: padding,
-//       child: Column(
-//         mainAxisSize: MainAxisSize.min,
-//         children: [
-//           Text(label, style: Theme.of(context).textTheme.bodySmall),
-//           const SizedBox(height: 8),
-//           field,
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-// ============================================================================
-// PART 3/3 — Helpers, Colors, Studies helpers, Compatibility adapters
-// ============================================================================
-
-// لون خفيف للوسوم/الشرائح في المجتمع
-// امتداد آمن للسلاسل (إن لم يكن موجوداً في أجزاء سابقة)
 extension SafeStringExt on String {
   String ellipsize(int max, {String ellipsis = '…'}) {
     if (length <= max) return this;

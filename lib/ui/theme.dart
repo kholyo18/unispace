@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  // ────────────────────────────── ثوابت الألوان ──────────────────────────────
   static const _seed = Color(0x30475E);
   static const _secondary = Color(0xFF2F9E44);
   static const _error = Color(0xFFE03131);
 
+  // ────────────────────────────── Getters الثيمات ──────────────────────────────
   static ThemeData get light => _buildTheme(Brightness.light);
-  static ThemeData get dark => _buildTheme(Brightness.dark);
+  static ThemeData get dark  => _buildTheme(Brightness.dark);
 
+  // ────────────────────────────── بناء الثيم الرئيسي ──────────────────────────────
   static ThemeData _buildTheme(Brightness brightness) {
     final baseScheme = ColorScheme.fromSeed(
       seedColor: _seed,
@@ -26,7 +29,6 @@ class AppTheme {
     );
 
     final textTheme = _buildTextTheme(brightness);
-
     final roundedShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(20),
     );
@@ -37,6 +39,8 @@ class AppTheme {
       brightness: brightness,
       scaffoldBackgroundColor: scheme.background,
       textTheme: textTheme,
+
+      // ───── Card Theme ─────
       cardTheme: CardThemeData(
         shape: roundedShape,
         elevation: brightness == Brightness.light ? 1 : 0,
@@ -44,7 +48,11 @@ class AppTheme {
         clipBehavior: Clip.antiAlias,
         surfaceTintColor: scheme.primary,
       ),
+
+      // ───── Input Decoration ─────
       inputDecorationTheme: _inputDecorationTheme(scheme),
+
+      // ───── AppBar ─────
       appBarTheme: AppBarTheme(
         elevation: 0,
         backgroundColor: scheme.surface,
@@ -52,6 +60,8 @@ class AppTheme {
         centerTitle: false,
         titleTextStyle: textTheme.titleLarge,
       ),
+
+      // ───── Buttons ─────
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: scheme.primary,
@@ -62,6 +72,7 @@ class AppTheme {
           elevation: brightness == Brightness.light ? 1 : 0,
         ),
       ),
+
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -70,6 +81,7 @@ class AppTheme {
           elevation: brightness == Brightness.light ? 1 : 0,
         ),
       ),
+
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -77,22 +89,27 @@ class AppTheme {
           textStyle: textTheme.labelLarge,
         ),
       ),
+
+      // ───── Navigation & Bottom ─────
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surface,
         indicatorColor: scheme.primary.withOpacity(.12),
         labelTextStyle: MaterialStateProperty.resolveWith(
-          (states) => textTheme.labelMedium?.copyWith(
+              (states) => textTheme.labelMedium?.copyWith(
             color: states.contains(MaterialState.selected)
                 ? scheme.primary
                 : scheme.onSurfaceVariant,
           ),
         ),
       ),
+
       bottomAppBarTheme: BottomAppBarTheme(
-        color: scheme.surface,
         elevation: brightness == Brightness.light ? 2 : 0,
+        color: scheme.surface,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
+
+      // ───── TabBar ─────
       tabBarTheme: TabBarThemeData(
         labelStyle: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
         unselectedLabelStyle: textTheme.titleSmall,
@@ -103,12 +120,15 @@ class AppTheme {
         labelColor: scheme.primary,
         unselectedLabelColor: scheme.onSurfaceVariant,
       ),
+
+      // ───── SnackBar, Chip, Divider, BottomSheet, ListTile ─────
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: scheme.onSurface,
         contentTextStyle: textTheme.bodyMedium?.copyWith(color: scheme.surface),
         shape: roundedShape,
       ),
+
       chipTheme: ChipThemeData(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -116,11 +136,13 @@ class AppTheme {
         backgroundColor: scheme.surfaceVariant,
         labelStyle: textTheme.labelLarge,
       ),
+
       dividerTheme: DividerThemeData(
         thickness: 1,
         space: 1,
         color: scheme.outlineVariant.withOpacity(.6),
       ),
+
       bottomSheetTheme: BottomSheetThemeData(
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -128,6 +150,7 @@ class AppTheme {
         backgroundColor: scheme.surface,
         showDragHandle: true,
       ),
+
       listTileTheme: ListTileThemeData(
         shape: roundedShape,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -136,6 +159,7 @@ class AppTheme {
     );
   }
 
+  // ────────────────────────────── TextTheme ──────────────────────────────
   static TextTheme _buildTextTheme(Brightness brightness) {
     final base = ThemeData(brightness: brightness).textTheme;
     return base.copyWith(
@@ -153,6 +177,7 @@ class AppTheme {
     );
   }
 
+  // ────────────────────────────── InputDecorationTheme ──────────────────────────────
   static InputDecorationTheme _inputDecorationTheme(ColorScheme scheme) {
     return InputDecorationTheme(
       filled: true,

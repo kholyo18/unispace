@@ -729,5 +729,6 @@
   "sessionLoginDateLabel": "تاريخ الدخول",
   "sessionLastActivityLabel": "آخر نشاط",
   "sessionNetworkLabel": "الشبكة",
-  "dangerZone": "منطقة الخطر"
+  "dangerZone": "منطقة الخطر",
+  "gpu": "حساب المعدل الاكاديمي"
 }

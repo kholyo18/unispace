@@ -6,7 +6,7 @@
     "build": "tsc"
   },
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.1",

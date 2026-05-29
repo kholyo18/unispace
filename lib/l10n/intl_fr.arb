@@ -722,5 +722,6 @@
   "sessionLoginDateLabel": "Date de connexion",
   "sessionLastActivityLabel": "Dernière activité",
   "sessionNetworkLabel": "Réseau",
-  "dangerZone": "Zone de danger"
+  "dangerZone": "Zone de danger",
+  "gpu": "Calcul de la moyenne scolaire"
 }
