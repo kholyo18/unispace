@@ -1618,93 +1618,9 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
 }
 
 // ============================================================================
-// HomeShell — الشريط السفلي الجديد + سحب/انزلاق بين الصفحات
+// HomeShell — main app shell
 // ============================================================================
 
-
-// ────────────────────────────── الشريط السفلي (الوحيد) ──────────────────────────────
-class _BottomBar extends StatelessWidget {
-  final int index;
-  final void Function(int) onTap;
-  final double hideProgress;
-
-  const _BottomBar({
-    super.key,
-    required this.index,
-    this.hideProgress = 0.0,
-    required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return BottomAppBar(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      height: 20,
-      shape: const CircularNotchedRectangle(),
-      notchMargin: 0,
-      child: Opacity(                    // ← الأيقونات فقط تتلاشى
-        opacity: 1 - hideProgress,
-        child: Row(
-          children: [
-            Expanded(
-              child: _BarItem(
-                icon: Icons.home,
-                selected: index == 0,
-                onTap: () => onTap(0),
-              ),
-            ),
-            const SizedBox(width: 56),
-            Expanded(
-              child: _BarItem(
-                icon: Icons.public_outlined,
-                selected: index == 1,
-                onTap: () => onTap(1),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ────────────────────────────── _BarItem (أبيض/رمادي) ──────────────────────────────
-class _BarItem extends StatelessWidget {
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _BarItem({
-    super.key,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final Color c = selected ? Colors.white : scheme.onSurfaceVariant.withValues(alpha: 0.3);
-
-    return InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: SizedBox(
-          height: 1000,                    // ← لا تغيّره (مهم لمساحة النقر)
-          width: 1000,
-          child: Align(
-            alignment: Alignment.topCenter,   // ← يرفع الأيقونة لأعلى
-            child: Padding(
-                // ← هنا التحكم
-              child: Icon(icon, color: c, size: 25),
-              padding: const EdgeInsets.only(bottom: 10),
-            ),
-        ),
-      ),
-    );
-  }
-}
 
 // ============================================================================
 // Home Landing — كروت كليات احترافية + دخول إلى Navigator الدراسة
@@ -2716,23 +2632,11 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, WidgetsBindingObserver {
-  int _current = 0;
-  late final PageController _page;
-  late final AnimationController _bottomBarController;
-  final GlobalKey<_CommunityScreenState> _communityKey = GlobalKey<_CommunityScreenState>();
-
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _page = PageController(initialPage: 0);
-
-    _bottomBarController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-
     _initializeCurrentSession();
   }
 
@@ -2763,15 +2667,9 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, Wi
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _page.dispose();
-    _bottomBarController.dispose();
     super.dispose();
   }
 
-  void _go(int i) {
-    setState(() => _current = i);
-    _page.animateToPage(i, duration: const Duration(milliseconds: 260), curve: Curves.easeInOut);
-  }
   void _openEndDrawer() {
     showGeneralDialog(
       context: context,
@@ -2805,247 +2703,41 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin, Wi
       },
     );
   }
-  void _newPost() async {
-    final result = await showModalBottomSheet<List<PostItem>>(
-      isScrollControlled: true,
-      context: context,
-      builder: (_) => const _CreatePostSheet(),
-    );
-
-    if (result == null || result.isEmpty) return;
-
-    String title = '';
-    String body = '';
-    final List<String> videoPaths = [];
-    List<PollData> pollDataList = [];
-    final List<Uint8List> imageBytesList = [];
-    final List<String> directImagePaths = [];
-
-    for (final item in result) {
-      switch (item.type) {
-        case PostItemType.text:
-          if (title.isEmpty) {
-            title = item.title;
-          } else {
-            body = item.title;
-          }
-          break;
-        case PostItemType.image:
-          if (item.imageBytes != null) {
-            imageBytesList.add(item.imageBytes!);
-          } else if (item.mediaPath != null) {
-            directImagePaths.add(item.mediaPath!);
-          }
-          break;
-        case PostItemType.video:
-          if (item.mediaPath != null) videoPaths.add(item.mediaPath!);
-          break;
-        case PostItemType.poll:
-          pollDataList = item.pollDataList ?? [];
-          break;
-      }
-    }
-
-    final List<String> finalImagePaths = List.from(directImagePaths);
-    if (imageBytesList.isNotEmpty) {
-      final tempDir = await getTemporaryDirectory();
-      for (int i = 0; i < imageBytesList.length; i++) {
-        final file = File(
-          '${tempDir.path}/post_${DateTime.now().millisecondsSinceEpoch}_$i.png',
-        );
-        await file.writeAsBytes(imageBytesList[i]);
-        finalImagePaths.add(file.path);
-      }
-    }
-
-    final newPost = _Post(
-      author: 'current_user',
-      title: title,
-      body: body,
-      createdAt: DateTime.now(),
-      imagePaths: finalImagePaths,
-      videoPaths: videoPaths,
-      pollDataList: pollDataList,
-      tags: const [],
-    );
-
-    // ✅ هذا هو الحل — أضف مباشرة لـ CommunityScreen عبر GlobalKey
-    _communityKey.currentState?.addPost(newPost);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context).post)),
-      );
-    }
-  }
-
-  Widget _buildAppBarForCurrentPage() {
-    return Builder(          // ← هذا الـ Builder هو الحل السحري
-      builder: (context) {
-        switch (_current) {
-          case 0: // Home
-            return AppBar(
-              automaticallyImplyLeading: false,
-              titleSpacing: 0,
-              title: Row(
-                textDirection: TextDirection.ltr,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.menu),
-
-                    onPressed: _openEndDrawer,   // ← استدعاء دالة داخل HomeShell
-                  ),
-                  const SizedBox(width: 4),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'UniSpace',
-                      style: GoogleFonts.pacifico(
-                        textStyle: Theme.of(context).textTheme.displayLarge,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        fontStyle: FontStyle.italic,
-                        color: Colors.teal[500],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-
-          case 1: // ← CommunityScreen (غيّر حسب ما تريد)
-            return  AppBar(
-              automaticallyImplyLeading: false,
-              titleSpacing: 0,
-              title: Row(
-                textDirection: TextDirection.ltr,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.menu),
-
-                    onPressed: _openEndDrawer,   // ← استدعاء دالة داخل HomeShell
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Community',
-                    style: GoogleFonts.pacifico(
-                      textStyle: Theme.of(context).textTheme.displayLarge,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w500,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline),
-
-                    onPressed:_newPost,
-                  ),
-                  IconButton(
-                      icon: const Icon(Icons.search),
-
-                      onPressed: () {
-                        // وظيفة البحث
-                      }),
-                  IconButton(
-                    icon: const Icon(Icons.account_circle),
-
-                    onPressed:
-                        () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ProfileScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            );
-
-          default: // Notes أو أي صفحة أخرى
-            return AppBar(
-              automaticallyImplyLeading: false,
-              title: const Text('الملاحظات'),
-              centerTitle: true,
-            );
-        }
-      },
-    );
-  }
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      //endDrawer: const AppEndDrawer(),
-      body: Stack(
+  PreferredSizeWidget _buildHomeAppBar() {
+    return AppBar(
+      automaticallyImplyLeading: false,
+      titleSpacing: 0,
+      title: Row(
+        textDirection: TextDirection.ltr,
         children: [
-          // كشف التمرير
-          NotificationListener<UserScrollNotification>(
-            onNotification: (notification) {
-              if (notification.direction == ScrollDirection.reverse) {
-                _bottomBarController.forward();
-              } else if (notification.direction == ScrollDirection.forward) {
-                _bottomBarController.reverse();
-              }
-              return false;
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 68),
-              child: PageView(
-                controller: _page,
-                onPageChanged: (i) => setState(() => _current = i),
-                children: [
-                  //HomeLandingScreen(),
-                  UnispaceScreen(),
-                  CommunityScreen(key: _communityKey),
-
-                  //NotesScreen(),
-                ],
-              ),
-            ),
+          IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: _openEndDrawer,
           ),
-
-          // الشريط العلوي المتحرك (ديناميكي حسب الصفحة)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: AnimatedBuilder(
-              animation: _bottomBarController,
-              builder: (_, child) => Transform.translate(
-                offset: Offset(0, -80 * _bottomBarController.value),
-                child: Opacity(
-                  opacity: 1 - _bottomBarController.value,
-                  child: child!,
-                ),
-              ),
-              child: _buildAppBarForCurrentPage(),
-            ),
-          ),
-
-          // الشريط السفلي (كما هو)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: AnimatedBuilder(
-              animation: _bottomBarController,
-              builder: (_, child) => Transform.translate(
-                offset: Offset(0, 80 * _bottomBarController.value),
-                child: Opacity(
-                  opacity: 1 - _bottomBarController.value,
-                  child: child!,
-                ),
-              ),
-              child: _BottomBar(
-                index: _current,
-                onTap: _go,
+          const SizedBox(width: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'UniSpace',
+              style: GoogleFonts.pacifico(
+                textStyle: Theme.of(context).textTheme.displayLarge,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                fontStyle: FontStyle.italic,
+                color: Colors.teal[500],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: _buildHomeAppBar(),
+      body: const UnispaceScreen(),
     );
   }
 }

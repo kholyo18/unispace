@@ -6,7 +6,6 @@ class AppScaffold extends StatelessWidget {
     this.appBar,
     this.endDrawer,
     this.drawer,
-    this.bottomNavigationBar,
     this.floatingActionButton,
     this.floatingActionButtonLocation,
     this.background,
@@ -18,7 +17,6 @@ class AppScaffold extends StatelessWidget {
   final PreferredSizeWidget? appBar;
   final Widget? endDrawer;
   final Widget? drawer;
-  final Widget? bottomNavigationBar;
   final Widget? floatingActionButton;
   final FloatingActionButtonLocation? floatingActionButtonLocation;
   final Widget body;
@@ -37,7 +35,6 @@ class AppScaffold extends StatelessWidget {
       drawer: drawer,
       backgroundColor: background ?? theme.scaffoldBackgroundColor,
       extendBody: extendBody,
-      bottomNavigationBar: bottomNavigationBar,
       floatingActionButton: floatingActionButton,
       floatingActionButtonLocation: floatingActionButtonLocation,
       body: SafeArea(
