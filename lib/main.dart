@@ -12458,36 +12458,384 @@ class FacultyMajorsScreen extends StatelessWidget {
   final ProgramFaculty faculty;
   const FacultyMajorsScreen({super.key, required this.faculty});
 
+  static const Color _primaryColor = Color(0xFF0F7C80);
+  static const Color _blueColor = Color(0xFF1565C0);
+  static const Color _lightBackgroundColor = Color(0xFFEAF7F8);
+
   @override
   Widget build(BuildContext context) {
-    final canPop = Navigator.canPop(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textDirection = Directionality.of(context);
+    final isRtl = textDirection == TextDirection.rtl;
+    final majors = faculty.majors;
+
     return AppScaffold(
-      appBar:
-          AppBar(automaticallyImplyLeading: true, title: Text(faculty.name)),
       //endDrawer: const AppEndDrawer(),
       padding: EdgeInsets.zero,
-      body: ListView.separated(
-        itemCount: faculty.majors.length,
-        separatorBuilder: (_, __) => const Divider(height: 5),
-        itemBuilder: (_, i) {
-          final m = faculty.majors[i];
-          return ListTile(
-            leading: const Icon(Icons.school_outlined),
-            title: Text(m.name),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MajorTracksScreen(
-                    major: m,
-                    faculty: faculty,
+      background: isDark ? theme.scaffoldBackgroundColor : const Color(0xFFF6FBFC),
+      body: Directionality(
+        textDirection: textDirection,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? [
+                      theme.colorScheme.surface,
+                      theme.scaffoldBackgroundColor,
+                    ]
+                  : const [
+                      Color(0xFFEAF7F8),
+                      Color(0xFFF8FCFD),
+                    ],
+            ),
+          ),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
+            children: [
+              _FacultyMajorsHeader(
+                facultyName: faculty.name,
+                isRtl: isRtl,
+                onBack: () => Navigator.pop(context),
+              ),
+              const SizedBox(height: 22),
+              if (majors.isEmpty)
+                const _FacultyMajorsEmptyState()
+              else
+                ...List.generate(majors.length, (index) {
+                  final major = majors[index];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == majors.length - 1 ? 0 : 14,
+                    ),
+                    child: _FacultyMajorCard(
+                      major: major,
+                      isRtl: isRtl,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MajorTracksScreen(
+                              major: major,
+                              faculty: faculty,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FacultyMajorsHeader extends StatelessWidget {
+  const _FacultyMajorsHeader({
+    required this.facultyName,
+    required this.isRtl,
+    required this.onBack,
+  });
+
+  final String facultyName;
+  final bool isRtl;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final foregroundColor = isDark ? Colors.white : const Color(0xFF083D43);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          begin: AlignmentDirectional.topStart,
+          end: AlignmentDirectional.bottomEnd,
+          colors: isDark
+              ? [
+                  theme.colorScheme.surfaceContainerHighest,
+                  theme.colorScheme.surface,
+                ]
+              : const [
+                  Colors.white,
+                  FacultyMajorsScreen._lightBackgroundColor,
+                ],
+        ),
+        border: Border.all(
+          color: (isDark ? Colors.white : FacultyMajorsScreen._primaryColor)
+              .withValues(alpha: isDark ? .08 : .12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? .22 : .07),
+            blurRadius: 24,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _FacultyBackButton(isRtl: isRtl, onPressed: onBack),
+              const SizedBox(width: 12),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: FacultyMajorsScreen._primaryColor.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.apartment_rounded,
+                  color: FacultyMajorsScreen._primaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            facultyName,
+            textAlign: TextAlign.start,
+            style: theme.textTheme.headlineSmall?.copyWith(
+                  color: foregroundColor,
+                  fontWeight: FontWeight.w800,
+                  height: 1.25,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'اختر القسم أو التخصص للمتابعة',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: foregroundColor.withValues(alpha: .68),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FacultyBackButton extends StatelessWidget {
+  const _FacultyBackButton({required this.isRtl, required this.onPressed});
+
+  final bool isRtl;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Material(
+      color: isDark
+          ? Colors.white.withValues(alpha: .08)
+          : Colors.white.withValues(alpha: .9),
+      borderRadius: BorderRadius.circular(16),
+      elevation: 0,
+      shadowColor: Colors.black.withValues(alpha: .08),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: (isDark ? Colors.white : FacultyMajorsScreen._primaryColor)
+                  .withValues(alpha: isDark ? .10 : .12),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? .18 : .05),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Icon(
+            isRtl ? Icons.arrow_forward_rounded : Icons.arrow_back_rounded,
+            color: isDark ? Colors.white : FacultyMajorsScreen._primaryColor,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FacultyMajorCard extends StatelessWidget {
+  const _FacultyMajorCard({
+    required this.major,
+    required this.isRtl,
+    required this.onTap,
+  });
+
+  final ProgramMajor major;
+  final bool isRtl;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF083D43);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        splashColor: FacultyMajorsScreen._primaryColor.withValues(alpha: .08),
+        highlightColor: FacultyMajorsScreen._primaryColor.withValues(alpha: .04),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: (isDark ? Colors.white : FacultyMajorsScreen._primaryColor)
+                  .withValues(alpha: isDark ? .08 : .10),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? .20 : .06),
+                blurRadius: 20,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                    colors: [
+                      FacultyMajorsScreen._primaryColor,
+                      FacultyMajorsScreen._blueColor,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: FacultyMajorsScreen._primaryColor.withValues(alpha: .22),
+                      blurRadius: 14,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.school_rounded,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  major.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w800,
+                    height: 1.25,
                   ),
                 ),
-              );
-            },
-          );
-        },
+              ),
+              const SizedBox(width: 12),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: FacultyMajorsScreen._lightBackgroundColor,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: FacultyMajorsScreen._primaryColor.withValues(alpha: .10),
+                  ),
+                ),
+                child: Icon(
+                  isRtl
+                      ? Icons.arrow_back_ios_new_rounded
+                      : Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: FacultyMajorsScreen._primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FacultyMajorsEmptyState extends StatelessWidget {
+  const _FacultyMajorsEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 34),
+      decoration: BoxDecoration(
+        color: isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: FacultyMajorsScreen._primaryColor.withValues(alpha: .10),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? .18 : .05),
+            blurRadius: 20,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: FacultyMajorsScreen._lightBackgroundColor,
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: const Icon(
+              Icons.school_rounded,
+              color: FacultyMajorsScreen._primaryColor,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'لا توجد أقسام متاحة حاليًا',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF083D43),
+            ),
+          ),
+        ],
       ),
     );
   }
