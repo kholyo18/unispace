@@ -170,7 +170,7 @@ class _FacultySearchCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.onSurface.withOpacity(.08),
+                color: theme.colorScheme.onSurface.withValues(alpha: .08),
                 blurRadius: 18,
                 offset: const Offset(0, 20),
               ),
@@ -180,7 +180,7 @@ class _FacultySearchCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: theme.colorScheme.primary.withOpacity(.2),
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: .2),
                 foregroundColor: theme.colorScheme.primary,
                 child: const Icon(Icons.apartment_outlined),
               ),

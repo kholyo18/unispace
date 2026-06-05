@@ -35,7 +35,7 @@ class AppScaffold extends StatelessWidget {
       appBar: appBar,
       endDrawer: endDrawer,
       drawer: drawer,
-      backgroundColor: background ?? theme.colorScheme.background,
+      backgroundColor: background ?? theme.scaffoldBackgroundColor,
       extendBody: extendBody,
       bottomNavigationBar: bottomNavigationBar,
       floatingActionButton: floatingActionButton,

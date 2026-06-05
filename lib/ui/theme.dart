@@ -23,10 +23,11 @@ class AppTheme {
       surface: brightness == Brightness.light
           ? const Color(0xFFF7F8FC)
           : const Color(0xFF12131A),
-      background: brightness == Brightness.light
-          ? const Color(0xFFF2F3F9)
-          : const Color(0xFF0C0D11),
     );
+
+    final scaffoldBackgroundColor = brightness == Brightness.light
+        ? const Color(0xFFF2F3F9)
+        : const Color(0xFF0C0D11);
 
     final textTheme = _buildTextTheme(brightness);
     final roundedShape = RoundedRectangleBorder(
@@ -37,7 +38,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       brightness: brightness,
-      scaffoldBackgroundColor: scheme.background,
+      scaffoldBackgroundColor: scaffoldBackgroundColor,
       textTheme: textTheme,
 
       // ───── Card Theme ─────
@@ -93,17 +94,17 @@ class AppTheme {
       // ───── Navigation & Bottom ─────
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surface,
-        indicatorColor: scheme.primary.withOpacity(.12),
-        labelTextStyle: MaterialStateProperty.resolveWith(
+        indicatorColor: scheme.primary.withValues(alpha: .12),
+        labelTextStyle: WidgetStateProperty.resolveWith(
               (states) => textTheme.labelMedium?.copyWith(
-            color: states.contains(MaterialState.selected)
+            color: states.contains(WidgetState.selected)
                 ? scheme.primary
                 : scheme.onSurfaceVariant,
           ),
         ),
       ),
 
-      bottomAppBarTheme: BottomAppBarTheme(
+      bottomAppBarTheme: BottomAppBarThemeData(
         elevation: brightness == Brightness.light ? 2 : 0,
         color: scheme.surface,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -132,7 +133,7 @@ class AppTheme {
       chipTheme: ChipThemeData(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        selectedColor: scheme.primary.withOpacity(.12),
+        selectedColor: scheme.primary.withValues(alpha: .12),
         backgroundColor: scheme.surfaceVariant,
         labelStyle: textTheme.labelLarge,
       ),
@@ -140,7 +141,7 @@ class AppTheme {
       dividerTheme: DividerThemeData(
         thickness: 1,
         space: 1,
-        color: scheme.outlineVariant.withOpacity(.6),
+        color: scheme.outlineVariant.withValues(alpha: .6),
       ),
 
       bottomSheetTheme: BottomSheetThemeData(
@@ -181,15 +182,19 @@ class AppTheme {
   static InputDecorationTheme _inputDecorationTheme(ColorScheme scheme) {
     return InputDecorationTheme(
       filled: true,
-      fillColor: scheme.surfaceVariant.withOpacity(.6),
+      fillColor: scheme.surfaceVariant.withValues(alpha: .6),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: scheme.outlineVariant.withOpacity(.6)),
+        borderSide: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: .6),
+        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: scheme.outlineVariant.withOpacity(.6)),
+        borderSide: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: .6),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),

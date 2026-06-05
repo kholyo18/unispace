@@ -1027,7 +1027,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.45),
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(

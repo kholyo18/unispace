@@ -19,7 +19,7 @@ class ErrorBanner extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: theme.colorScheme.error.withOpacity(.12),
+          color: theme.colorScheme.error.withValues(alpha: .12),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
