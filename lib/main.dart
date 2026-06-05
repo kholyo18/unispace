@@ -3088,7 +3088,7 @@ class ModernUniSpaceBottomBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         child: Container(
-          height: 76,
+          height: 78,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: isDark
@@ -4066,7 +4066,7 @@ class _PostCardState extends State<_PostCard> {
               ),
               const SizedBox(height: 10),
               _CommunityPostActionBar(
-                voteLabel: formatVotes(post.votes),
+                voteLabel: '${formatVotes(post.votes)} تصويت',
                 isUpvoted: post.upvoted,
                 commentLabel: '${post.comments.length} تعليق',
                 onVoteTap: _toggleUpvote,
@@ -4103,38 +4103,48 @@ class _CommunityPostActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      textDirection: TextDirection.rtl,
       children: [
-        _PostActionPill(
-          icon: Icons.keyboard_arrow_up_rounded,
-          label: voteLabel,
-          selected: isUpvoted,
-          selectedColor: const Color(0xFF0F7C80),
-          onTap: onVoteTap,
+        Expanded(
+          child: _PostActionPill(
+            icon: Icons.keyboard_arrow_up_rounded,
+            label: voteLabel,
+            selected: isUpvoted,
+            selectedColor: const Color(0xFF0F7C80),
+            onTap: onVoteTap,
+          ),
         ),
-        _PostActionPill(
-          icon: Icons.chat_bubble_outline_rounded,
-          label: commentLabel,
-          selected: false,
-          selectedColor: const Color(0xFF0F7C80),
-          onTap: onCommentTap,
+        const SizedBox(width: 6),
+        Expanded(
+          child: _PostActionPill(
+            icon: Icons.chat_bubble_outline_rounded,
+            label: commentLabel,
+            selected: false,
+            selectedColor: const Color(0xFF1565C0),
+            onTap: onCommentTap,
+          ),
         ),
-        _PostActionPill(
-          icon: Icons.bookmark_border_rounded,
-          label: 'حفظ',
-          selected: false,
-          selectedColor: const Color(0xFF0F7C80),
-          onTap: onSaveTap,
+        const SizedBox(width: 6),
+        Expanded(
+          child: _PostActionPill(
+            icon: Icons.bookmark_border_rounded,
+            label: 'حفظ',
+            selected: false,
+            selectedColor: const Color(0xFF0F7C80),
+            onTap: onSaveTap,
+          ),
         ),
-        _PostActionPill(
-          icon: Icons.ios_share_rounded,
-          label: 'مشاركة',
-          selected: false,
-          selectedColor: const Color(0xFF0F7C80),
-          onTap: onShareTap,
+        const SizedBox(width: 6),
+        Expanded(
+          child: _PostActionPill(
+            icon: Icons.ios_share_rounded,
+            label: 'مشاركة',
+            selected: false,
+            selectedColor: const Color(0xFF1565C0),
+            onTap: onShareTap,
+          ),
         ),
       ],
     );
@@ -4163,12 +4173,14 @@ class _PostActionPill extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
-      height: 40,
+      height: 36,
       decoration: BoxDecoration(
         color: selected
             ? selectedColor.withValues(alpha: 0.13)
-            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.58),
-        borderRadius: BorderRadius.circular(16),
+            : const Color(0xFFEAF7F8).withValues(
+                alpha: theme.brightness == Brightness.dark ? 0.12 : 0.78,
+              ),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(
           color: selected
               ? selectedColor.withValues(alpha: 0.30)
@@ -4177,24 +4189,28 @@ class _PostActionPill extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(15),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(15),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 19, color: color),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12.5,
+                Icon(icon, size: 17, color: color),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11.5,
+                    ),
                   ),
                 ),
               ],
