@@ -1,5 +1,5 @@
 // ============================================================================
-// UniSpace — main.dart (UPDATED: BottomBar + Notes + Reddit-like Community + Table)
+// UniSpace — main.dart (UPDATED: BottomBar + Notes + Campus Community + Table)
 // PART 1/3
 // ============================================================================
 import 'dart:convert';
@@ -2830,7 +2830,7 @@ class UnispaceScreen extends StatelessWidget {
 // ============================================================================
 
 // ============================================================================
-// PART 2/3 — Community (Reddit-like) + Studies Navigator + Table Calculator
+// PART 2/3 — Community (Campus) + Studies Navigator + Table Calculator
 // ============================================================================
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -3227,7 +3227,7 @@ class _ModernUniSpaceBottomTab extends StatelessWidget {
   }
 }
 
-// ========================= Community (Reddit-like) ===========================
+// ========================= Community (UniSpace Campus) =========================
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({super.key});
   @override
@@ -3236,6 +3236,15 @@ class CommunityScreen extends StatefulWidget {
 
 class _CommunityScreenState extends State<CommunityScreen> {
   final List<_Post> _posts = [];
+  final List<String> _filters = const [
+    'الكل',
+    'أسئلة',
+    'مواد',
+    'إعلانات',
+    'نصائح',
+    'تخصصات',
+  ];
+  String _selectedFilter = 'الكل';
 
   void _newPost() async {
     final result = await showModalBottomSheet<List<PostItem>>(
@@ -3322,99 +3331,408 @@ class _CommunityScreenState extends State<CommunityScreen> {
       );
     }
   }
+
   void addPost(_Post post) {
     setState(() {
       _posts.insert(0, post);
     });
   }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return AppScaffold(
-      // appBar: AppBar(
-      //   automaticallyImplyLeading: false,
-      //   titleSpacing: 0,
-      //   title: Row(
-      //     textDirection: TextDirection.ltr,
-      //     children: [
-      //       IconButton(
-      //         icon: const Icon(Icons.menu),
-      //         onPressed: () {
-      //           Scaffold.of(context).openEndDrawer();
-      //         },
-      //       ),
-      //       const SizedBox(width: 4),
-      //       Text(
-      //         'Community',
-      //         style: GoogleFonts.pacifico(
-      //           textStyle: Theme.of(context).textTheme.displayLarge,
-      //           fontSize: 30,
-      //           fontWeight: FontWeight.w500,
-      //           fontStyle: FontStyle.italic,
-      //         ),
-      //       ),
-      //       const Spacer(),
-      //       IconButton(
-      //         icon: const Icon(Icons.add_circle_outline),
-      //         onPressed:_newPost,
-      //       ),
-      //       IconButton(
-      //           icon: const Icon(Icons.search),
-      //           onPressed: () {
-      //             // وظيفة البحث
-      //           }),
-      //       IconButton(
-      //         icon: const Icon(Icons.account_circle),
-      //         onPressed:
-      //             () {
-      //           Navigator.push(
-      //             context,
-      //             MaterialPageRoute(
-      //               builder: (_) => const ProfileScreen(),
-      //             ),
-      //           );
-      //         },
-      //       ),
-      //     ],
-      //   ),
-      // ),
       padding: EdgeInsets.zero,
-      body: _posts.isEmpty
-          ? EmptyState(
-              icon: Icons.public_outlined,
-              title: S.of(context).noPostsYet,
-              subtitle: S.of(context).startDiscussion,
-              action: PrimaryButton(
-                label: S.of(context).createPoste,
-                icon: Icons.add,
-                onPressed: _newPost,
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? [
+                      const Color(0xFF071A1F),
+                      theme.scaffoldBackgroundColor,
+                    ]
+                  : [
+                      const Color(0xFFE8FBFF),
+                      const Color(0xFFF7FBFF),
+                      theme.scaffoldBackgroundColor,
+                    ],
+            ),
+          ),
+          child: CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _CommunityHeader(onCreatePost: _newPost),
+                    const SizedBox(height: 14),
+                    _CommunityFilterChips(
+                      filters: _filters,
+                      selectedFilter: _selectedFilter,
+                      onSelected: (filter) {
+                        setState(() => _selectedFilter = filter);
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    _CreatePostEntry(onTap: _newPost),
+                    const SizedBox(height: 16),
+                  ]),
+                ),
               ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 80, 16, 120),
-              itemCount: _posts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (_, i) => _PostCard(
-                post: _posts[i],
-                onVote: (delta) => setState(() => _posts[i].votes += delta),
-                onComment: () async {
-                  final txt = await showDialog<String>(
-                    context: context,
-                    builder: (_) => const _CommentDialog(),
-                  );
-                  if (txt != null && txt.trim().isNotEmpty) {
-                    setState(() => _posts[i].comments.insert(
-                          0,
-                          _Comment(
-                            id: UniqueKey().toString(),
-                            author: 'you',
-                            text: txt,
-                            createdAt: DateTime.now(),
-                          ),
-                        ));
-                  }
-                },
+              if (_posts.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 132),
+                    child: _CommunityEmptyState(onCreatePost: _newPost),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 132),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index.isOdd) return const SizedBox(height: 14);
+                        final postIndex = index ~/ 2;
+                        return _PostCard(
+                          post: _posts[postIndex],
+                          onChanged: () => setState(() {}),
+                        );
+                      },
+                      childCount: _posts.length * 2 - 1,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommunityHeader extends StatelessWidget {
+  const _CommunityHeader({required this.onCreatePost});
+
+  final VoidCallback onCreatePost;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: const LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [Color(0xFF0F766E), Color(0xFF0891B2), Color(0xFF38BDF8)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0891B2).withValues(alpha: 0.24),
+            blurRadius: 24,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+            ),
+            child: const Icon(
+              Icons.school_rounded,
+              color: Colors.white,
+              size: 30,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'المجتمع الجامعي',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'اسأل، شارك، وتبادل الخبرة مع طلبة جامعتك',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.88),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filledTonal(
+            onPressed: onCreatePost,
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'أنشئ منشوراً',
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.18),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommunityFilterChips extends StatelessWidget {
+  const _CommunityFilterChips({
+    required this.filters,
+    required this.selectedFilter,
+    required this.onSelected,
+  });
+
+  final List<String> filters;
+  final String selectedFilter;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final filter = filters[index];
+          final selected = filter == selectedFilter;
+
+          return ChoiceChip(
+            label: Text(filter),
+            selected: selected,
+            onSelected: (_) => onSelected(filter),
+            avatar: selected
+                ? const Icon(Icons.check_rounded, size: 17, color: Colors.white)
+                : null,
+            labelStyle: TextStyle(
+              color: selected ? Colors.white : theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+            selectedColor: const Color(0xFF0F766E),
+            backgroundColor: theme.colorScheme.surface,
+            side: BorderSide(
+              color: selected
+                  ? const Color(0xFF0F766E)
+                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.45),
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CreatePostEntry extends StatelessWidget {
+  const _CreatePostEntry({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: const Color(0xFF67E8F9).withValues(alpha: 0.55),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.teal.withValues(alpha: 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFEFF),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.edit_rounded,
+                  color: Color(0xFF0E7490),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'شارك سؤالاً أو تجربة...',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F766E),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add_rounded, color: Colors.white, size: 18),
+                    SizedBox(width: 4),
+                    Text(
+                      'نشر',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommunityEmptyState extends StatelessWidget {
+  const _CommunityEmptyState({required this.onCreatePost});
+
+  final VoidCallback onCreatePost;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 24,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 82,
+              height: 82,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFCCFBF1),
+                    const Color(0xFFBAE6FD).withValues(alpha: 0.9),
+                  ],
+                ),
+              ),
+              child: const Icon(
+                Icons.forum_rounded,
+                color: Color(0xFF0F766E),
+                size: 42,
               ),
             ),
+            const SizedBox(height: 18),
+            Text(
+              'لا توجد منشورات بعد',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'كن أول من يبدأ نقاشاً جامعياً مع زملائك.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 20),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F766E), Color(0xFF0891B2)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0891B2).withValues(alpha: 0.22),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: onCreatePost,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('أنشئ منشوراً'),
+                style: ElevatedButton.styleFrom(
+                  elevation: 0,
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -3465,17 +3783,13 @@ class _Post {
 }
 
 // ==================== PostCard ====================
-// ==================== PostCard ====================
 class _PostCard extends StatefulWidget {
   final _Post post;
-  final void Function(int delta) onVote;
-  final VoidCallback onComment;
+  final VoidCallback onChanged;
 
   const _PostCard({
-    super.key,
     required this.post,
-    required this.onVote,
-    required this.onComment,
+    required this.onChanged,
   });
 
   @override
@@ -3508,9 +3822,9 @@ class _PostCardState extends State<_PostCard> {
       MaterialPageRoute(builder: (_) => CommentsScreen(post: widget.post)),
     );
     _isNavigating = false;
+    if (mounted) widget.onChanged();
   }
 
-  // ===== دوال بناء الشرائح =====
   Widget _buildImageSlide(String path) {
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -3523,35 +3837,29 @@ class _PostCardState extends State<_PostCard> {
         ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
         child: path.startsWith('assets/')
-            ? Image.asset(
-          path,
-          fit: BoxFit.cover,
-          width: double.infinity,
-        )
+            ? Image.asset(path, fit: BoxFit.cover, width: double.infinity)
             : Image.file(
-          File(path),
-          fit: BoxFit.cover,
-          width: double.infinity,
-          errorBuilder: (_, __, ___) => Container(
-            color: Colors.grey[300],
-            child: const Center(child: Icon(Icons.broken_image)),
-          ),
-        ),
+                File(path),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.grey[200],
+                  child: const Center(child: Icon(Icons.broken_image_rounded)),
+                ),
+              ),
       ),
     );
   }
 
-  Widget _buildVideoSlide(String path) {
-    return _VideoSlideWidget(videoPath: path);
-  }
+  Widget _buildVideoSlide(String path) => _VideoSlideWidget(videoPath: path);
 
   Widget _buildPollSlide(PollData poll) {
-    return GestureDetector(
-      onTap: () {},
-      child: SizedBox(
-        height: 200,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: ColoredBox(
+        color: Colors.white,
         child: SingleChildScrollView(
           physics: const NeverScrollableScrollPhysics(),
           child: PollPostWidget(polls: [poll]),
@@ -3560,93 +3868,54 @@ class _PostCardState extends State<_PostCard> {
     );
   }
 
-  Widget _bottomSheetItem(
-      BuildContext context, {
-        required IconData icon,
-        required String text,
-        VoidCallback? onTap,
-      }) {
-    final theme = Theme.of(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap ?? () => Navigator.pop(context),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.15)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 22),
-            const SizedBox(width: 14),
-            Text(text, style: theme.textTheme.bodyMedium),
-          ],
-        ),
-      ),
-    );
+  List<Widget> _mediaSlides(_Post post) {
+    return [
+      ...post.imagePaths.map(_buildImageSlide),
+      ...post.videoPaths.map(_buildVideoSlide),
+      ...post.pollDataList.map(_buildPollSlide),
+    ];
   }
 
-  Widget _postMediaWidget(String? url) {
-    if (url == null || url.isEmpty) return const SizedBox.shrink();
-    final isImage = url.endsWith('.png') ||
-        url.endsWith('.jpg') ||
-        url.endsWith('.jpeg') ||
-        url.endsWith('.gif') ||
-        url.endsWith('.webp');
+  String _authorLabel(String author) {
+    final cleaned = author.trim();
+    if (cleaned.isEmpty || cleaned == 'current_user') return 'طالب UniSpace';
+    return cleaned.replaceFirst(RegExp(r'^u/'), '');
+  }
 
-    if (isImage) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.network(
-            url,
-            height: 190,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              height: 190,
-              width: double.infinity,
-              color: Colors.grey[300],
-              child: const Center(child: Icon(Icons.broken_image)),
-            ),
-          ),
-        ),
-      );
-    } else {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: GestureDetector(
-          onTap: () =>
-              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.blue),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.link),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    url,
-                    style: const TextStyle(
-                        color: Colors.blue, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
+  void _toggleUpvote() {
+    setState(() {
+      final post = widget.post;
+      if (post.upvoted) {
+        post.upvoted = false;
+        post.votes--;
+      } else {
+        if (post.downvoted) {
+          post.downvoted = false;
+          post.votes++;
+        }
+        post.upvoted = true;
+        post.votes++;
+      }
+    });
+    widget.onChanged();
+  }
+
+  void _toggleDownvote() {
+    setState(() {
+      final post = widget.post;
+      if (post.downvoted) {
+        post.downvoted = false;
+        post.votes++;
+      } else {
+        if (post.upvoted) {
+          post.upvoted = false;
+          post.votes--;
+        }
+        post.downvoted = true;
+        post.votes--;
+      }
+    });
+    widget.onChanged();
   }
 
   String formatVotes(int votes) {
@@ -3655,555 +3924,252 @@ class _PostCardState extends State<_PostCard> {
     return votes.toString();
   }
 
+  void _sharePost() {
+    Share.share('UniSpace: ${widget.post.title}\n${widget.post.body}');
+  }
+
+  void _showSavedMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حفظ المنشور')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
     final theme = Theme.of(context);
+    final slides = _mediaSlides(post);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _openComments,
-      child: Directionality(
-        textDirection: TextDirection.ltr,
-        child: Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ===== Header =====
-                Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor:
-                        theme.colorScheme.onPrimary.withValues(alpha: .5),
-                        child: const Icon(Icons.person),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openComments,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.32),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.055),
+                blurRadius: 22,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF14B8A6), Color(0xFF38BDF8)],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _authorLabel(post.author),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
                           children: [
-                            Text(
-                              'u/${post.author}',
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            const Icon(
+                              Icons.auto_stories_rounded,
+                              size: 14,
+                              color: Color(0xFF0E7490),
                             ),
+                            const SizedBox(width: 4),
                             Text(
-                              post.timeAgo,
+                              'نقاش جامعي • ${post.timeAgo}',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.5),
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (context) {
-                              return DraggableScrollableSheet(
-                                initialChildSize: 0.5,
-                                minChildSize: 0.5,
-                                maxChildSize: 0.85,
-                                builder: (context, scrollController) {
-                                  return Container(
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surface,
-                                      borderRadius:
-                                      const BorderRadius.vertical(
-                                          top: Radius.circular(16)),
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Container(
-                                          margin: const EdgeInsets.symmetric(
-                                              vertical: 12),
-                                          width: 40,
-                                          height: 4,
-                                          decoration: BoxDecoration(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .surface,
-                                            borderRadius:
-                                            BorderRadius.circular(10),
-                                          ),
-                                        ),
-                                        SingleChildScrollView(
-                                          scrollDirection: Axis.horizontal,
-                                          child: Row(
-                                            children: [
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/repost.png',
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface,
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/instagram.png',
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/link.png',
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface,
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/whatsapp.png',
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/Facebook_f_logo_(2019).svg.png',
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/messenger.png',
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/Logo_of_Twitter.svg.png',
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/discord.png',
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/email.png',
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface,
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              GestureDetector(
-                                                onTap: () => Share.share(
-                                                    'Check out this post: ${post.title}'),
-                                                child: Image.asset(
-                                                  'assets/icons/more.png',
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface,
-                                                  width: 50,
-                                                  height: 50,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 10),
-                                            ],
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: ListView(
-                                            controller: scrollController,
-                                            padding:
-                                            const EdgeInsets.all(12),
-                                            children: [
-                                              const SizedBox(height: 5),
-                                              _bottomSheetItem(context,
-                                                  icon:
-                                                  Icons.bookmark_border,
-                                                  text: S
-                                                      .of(context)
-                                                      .savePost),
-                                              _bottomSheetItem(context,
-                                                  icon: Icons
-                                                      .report_gmailerrorred,
-                                                  text: S
-                                                      .of(context)
-                                                      .blockAccount),
-                                              _bottomSheetItem(context,
-                                                  icon:
-                                                  Icons.flag_outlined,
-                                                  text: S
-                                                      .of(context)
-                                                      .report),
-                                              _bottomSheetItem(context,
-                                                  icon: Icons
-                                                      .visibility_off_outlined,
-                                                  text:
-                                                  S.of(context).hide),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          );
-                        },
-                        child: const Icon(Icons.more_vert),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // ===== العنوان =====
-                if (post.title.trim().isNotEmpty)
-                  Directionality(
-                    textDirection:
-                    RegExp(r'[\u0600-\u06FF]').hasMatch(post.title)
-                        ? TextDirection.rtl
-                        : TextDirection.ltr,
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Text(
-                        post.title,
-                        style: theme.textTheme.titleMedium,
-                        textAlign:
-                        RegExp(r'[\u0600-\u06FF]').hasMatch(post.title)
-                            ? TextAlign.right
-                            : TextAlign.left,
-                      ),
+                      ],
                     ),
                   ),
-
-                // ===== الجسم =====
-                if (post.body.trim().isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  ExpandableText(
-                    text: post.body,
-                    style: theme.textTheme.bodyMedium,
-                    maxLines: 2,
+                  IconButton(
+                    onPressed: _sharePost,
+                    icon: const Icon(Icons.ios_share_rounded),
+                    color: const Color(0xFF0E7490),
+                    tooltip: 'مشاركة',
                   ),
                 ],
-
-                const SizedBox(height: 8),
-
-                // ===== Media URL =====
-                _postMediaWidget(post.mediaUrl),
-
-                // ✅ ===== المحتوى الوسائطي — كل شيء في carousel واحد =====
-                Builder(builder: (context) {
-                  final List<Widget> slides = [];
-
-                  for (final path in post.imagePaths) {
-                    slides.add(_buildImageSlide(path));
-                  }
-
-                  for (final path in post.videoPaths) {
-                    slides.add(_buildVideoSlide(path));
-                  }
-
-                  for (final poll in post.pollDataList) {
-                    slides.add(_buildPollSlide(poll));
-                  }
-
-                  if (slides.isEmpty) return const SizedBox.shrink();
-
-                  return Column(
-                    children: [
-                      const SizedBox(height: 4),
-                      GestureDetector(
-                        // ✅ يمنع النقر من فتح التعليقات عند التفاعل مع الوسائط
-                        onTap: () {},
-                        child: _MediaCarousel(slides: slides),
-                      ),
-                    ],
-                  );
-                }),
-
-                const SizedBox(height: 12),
-
-                // ===== أزرار التفاعل =====
-                Directionality(
-                  textDirection: TextDirection.rtl,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(0),
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: Colors.grey, width: 1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius:
-                                    BorderRadius.circular(20),
-                                    splashColor:
-                                    Colors.teal.withValues(alpha: 0.3),
-                                    highlightColor:
-                                    Colors.teal.withValues(alpha: 0.15),
-                                    onTap: () {
-                                      setState(() {
-                                        if (post.upvoted) {
-                                          post.upvoted = false;
-                                          post.votes--;
-                                        } else {
-                                          post.upvoted = true;
-                                          if (post.downvoted) {
-                                            post.downvoted = false;
-                                            post.votes++;
-                                          }
-                                          post.votes++;
-                                        }
-                                      });
-                                    },
-                                    child: Padding(
-                                      padding:
-                                      const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 2),
-                                      child: Icon(
-                                        Icons.arrow_upward_outlined,
-                                        size: 20,
-                                        color: post.upvoted
-                                            ? Colors.teal[700]
-                                            : theme
-                                            .colorScheme.onSurface,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                AnimatedSwitcher(
-                                  duration:
-                                  const Duration(milliseconds: 180),
-                                  transitionBuilder: (child,
-                                      animation) =>
-                                      ScaleTransition(
-                                          scale: animation, child: child),
-                                  child: Text(
-                                    formatVotes(post.votes),
-                                    key: ValueKey(
-                                        '${post.votes}-${post.upvoted}-${post.downvoted}'),
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(
-                                      color: post.upvoted
-                                          ? Colors.teal[600]
-                                          : post.downvoted
-                                          ? Colors.red
-                                          : theme
-                                          .colorScheme.onSurface,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius:
-                                    BorderRadius.circular(20),
-                                    splashColor:
-                                    Colors.red.withValues(alpha: 0.3),
-                                    highlightColor:
-                                    Colors.red.withValues(alpha: 0.15),
-                                    onTap: () {
-                                      setState(() {
-                                        if (post.downvoted) {
-                                          post.downvoted = false;
-                                          post.votes++;
-                                        } else {
-                                          post.downvoted = true;
-                                          if (post.upvoted) {
-                                            post.upvoted = false;
-                                            post.votes--;
-                                          }
-                                          post.votes--;
-                                        }
-                                      });
-                                    },
-                                    child: Padding(
-                                      padding:
-                                      const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 5),
-                                      child: Icon(
-                                        Icons.arrow_downward_outlined,
-                                        size: 20,
-                                        color: post.downvoted
-                                            ? Colors.red
-                                            : theme
-                                            .colorScheme.onSurface,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Container(
-                            height: 32,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 0),
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(25),
-                              border: Border.all(
-                                  color: Colors.grey, width: 1),
-                            ),
-                            child: Row(
-                              children: [
-                                IconButton(
-                                  onPressed: _openComments,
-                                  icon: Icon(
-                                    Icons.chat_bubble_outline_outlined,
-                                    color: theme.colorScheme.onSurface,
-                                    size: 18,
-                                  ),
-                                ),
-                                Text(
-                                  '${post.comments.length}',
-                                  key: ValueKey(post.comments.length),
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          showGeneralDialog(
-                            context: context,
-                            barrierDismissible: true,
-                            barrierLabel: 'Dismiss',
-                            barrierColor: Colors.transparent,
-                            transitionDuration:
-                            const Duration(milliseconds: 300),
-                            pageBuilder: (context, anim1, anim2) {
-                              return Center(
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: Container(
-                                    width: MediaQuery.of(context)
-                                        .size
-                                        .width *
-                                        0.95,
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color:
-                                      theme.colorScheme.surface,
-                                      borderRadius:
-                                      BorderRadius.circular(16),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: theme
-                                              .colorScheme.onSurface
-                                              .withValues(alpha: 0.2),
-                                          offset: const Offset(0, 10),
-                                          blurRadius: 20,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: post.tags
-                                          .map((tag) => Chip(
-                                        label: Text('c/$tag'),
-                                        backgroundColor:
-                                        Colors.transparent,
-                                      ))
-                                          .toList(),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(
-                                color: Colors.grey, width: 1),
-                          ),
-                          child: const Text('Tags #'),
-                        ),
-                      ),
-                    ],
+              ),
+              if (post.title.trim().isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(
+                  post.title.trim(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    height: 1.35,
                   ),
                 ),
               ],
-            ),
+              if (post.body.trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  post.body.trim(),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.55,
+                  ),
+                ),
+              ],
+              if (slides.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: _MediaCarousel(slides: slides),
+                ),
+              ],
+              if (post.tags.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: post.tags
+                      .map(
+                        (tag) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE0F2FE),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFF7DD3FC).withValues(alpha: 0.7),
+                            ),
+                          ),
+                          child: Text(
+                            '#$tag',
+                            style: const TextStyle(
+                              color: Color(0xFF0369A1),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Divider(
+                height: 1,
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _PostActionPill(
+                    icon: Icons.keyboard_arrow_up_rounded,
+                    label: formatVotes(post.votes),
+                    selected: post.upvoted,
+                    selectedColor: const Color(0xFF0F766E),
+                    onTap: _toggleUpvote,
+                  ),
+                  _PostActionPill(
+                    icon: Icons.keyboard_arrow_down_rounded,
+                    label: 'تصويت',
+                    selected: post.downvoted,
+                    selectedColor: Colors.redAccent,
+                    onTap: _toggleDownvote,
+                  ),
+                  _PostActionPill(
+                    icon: Icons.chat_bubble_rounded,
+                    label: '${post.comments.length} تعليق',
+                    selected: false,
+                    selectedColor: const Color(0xFF0891B2),
+                    onTap: _openComments,
+                  ),
+                  _PostActionPill(
+                    icon: Icons.bookmark_border_rounded,
+                    label: 'حفظ',
+                    selected: false,
+                    selectedColor: const Color(0xFF2563EB),
+                    onTap: _showSavedMessage,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PostActionPill extends StatelessWidget {
+  const _PostActionPill({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.selectedColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final Color selectedColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = selected ? selectedColor : const Color(0xFF64748B);
+
+    return Material(
+      color: selected
+          ? selectedColor.withValues(alpha: 0.12)
+          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.62),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -4571,10 +4537,10 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
-                    Text('Current User',
+                    Text('طالب UniSpace',
                         style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('u/current_user',
+                    Text('حساب طالب',
                         style: TextStyle(color: Colors.grey)),
                   ],
                 )
@@ -9847,7 +9813,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                             PostImagesSlider(images: widget.post.imagePaths),
                           const SizedBox(height: 12),
                           Text(
-                            'Posted by u/${widget.post.author} • ${_timeAgo(widget.post.createdAt)}',
+                            'طالب UniSpace • ${_timeAgo(widget.post.createdAt)}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
@@ -9959,7 +9925,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                                 style: Theme.of(context).textTheme.bodySmall,
                                 children: [
                                   TextSpan(
-                                    text: 'u/${_replyTo!.author} : \n',
+                                    text: 'رد على ${_replyTo!.author} : \n',
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 15),
@@ -10015,7 +9981,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                                 decoration: InputDecoration(
                                   hintText: _replyTo == null
                                       ? 'Add a comment...'
-                                      : 'Replying to u/${_replyTo!.author}',
+                                      : 'الرد على ${_replyTo!.author}',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -10219,9 +10185,9 @@ class _CommentTileState extends State<CommentTile> {
                     // النص الذي يظهر اسم الكاتب أو الرد
                     Text(
                       widget.comment.replyToAuthor != null
-                          ? 'u/${widget.comment.author} '
-                          //'→ u/${widget.comment.replyToAuthor}'
-                          : 'u/${widget.comment.author}',
+                          ? '${widget.comment.author} '
+                          //'→ ${widget.comment.replyToAuthor}'
+                          : widget.comment.author,
                       style: theme.textTheme.bodySmall
                           ?.copyWith(fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
