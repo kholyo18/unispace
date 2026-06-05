@@ -104,10 +104,9 @@ class AppTheme {
         ),
       ),
 
-      bottomAppBarTheme: BottomAppBarThemeData(
+      bottomAppBarTheme: BottomAppBarTheme(
         elevation: brightness == Brightness.light ? 2 : 0,
         color: scheme.surface,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
 
       // ───── TabBar ─────
