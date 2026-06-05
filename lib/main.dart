@@ -1627,7 +1627,14 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
 // ============================================================================
 
 class HomeLandingScreen extends StatefulWidget {
-  const HomeLandingScreen({super.key});
+  const HomeLandingScreen({
+    super.key,
+    this.showAppBar = true,
+    this.bottomPadding = 0,
+  });
+
+  final bool showAppBar;
+  final double bottomPadding;
 
   @override
   State<HomeLandingScreen> createState() => _HomeLandingScreenState();
@@ -1829,40 +1836,34 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canPop = Navigator.canPop(context);
     final faculties = getDemoFaculties(context).take(6).toList();
 
     final quickFaculty = faculties.isNotEmpty ? faculties.first : null;
-    final gridFaculties = quickFaculty == null
-        ? faculties
-        : faculties.skip(1).toList(growable: false);
 
     return AppScaffold(
         // endDrawer:  AppEndDrawer(),
-        appBar: AppBar(
-          automaticallyImplyLeading: true,
-
-          title: Row(
-            children: [
-              const SizedBox(width: 4),
-              Align(
-                  alignment: Alignment.center,
-                  child: Text(
-                    S.of(context).gpu,
-                    style: TextStyle(
-
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-
-
+        appBar: widget.showAppBar
+            ? AppBar(
+                automaticallyImplyLeading: true,
+                title: Row(
+                  children: [
+                    const SizedBox(width: 4),
+                    Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        S.of(context).gpu,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
-                  )),
-            ],
-          ),
-        ),
+                  ],
+                ),
+              )
+            : null,
         padding: EdgeInsets.zero,
-        body:
-        CustomScrollView(
+        body: CustomScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           slivers: [
 
@@ -2201,6 +2202,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                 ),
               ),
             ],
+            SliverToBoxAdapter(child: SizedBox(height: widget.bottomPadding)),
           ],
         ));
   }
@@ -2606,11 +2608,9 @@ class UnispaceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const AppScaffold(
-      padding: EdgeInsets.zero,
-      body: SafeArea(
-        child: SizedBox.expand(),
-      ),
+    return const HomeLandingScreen(
+      showAppBar: false,
+      bottomPadding: 116,
     );
   }
 }
@@ -2882,7 +2882,7 @@ class ModernUniSpaceBottomBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         child: Container(
-          height: 78,
+          height: 80,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: isDark
