@@ -12852,103 +12852,389 @@ class MajorTracksScreen extends StatelessWidget {
     required this.faculty,
   });
 
+  static const Color _primaryColor = FacultyMajorsScreen._primaryColor;
+  static const Color _blueColor = FacultyMajorsScreen._blueColor;
+  static const Color _lightBackgroundColor = FacultyMajorsScreen._lightBackgroundColor;
+
   @override
   Widget build(BuildContext context) {
-    // تجميع التراكات حسب المستوى
+    // تجميع التراكات حسب المستوى مع الحفاظ على ترتيب البيانات كما هو
     final Map<String, List<ProgramTrack>> tracksByLevel = {};
     for (var track in major.tracks) {
       tracksByLevel.putIfAbsent(track.level, () => []).add(track);
     }
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textDirection = Directionality.of(context);
+    final isRtl = textDirection == TextDirection.rtl;
+
     return Scaffold(
+      backgroundColor: isDark ? theme.scaffoldBackgroundColor : const Color(0xFFF6FBFC),
       appBar: AppBar(
-          automaticallyImplyLeading: true,
-          title: Text(
-            major.name,
-          )),
-     // endDrawer: const AppEndDrawer(),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          ...tracksByLevel.entries.map((entry) {
-            final level = entry.key;
-            final tracks = entry.value;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Align(
-                    alignment: Alignment.centerLeft,
-                    child:
-                        // عنوان المستوى
-                        Text(
-                      level,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    )),
-
-                const SizedBox(height: 12),
-
-                // قائمة التخصصات داخل المستوى مع فاصل بين كل عنصر
-                ...tracks.map((track) {
-                  return Column(
-                    children: [
-                      Card(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .outline
-                                .withValues(alpha: .4),
-                          ),
-                        ),
-                        child: ListTile(
-                          leading: const Icon(Icons.view_stream_outlined),
-                          title: Text(track.name),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            final specs = createSemesterSpecsForTrack(track);
-                            final sem1 = _pickSemester(specs, 'S1');
-                            final sem2 = _pickSemester(specs, 'S2');
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => StudiesTableScreen(
-                                  facultyName: track.name,
-                                  programName: '${major.name} • ${track.name}',
-                                  collegeId: faculty.name,
-                                  departmentId: major.name,
-                                  specialtyId: track.name,
-                                  level: track.level,
-                                  academicScopeId: buildAcademicStorageSignature(
-                                    semester1: sem1,
-                                    semester2: sem2,
-                                    level: track.level,
-                                  ),
-                                  semester1Modules: sem1,
-                                  semester2Modules: sem2,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-
-                      // الفاصل بين التخصصات
-                      const SizedBox(height: 14),
+        automaticallyImplyLeading: false,
+        elevation: 0,
+        backgroundColor: isDark ? theme.scaffoldBackgroundColor : const Color(0xFFEAF7F8),
+        surfaceTintColor: Colors.transparent,
+        leadingWidth: 64,
+        leading: Padding(
+          padding: const EdgeInsetsDirectional.only(start: 12),
+          child: _TrackBackButton(
+            isRtl: isRtl,
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        title: Text(
+          major.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : const Color(0xFF083D43),
+          ),
+        ),
+      ),
+      body: Directionality(
+        textDirection: textDirection,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? [
+                      theme.colorScheme.surface,
+                      theme.scaffoldBackgroundColor,
+                    ]
+                  : const [
+                      Color(0xFFEAF7F8),
+                      Color(0xFFF8FCFD),
                     ],
-                  );
-                }).toList(),
+            ),
+          ),
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 36),
+            itemCount: tracksByLevel.length,
+            itemBuilder: (context, index) {
+              final entry = tracksByLevel.entries.elementAt(index);
+              return _TrackLevelSection(
+                level: entry.key,
+                tracks: entry.value,
+                major: major,
+                faculty: faculty,
+                isRtl: isRtl,
+                isLast: index == tracksByLevel.length - 1,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-                // فاصل بين المستويات
-                const SizedBox(height: 25),
+class _TrackBackButton extends StatelessWidget {
+  const _TrackBackButton({required this.isRtl, required this.onPressed});
+
+  final bool isRtl;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: .72)
+                  : Colors.white.withValues(alpha: .94),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: MajorTracksScreen._primaryColor.withValues(alpha: isDark ? .18 : .12),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? .18 : .05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
               ],
+            ),
+            child: Icon(
+              isRtl ? Icons.arrow_forward_rounded : Icons.arrow_back_rounded,
+              size: 21,
+              color: isDark ? Colors.white : MajorTracksScreen._primaryColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrackLevelSection extends StatelessWidget {
+  const _TrackLevelSection({
+    required this.level,
+    required this.tracks,
+    required this.major,
+    required this.faculty,
+    required this.isRtl,
+    required this.isLast,
+  });
+
+  final String level;
+  final List<ProgramTrack> tracks;
+  final ProgramMajor major;
+  final ProgramFaculty faculty;
+  final bool isRtl;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _TrackLevelHeader(level: level),
+          const SizedBox(height: 10),
+          ...List.generate(tracks.length, (index) {
+            final track = tracks[index];
+            return Padding(
+              padding: EdgeInsets.only(bottom: index == tracks.length - 1 ? 0 : 10),
+              child: _TrackSpecialtyCard(
+                track: track,
+                major: major,
+                faculty: faculty,
+                isRtl: isRtl,
+              ),
             );
-          }).toList(),
+          }),
         ],
+      ),
+    );
+  }
+}
+
+class _TrackLevelHeader extends StatelessWidget {
+  const _TrackLevelHeader({required this.level});
+
+  final String level;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final foregroundColor = isDark ? Colors.white : const Color(0xFF083D43);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [
+                MajorTracksScreen._primaryColor,
+                MajorTracksScreen._blueColor,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(13),
+            boxShadow: [
+              BoxShadow(
+                color: MajorTracksScreen._primaryColor.withValues(alpha: isDark ? .18 : .14),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.school_rounded,
+            size: 18,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          level,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: foregroundColor,
+            fontSize: 21,
+            fontWeight: FontWeight.w900,
+            height: 1.15,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Container(
+          width: 30,
+          height: 4,
+          decoration: BoxDecoration(
+            color: MajorTracksScreen._primaryColor.withValues(alpha: .22),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrackSpecialtyCard extends StatelessWidget {
+  const _TrackSpecialtyCard({
+    required this.track,
+    required this.major,
+    required this.faculty,
+    required this.isRtl,
+  });
+
+  final ProgramTrack track;
+  final ProgramMajor major;
+  final ProgramFaculty faculty;
+  final bool isRtl;
+
+  static const List<IconData> _specialtyIcons = [
+    Icons.menu_book_rounded,
+    Icons.auto_stories_rounded,
+    Icons.library_books_rounded,
+    Icons.school_rounded,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF083D43);
+    final icon = _specialtyIcons[track.name.hashCode.abs() % _specialtyIcons.length];
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          final specs = createSemesterSpecsForTrack(track);
+          final sem1 = _pickSemester(specs, 'S1');
+          final sem2 = _pickSemester(specs, 'S2');
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => StudiesTableScreen(
+                facultyName: track.name,
+                programName: '${major.name} • ${track.name}',
+                collegeId: faculty.name,
+                departmentId: major.name,
+                specialtyId: track.name,
+                level: track.level,
+                academicScopeId: buildAcademicStorageSignature(
+                  semester1: sem1,
+                  semester2: sem2,
+                  level: track.level,
+                ),
+                semester1Modules: sem1,
+                semester2Modules: sem2,
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(20),
+        splashColor: MajorTracksScreen._primaryColor.withValues(alpha: .08),
+        highlightColor: MajorTracksScreen._primaryColor.withValues(alpha: .04),
+        child: Ink(
+          constraints: const BoxConstraints(minHeight: 60),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: .78)
+                : Colors.white.withValues(alpha: .96),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: (isDark ? Colors.white : MajorTracksScreen._primaryColor)
+                  .withValues(alpha: isDark ? .08 : .11),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? .18 : .045),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                    colors: [
+                      MajorTracksScreen._primaryColor,
+                      MajorTracksScreen._blueColor,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: MajorTracksScreen._primaryColor.withValues(alpha: .18),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  icon,
+                  size: 22,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  track.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w800,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? MajorTracksScreen._primaryColor.withValues(alpha: .14)
+                      : MajorTracksScreen._lightBackgroundColor,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: MajorTracksScreen._primaryColor.withValues(alpha: .12),
+                  ),
+                ),
+                child: Icon(
+                  isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                  size: 24,
+                  color: MajorTracksScreen._primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
