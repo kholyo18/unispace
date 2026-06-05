@@ -3390,13 +3390,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 132),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 152),
                     child: _CommunityEmptyState(onCreatePost: _newPost),
                   ),
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 132),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 152),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
@@ -3900,24 +3900,6 @@ class _PostCardState extends State<_PostCard> {
     widget.onChanged();
   }
 
-  void _toggleDownvote() {
-    setState(() {
-      final post = widget.post;
-      if (post.downvoted) {
-        post.downvoted = false;
-        post.votes++;
-      } else {
-        if (post.upvoted) {
-          post.upvoted = false;
-          post.votes--;
-        }
-        post.downvoted = true;
-        post.votes--;
-      }
-    });
-    widget.onChanged();
-  }
-
   String formatVotes(int votes) {
     if (votes >= 1000000) return '${(votes / 1000000).toStringAsFixed(1)}M';
     if (votes >= 1000) return '${(votes / 1000).toStringAsFixed(1)}k';
@@ -4077,51 +4059,84 @@ class _PostCardState extends State<_PostCard> {
                       .toList(),
                 ),
               ],
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Divider(
                 height: 1,
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.30),
               ),
               const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  _PostActionPill(
-                    icon: Icons.keyboard_arrow_up_rounded,
-                    label: formatVotes(post.votes),
-                    selected: post.upvoted,
-                    selectedColor: const Color(0xFF0F766E),
-                    onTap: _toggleUpvote,
-                  ),
-                  _PostActionPill(
-                    icon: Icons.keyboard_arrow_down_rounded,
-                    label: 'تصويت',
-                    selected: post.downvoted,
-                    selectedColor: Colors.redAccent,
-                    onTap: _toggleDownvote,
-                  ),
-                  _PostActionPill(
-                    icon: Icons.chat_bubble_rounded,
-                    label: '${post.comments.length} تعليق',
-                    selected: false,
-                    selectedColor: const Color(0xFF0891B2),
-                    onTap: _openComments,
-                  ),
-                  _PostActionPill(
-                    icon: Icons.bookmark_border_rounded,
-                    label: 'حفظ',
-                    selected: false,
-                    selectedColor: const Color(0xFF2563EB),
-                    onTap: _showSavedMessage,
-                  ),
-                ],
+              _CommunityPostActionBar(
+                voteLabel: formatVotes(post.votes),
+                isUpvoted: post.upvoted,
+                commentLabel: '${post.comments.length} تعليق',
+                onVoteTap: _toggleUpvote,
+                onCommentTap: _openComments,
+                onSaveTap: _showSavedMessage,
+                onShareTap: _sharePost,
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CommunityPostActionBar extends StatelessWidget {
+  const _CommunityPostActionBar({
+    required this.voteLabel,
+    required this.isUpvoted,
+    required this.commentLabel,
+    required this.onVoteTap,
+    required this.onCommentTap,
+    required this.onSaveTap,
+    required this.onShareTap,
+  });
+
+  final String voteLabel;
+  final bool isUpvoted;
+  final String commentLabel;
+  final VoidCallback onVoteTap;
+  final VoidCallback onCommentTap;
+  final VoidCallback onSaveTap;
+  final VoidCallback onShareTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _PostActionPill(
+          icon: Icons.keyboard_arrow_up_rounded,
+          label: voteLabel,
+          selected: isUpvoted,
+          selectedColor: const Color(0xFF0F7C80),
+          onTap: onVoteTap,
+        ),
+        _PostActionPill(
+          icon: Icons.chat_bubble_outline_rounded,
+          label: commentLabel,
+          selected: false,
+          selectedColor: const Color(0xFF0F7C80),
+          onTap: onCommentTap,
+        ),
+        _PostActionPill(
+          icon: Icons.bookmark_border_rounded,
+          label: 'حفظ',
+          selected: false,
+          selectedColor: const Color(0xFF0F7C80),
+          onTap: onSaveTap,
+        ),
+        _PostActionPill(
+          icon: Icons.ios_share_rounded,
+          label: 'مشاركة',
+          selected: false,
+          selectedColor: const Color(0xFF0F7C80),
+          onTap: onShareTap,
+        ),
+      ],
     );
   }
 }
@@ -4146,30 +4161,44 @@ class _PostActionPill extends StatelessWidget {
     final theme = Theme.of(context);
     final color = selected ? selectedColor : const Color(0xFF64748B);
 
-    return Material(
-      color: selected
-          ? selectedColor.withValues(alpha: 0.12)
-          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.62),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      height: 40,
+      decoration: BoxDecoration(
+        color: selected
+            ? selectedColor.withValues(alpha: 0.13)
+            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.58),
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
+        border: Border.all(
+          color: selected
+              ? selectedColor.withValues(alpha: 0.30)
+              : const Color(0xFF0F7C80).withValues(alpha: 0.10),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 19, color: color),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
