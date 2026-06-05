@@ -1918,60 +1918,54 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                   final specialtyId =
                       settings.academicSpecialtyId.trim();
                   if (!settings.hasAcademicShortcut) {
-
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: theme.colorScheme.onSurface
-                                //.withValues(alpha: 0.4),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: theme.colorScheme.shadow
-                                  .withValues(alpha: 0.08),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
+                      child: _AcademicShortcutCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            const _AcademicShortcutHeader(),
+                            const SizedBox(height: 16),
                             Text(
-                              S.of(context).academicShortcutTitle,
-                              style: theme.textTheme.titleMedium?.copyWith(
+                              S.of(context).academicShortcutEmptyTitle,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              S.of(context).academicShortcutEmptyTitle,
+                              'اختر كليتك وتخصصك للوصول السريع إلى حساب المعدل والمواد.',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: theme.colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.78),
+                                height: 1.45,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Align(
-                              alignment: AlignmentDirectional.centerEnd,
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const AcademicSettingsScreen(),
-                                    ),
-                                  );
-                                },
-                                child: Text(
+                            const SizedBox(height: 18),
+                            _AcademicShortcutActions(
+                              primaryLabel:
                                   S.of(context).academicShortcutEmptyAction,
-                                ),
-                              ),
+                              primaryIcon: Icons.add_circle_outline_rounded,
+                              onPrimaryPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const AcademicSettingsScreen(),
+                                  ),
+                                );
+                              },
+                              secondaryLabel: S.of(context).quickCalc2,
+                              secondaryIcon: Icons.calculate_rounded,
+                              onSecondaryPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const QuickAverageScreen(),
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -2074,81 +2068,69 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           ),
                         );
                       },
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: theme.colorScheme.outlineVariant
-                                .withValues(alpha: 0.4),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  theme.colorScheme.shadow.withValues(alpha: 0.08),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
+                      child: _AcademicShortcutCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              S.of(context).academicShortcutTitle,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
+                            const _AcademicShortcutHeader(),
+                            const SizedBox(height: 16),
                             if (facultyName.isNotEmpty)
                               Text(
                                 facultyName,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color:
-                                      theme.colorScheme.onSurfaceVariant,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: theme.colorScheme.onSurface,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 6),
                             Text(
                               S.of(context).academicShortcutDetails(
                                 displaySpecialty,
                                 displayLevel,
                               ),
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: theme.colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.82),
+                                height: 1.45,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                OutlinedButton(
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const AcademicSettingsScreen(),
-                                      ),
-                                    );
-                                  },
-                                  child: Text(
-                                    S.of(context).academicShortcutEdit,
+                            const SizedBox(height: 18),
+                            _AcademicShortcutActions(
+                              primaryLabel: S.of(context).academicShortcutGo,
+                              primaryIcon: Icons.auto_stories_rounded,
+                              onPrimaryPressed: () => _openAcademicShortcut(
+                                context,
+                                settings,
+                              ),
+                              secondaryLabel: S.of(context).quickCalc2,
+                              secondaryIcon: Icons.calculate_rounded,
+                              onSecondaryPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const QuickAverageScreen(),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: () => _openAcademicShortcut(
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
                                     context,
-                                    settings,
-                                  ),
-                                  child: Text(
-                                    S.of(context).academicShortcutGo,
-                                  ),
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const AcademicSettingsScreen(),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.tune_rounded, size: 18),
+                                label: Text(
+                                  S.of(context).academicShortcutEdit,
                                 ),
-                              ],
+                              ),
                             ),
                           ],
                         ),
@@ -2160,29 +2142,6 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
             ),
 
             if (quickFaculty != null) ...[
-
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                sliver: SliverToBoxAdapter(child:
-                       Container(
-                         decoration: BoxDecoration(borderRadius: BorderRadius.circular(16),
-
-                             border: Border.all(color:Theme.of(context).colorScheme.onSurface
-                             )),
-                          child: TextButton(onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const QuickAverageScreen(),
-                              ),
-                            );
-                          },
-                              child: Text(S.of(context).quickCalc2)),
-                        )
-
-                ),
-              ),
-
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 sliver: SliverList(
@@ -2205,6 +2164,253 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
             SliverToBoxAdapter(child: SizedBox(height: widget.bottomPadding)),
           ],
         ));
+  }
+}
+
+class _AcademicShortcutCard extends StatelessWidget {
+  const _AcademicShortcutCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: LinearGradient(
+          colors: isDark
+              ? [
+                  theme.colorScheme.surfaceContainerHighest,
+                  theme.colorScheme.surface,
+                ]
+              : const [
+                  Color(0xFFFFFFFF),
+                  Color(0xFFEFFBFF),
+                ],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.withValues(alpha: isDark ? 0.18 : 0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: isDark ? 0.20 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _AcademicShortcutHeader extends StatelessWidget {
+  const _AcademicShortcutHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF13B8A6), Color(0xFF2563EB)],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF13B8A6).withValues(alpha: 0.24),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.school_rounded,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            S.of(context).academicShortcutTitle,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.1,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: const Color(0xFF13B8A6).withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: const Color(0xFF13B8A6).withValues(alpha: 0.18),
+            ),
+          ),
+          child: Text(
+            'جامعي',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: const Color(0xFF0F766E),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AcademicShortcutActions extends StatelessWidget {
+  const _AcademicShortcutActions({
+    required this.primaryLabel,
+    required this.primaryIcon,
+    required this.onPrimaryPressed,
+    required this.secondaryLabel,
+    required this.secondaryIcon,
+    required this.onSecondaryPressed,
+  });
+
+  final String primaryLabel;
+  final IconData primaryIcon;
+  final VoidCallback onPrimaryPressed;
+  final String secondaryLabel;
+  final IconData secondaryIcon;
+  final VoidCallback onSecondaryPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stackButtons = constraints.maxWidth < 330;
+        final primaryButton = _AcademicShortcutButton(
+          label: primaryLabel,
+          icon: primaryIcon,
+          onPressed: onPrimaryPressed,
+          primary: true,
+        );
+        final secondaryButton = _AcademicShortcutButton(
+          label: secondaryLabel,
+          icon: secondaryIcon,
+          onPressed: onSecondaryPressed,
+          primary: false,
+        );
+
+        if (stackButtons) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              primaryButton,
+              const SizedBox(height: 10),
+              secondaryButton,
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: primaryButton),
+            const SizedBox(width: 10),
+            Expanded(child: secondaryButton),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AcademicShortcutButton extends StatelessWidget {
+  const _AcademicShortcutButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    required this.primary,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final gradientColors = primary
+        ? const [Color(0xFF13B8A6), Color(0xFF2563EB)]
+        : const [Color(0xFF38BDF8), Color(0xFF10B981)];
+
+    return SizedBox(
+      height: 50,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(17),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(17),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(17),
+              gradient: LinearGradient(
+                colors: gradientColors,
+                begin: Alignment.centerRight,
+                end: Alignment.centerLeft,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: gradientColors.last.withValues(alpha: 0.24),
+                  blurRadius: 14,
+                  offset: const Offset(0, 7),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, color: Colors.white, size: 20),
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -2882,8 +3088,8 @@ class ModernUniSpaceBottomBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         child: Container(
-          height: 80,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          height: 76,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: isDark
                 ? theme.colorScheme.surfaceContainerHighest
@@ -2964,8 +3170,8 @@ class _ModernUniSpaceBottomTab extends StatelessWidget {
               AnimatedContainer(
                 duration: const Duration(milliseconds: 240),
                 curve: Curves.easeOutCubic,
-                width: isCenter ? 42 : 34,
-                height: isCenter ? 42 : 34,
+                width: isCenter ? 38 : 32,
+                height: isCenter ? 38 : 32,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: selected && isCenter
@@ -2992,20 +3198,20 @@ class _ModernUniSpaceBottomTab extends StatelessWidget {
                 ),
                 child: Icon(
                   item.icon,
-                  size: isCenter ? 23 : 20,
+                  size: isCenter ? 21 : 19,
                   color: selected && isCenter
                       ? Colors.white
                       : (selected ? activeColor : inactiveColor),
                 ),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOut,
                 style: theme.textTheme.labelSmall!.copyWith(
                   color: selected ? activeColor : inactiveColor,
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  fontSize: isCenter ? 12 : 11,
+                  fontSize: isCenter ? 11 : 10,
                 ),
                 child: Text(
                   item.label,
