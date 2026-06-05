@@ -2633,6 +2633,14 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
+  int _selectedIndex = 0;
+
+  late final List<Widget> _tabPages = const [
+    UnispaceScreen(),
+    ChatPage(),
+    CommunityScreen(),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -2737,7 +2745,278 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: _buildHomeAppBar(),
-      body: const UnispaceScreen(),
+      extendBody: true,
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _tabPages,
+      ),
+      bottomNavigationBar: ModernUniSpaceBottomBar(
+        selectedIndex: _selectedIndex,
+        onTabSelected: (index) {
+          if (index == _selectedIndex) return;
+          setState(() => _selectedIndex = index);
+        },
+      ),
+    );
+  }
+}
+
+class ChatPage extends StatelessWidget {
+  const ChatPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AppScaffold(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 110),
+      body: Center(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.teal.withValues(alpha: isDark ? 0.18 : 0.10),
+                blurRadius: 28,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF13B8A6), Color(0xFF10A37F)],
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.chat_bubble_rounded,
+                  color: Colors.white,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'المحادثات',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'صفحة المحادثات',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UniSpaceBottomTabItem {
+  const _UniSpaceBottomTabItem({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+}
+
+class ModernUniSpaceBottomBar extends StatelessWidget {
+  const ModernUniSpaceBottomBar({
+    super.key,
+    required this.selectedIndex,
+    required this.onTabSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onTabSelected;
+
+  static const List<_UniSpaceBottomTabItem> _items = [
+    _UniSpaceBottomTabItem(
+      label: 'الصفحة الرئيسية',
+      icon: Icons.home_rounded,
+      color: Color(0xFF2563EB),
+    ),
+    _UniSpaceBottomTabItem(
+      label: 'المحادثات',
+      icon: Icons.chat_bubble_rounded,
+      color: Color(0xFF10A37F),
+    ),
+    _UniSpaceBottomTabItem(
+      label: 'المجتمع',
+      icon: Icons.groups_rounded,
+      color: Color(0xFF8B5CF6),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Container(
+          height: 78,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.92)
+                : Colors.white.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.30),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.12),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Row(
+            children: List.generate(_items.length, (index) {
+              final item = _items[index];
+              return Expanded(
+                child: _ModernUniSpaceBottomTab(
+                  item: item,
+                  selected: selectedIndex == index,
+                  isCenter: index == 1,
+                  onTap: () => onTabSelected(index),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModernUniSpaceBottomTab extends StatelessWidget {
+  const _ModernUniSpaceBottomTab({
+    required this.item,
+    required this.selected,
+    required this.isCenter,
+    required this.onTap,
+  });
+
+  final _UniSpaceBottomTabItem item;
+  final bool selected;
+  final bool isCenter;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final activeColor = item.color;
+    final inactiveColor =
+        theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.68);
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected && !isCenter
+                ? activeColor.withValues(alpha: 0.10)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                width: isCenter ? 42 : 34,
+                height: isCenter ? 42 : 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: selected && isCenter
+                      ? const LinearGradient(
+                          colors: [Color(0xFF13B8A6), Color(0xFF10A37F)],
+                          begin: Alignment.topRight,
+                          end: Alignment.bottomLeft,
+                        )
+                      : null,
+                  color: selected && isCenter
+                      ? null
+                      : activeColor.withValues(
+                          alpha: selected ? 0.14 : 0.08,
+                        ),
+                  boxShadow: selected && isCenter
+                      ? [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: 0.30),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  item.icon,
+                  size: isCenter ? 23 : 20,
+                  color: selected && isCenter
+                      ? Colors.white
+                      : (selected ? activeColor : inactiveColor),
+                ),
+              ),
+              const SizedBox(height: 3),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                style: theme.textTheme.labelSmall!.copyWith(
+                  color: selected ? activeColor : inactiveColor,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: isCenter ? 12 : 11,
+                ),
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
