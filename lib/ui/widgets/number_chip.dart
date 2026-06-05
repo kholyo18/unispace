@@ -30,8 +30,8 @@ class NumberChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? theme.colorScheme.primary.withOpacity(.12)
-                : theme.colorScheme.surfaceVariant.withOpacity(.6),
+                ? theme.colorScheme.primary.withValues(alpha: .12)
+                : theme.colorScheme.surfaceVariant.withValues(alpha: .6),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Directionality(

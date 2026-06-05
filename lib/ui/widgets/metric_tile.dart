@@ -32,7 +32,7 @@ class MetricTile extends StatelessWidget {
             boxShadow: [
               if (theme.brightness == Brightness.light)
                 BoxShadow(
-                  color: theme.colorScheme.onSurface.withOpacity(.05),
+                  color: theme.colorScheme.onSurface.withValues(alpha: .05),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),

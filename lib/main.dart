@@ -377,8 +377,8 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                               ),
                               decoration: BoxDecoration(
                                 color: isVerified
-                                    ? Colors.green.withOpacity(0.2)
-                                    : Colors.orange.withOpacity(0.2),
+                                    ? Colors.green.withValues(alpha: 0.2)
+                                    : Colors.orange.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(999),
                                 border: Border.all(
                                   color: isVerified
@@ -1534,7 +1534,7 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: kUniSpaceBlue.withOpacity(0.1),
+                      color: kUniSpaceBlue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.lock_reset, color: kUniSpaceBlue),
@@ -1639,7 +1639,7 @@ class _BottomBar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return BottomAppBar(
-      color: scheme.background,
+      color: Theme.of(context).scaffoldBackgroundColor,
       height: 20,
       shape: const CircularNotchedRectangle(),
       notchMargin: 0,
@@ -1685,7 +1685,7 @@ class _BarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final Color c = selected ? Colors.white : scheme.onSurfaceVariant.withOpacity(0.3);
+    final Color c = selected ? Colors.white : scheme.onSurfaceVariant.withValues(alpha: 0.3);
 
     return InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -1962,7 +1962,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
                         blurRadius: 20,
                         offset: const Offset(4, 8),
                       ),
@@ -1984,7 +1984,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withOpacity(0.6)),
+                              .withValues(alpha: 0.6)),
                       border: InputBorder.none,
                       prefixIcon: Icon(Icons.search,
                           color: Theme.of(context).colorScheme.onSurface),
@@ -2011,12 +2011,12 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: theme.colorScheme.onSurface
-                                //.withOpacity(0.4),
+                                //.withValues(alpha: 0.4),
                           ),
                           boxShadow: [
                             BoxShadow(
                               color: theme.colorScheme.shadow
-                                  .withOpacity(0.08),
+                                  .withValues(alpha: 0.08),
                               blurRadius: 16,
                               offset: const Offset(0, 8),
                             ),
@@ -2164,12 +2164,12 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: theme.colorScheme.outlineVariant
-                                .withOpacity(0.4),
+                                .withValues(alpha: 0.4),
                           ),
                           boxShadow: [
                             BoxShadow(
                               color:
-                                  theme.colorScheme.shadow.withOpacity(0.08),
+                                  theme.colorScheme.shadow.withValues(alpha: 0.08),
                               blurRadius: 16,
                               offset: const Offset(0, 8),
                             ),
@@ -2317,7 +2317,7 @@ class _FacultyQuickCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.onSurface.withOpacity(.08),
+                color: theme.colorScheme.onSurface.withValues(alpha: .08),
                 blurRadius: 18,
                 offset: const Offset(0, 20),
               ),
@@ -2331,7 +2331,7 @@ class _FacultyQuickCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 15,
-                    backgroundColor: theme.colorScheme.primary.withOpacity(.2),
+                    backgroundColor: theme.colorScheme.primary.withValues(alpha: .2),
                     foregroundColor: theme.colorScheme.primary,
                     child: const Icon(Icons.apartment_outlined),
                   ),
@@ -2582,7 +2582,7 @@ class _NoteTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: kNoteYellow.withOpacity(
+      color: kNoteYellow.withValues(alpha:
           Theme.of(context).brightness == Brightness.dark ? .12 : .35),
       child: ListTile(
         title: Text(note.title,
@@ -3611,7 +3611,7 @@ class _PostCardState extends State<_PostCard> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: theme.colorScheme.onSurface.withOpacity(0.15)),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.15)),
         ),
         child: Row(
           children: [
@@ -3715,7 +3715,7 @@ class _PostCardState extends State<_PostCard> {
                       CircleAvatar(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor:
-                        theme.colorScheme.onPrimary.withOpacity(.5),
+                        theme.colorScheme.onPrimary.withValues(alpha: .5),
                         child: const Icon(Icons.person),
                       ),
                       const SizedBox(width: 12),
@@ -3732,7 +3732,7 @@ class _PostCardState extends State<_PostCard> {
                               post.timeAgo,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurface
-                                    .withOpacity(0.5),
+                                    .withValues(alpha: 0.5),
                               ),
                             ),
                           ],
@@ -4036,9 +4036,9 @@ class _PostCardState extends State<_PostCard> {
                                     borderRadius:
                                     BorderRadius.circular(20),
                                     splashColor:
-                                    Colors.teal.withOpacity(0.3),
+                                    Colors.teal.withValues(alpha: 0.3),
                                     highlightColor:
-                                    Colors.teal.withOpacity(0.15),
+                                    Colors.teal.withValues(alpha: 0.15),
                                     onTap: () {
                                       setState(() {
                                         if (post.upvoted) {
@@ -4099,9 +4099,9 @@ class _PostCardState extends State<_PostCard> {
                                     borderRadius:
                                     BorderRadius.circular(20),
                                     splashColor:
-                                    Colors.red.withOpacity(0.3),
+                                    Colors.red.withValues(alpha: 0.3),
                                     highlightColor:
-                                    Colors.red.withOpacity(0.15),
+                                    Colors.red.withValues(alpha: 0.15),
                                     onTap: () {
                                       setState(() {
                                         if (post.downvoted) {
@@ -4198,7 +4198,7 @@ class _PostCardState extends State<_PostCard> {
                                         BoxShadow(
                                           color: theme
                                               .colorScheme.onSurface
-                                              .withOpacity(0.2),
+                                              .withValues(alpha: 0.2),
                                           offset: const Offset(0, 10),
                                           blurRadius: 20,
                                           spreadRadius: 1,
@@ -4301,7 +4301,7 @@ class _MediaCarouselState extends State<_MediaCarousel> {
                 decoration: BoxDecoration(
                   color: _current == i
                       ? Colors.teal[900]
-                      : Colors.teal.shade900.withOpacity(0.4),
+                      : Colors.teal.shade900.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(4),
                 ),
               );
@@ -4868,7 +4868,7 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                               decoration: BoxDecoration(
                                 color: _currentImageIndex == i
                                     ? Colors.teal[900]
-                                    : Colors.teal.shade900.withOpacity(0.5),
+                                    : Colors.teal.shade900.withValues(alpha: 0.5),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
@@ -5281,7 +5281,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                 hintText: 'اكتب إجابتك هنا...',
                 hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 filled: true,
-                fillColor: Colors.teal.withOpacity(0.04),
+                fillColor: Colors.teal.withValues(alpha: 0.04),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.grey.shade300),
@@ -5309,10 +5309,10 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.teal.withOpacity(0.08),
+                      color: Colors.teal.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                          color: Colors.teal.withOpacity(0.3)),
+                          color: Colors.teal.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -5390,7 +5390,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                 hintText: 'اكتب إجابتك هنا...',
                 hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 filled: true,
-                fillColor: Colors.teal.withOpacity(0.04),
+                fillColor: Colors.teal.withValues(alpha: 0.04),
                 alignLabelWithHint: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -5430,10 +5430,10 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.teal.withOpacity(0.08),
+                      color: Colors.teal.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                          color: Colors.teal.withOpacity(0.3)),
+                          color: Colors.teal.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -5509,7 +5509,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                         horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: isChecked
-                          ? Colors.teal.withOpacity(0.07)
+                          ? Colors.teal.withValues(alpha: 0.07)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
@@ -5595,7 +5595,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                         horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? Colors.teal.withOpacity(0.07)
+                          ? Colors.teal.withValues(alpha: 0.07)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
@@ -5683,7 +5683,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                   borderSide: const BorderSide(color: Colors.teal, width: 1.5),
                 ),
                 filled: true,
-                fillColor: Colors.teal.withOpacity(0.04),
+                fillColor: Colors.teal.withValues(alpha: 0.04),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 14,
@@ -5730,9 +5730,9 @@ class _PollPostWidgetState extends State<PollPostWidget> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.08),
+                  color: Colors.teal.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                  border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -5808,11 +5808,11 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                       shape: BoxShape.circle,
                       color: isSelected
                           ? Colors.teal
-                          : Colors.teal.withOpacity(0.06),
+                          : Colors.teal.withValues(alpha: 0.06),
                       border: Border.all(
                         color: isSelected
                             ? Colors.teal
-                            : Colors.teal.withOpacity(0.25),
+                            : Colors.teal.withValues(alpha: 0.25),
                         width: isSelected ? 2 : 1,
                       ),
                     ),
@@ -5842,7 +5842,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                 padding:
                 const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.08),
+                  color: Colors.teal.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -5907,9 +5907,9 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                 overlayShape:
                 const RoundSliderOverlayShape(overlayRadius: 22),
                 activeTrackColor: Colors.teal,
-                inactiveTrackColor: Colors.teal.withOpacity(0.15),
+                inactiveTrackColor: Colors.teal.withValues(alpha: 0.15),
                 thumbColor: Colors.white,
-                overlayColor: Colors.teal.withOpacity(0.12),
+                overlayColor: Colors.teal.withValues(alpha: 0.12),
                 valueIndicatorColor: Colors.teal.shade700,
                 valueIndicatorShape:
                 const PaddleSliderValueIndicatorShape(),
@@ -5956,7 +5956,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                   color: Colors.teal,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.teal.withOpacity(0.3),
+                      color: Colors.teal.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -6000,12 +6000,12 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                         padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.teal.withOpacity(0.12)
+                              ? Colors.teal.withValues(alpha: 0.12)
                               : Colors.transparent,
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: isSelected
-                                ? Colors.teal.withOpacity(0.5)
+                                ? Colors.teal.withValues(alpha: 0.5)
                                 : Colors.transparent,
                             width: 1.5,
                           ),
@@ -6061,12 +6061,12 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.teal.withOpacity(0.12)
+                              ? Colors.teal.withValues(alpha: 0.12)
                               : Colors.transparent,
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: isSelected
-                                ? Colors.teal.withOpacity(0.5)
+                                ? Colors.teal.withValues(alpha: 0.5)
                                 : Colors.transparent,
                             width: 1.5,
                           ),
@@ -6137,7 +6137,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                   width: (poll.gridColumns.length + 1) * 110.0,
                   child: DataTable(
                     columnSpacing: 24,
-                    headingRowColor: MaterialStateProperty.all(
+                    headingRowColor: WidgetStateProperty.all(
                       Theme.of(context).colorScheme.surfaceVariant,
                     ),
                     columns: [
@@ -6181,7 +6181,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: isSelected
-                                          ? Colors.teal.withOpacity(0.10)
+                                          ? Colors.teal.withValues(alpha: 0.10)
                                           : Colors.transparent,
                                       border: Border.all(
                                         color: isSelected
@@ -6189,7 +6189,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                                             : Theme.of(context)
                                             .colorScheme
                                             .outline
-                                            .withOpacity(0.6),
+                                            .withValues(alpha: 0.6),
                                         width: isSelected ? 2.2 : 1.5,
                                       ),
                                     ),
@@ -6243,7 +6243,7 @@ class _PollPostWidgetState extends State<PollPostWidget> {
                       columnSpacing: 0,
                       headingRowHeight: 44,
                       dataRowHeight: 52,
-                      headingRowColor: MaterialStateProperty.all(
+                      headingRowColor: WidgetStateProperty.all(
                         Theme.of(context).colorScheme.surfaceVariant,
                       ),
                       columns: [
@@ -6449,9 +6449,9 @@ class _PollPostWidgetState extends State<PollPostWidget> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           decoration: BoxDecoration(
-            //color: Colors.teal.withOpacity(0.08),
+            //color: Colors.teal.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.teal.withOpacity(0.3)),
+            border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
           ),
           child: Text(
             selected != null
@@ -6740,12 +6740,12 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
             margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
             decoration: BoxDecoration(
               color: isPressed
-                  ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.2)
                   : Theme.of(context).colorScheme.surface,
               border: Border.all(
                 color: isPressed
                     ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
                 width: 1.5,
               ),
               borderRadius: BorderRadius.circular(12),
@@ -6833,7 +6833,7 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.25),
+                    color: Colors.black.withValues(alpha: 0.25),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -7373,7 +7373,7 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
                                 margin: const EdgeInsets.symmetric(horizontal: 6),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: isSelected ? Colors.blue.withOpacity(0.2) : Colors.transparent,
+                                  color: isSelected ? Colors.blue.withValues(alpha: 0.2) : Colors.transparent,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: AnimatedScale(
@@ -7418,7 +7418,7 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
                                 margin: const EdgeInsets.symmetric(horizontal: 6),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: isSelected ? Colors.blue.withOpacity(0.2) : Colors.transparent,
+                                  color: isSelected ? Colors.blue.withValues(alpha: 0.2) : Colors.transparent,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: AnimatedScale(
@@ -7493,7 +7493,7 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
                         backgroundColor: Theme.of(context)
                             .colorScheme
                             .surface
-                            .withOpacity(0.8), // لون الزر
+                            .withValues(alpha: 0.8), // لون الزر
                         foregroundColor: Theme.of(context)
                             .colorScheme
                             .onSurface, // لون النص والأيقونة
@@ -7630,7 +7630,7 @@ Text('Style :'),SizedBox(height: 8,),
               5,
                   (i) => CircleAvatar(
                 radius: 16,
-                backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
                 child: Text('${i + 1}'),
               ),
             ),
@@ -7750,7 +7750,7 @@ class _ScaleOptionCard extends StatelessWidget {
       child: Card(
         elevation: selected ? 4 : 1,
         color: selected
-            ? theme.colorScheme.primary.withOpacity(0.1)
+            ? theme.colorScheme.primary.withValues(alpha: 0.1)
             : theme.cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
@@ -8035,7 +8035,7 @@ class _PollCheckboxWidgetState extends State<PollCheckboxWidget> {
               end: Alignment.bottomCenter,
               colors: [
                 Colors.transparent,
-                Colors.black.withOpacity(0.0), // تأثير شفاف في الأسفل
+                Colors.black.withValues(alpha: 0.0), // تأثير شفاف في الأسفل
               ],
             ),
           ),
@@ -8183,7 +8183,7 @@ class _PollMultipleChoiceWidgetState extends State<PollMultipleChoiceWidget> {
               end: Alignment.bottomCenter,
               colors: [
                 Colors.transparent,
-                Colors.black.withOpacity(0.0), // تلميح بصري لوجود خيارات إضافية
+                Colors.black.withValues(alpha: 0.0), // تلميح بصري لوجود خيارات إضافية
               ],
             ),
           ),
@@ -8211,7 +8211,7 @@ class _PollMultipleChoiceWidgetState extends State<PollMultipleChoiceWidget> {
                           color: isSelected ? Colors.teal.shade900 : Colors.grey.shade400,
                           width: 2,
                         ),
-                        color: isSelected ? Colors.blue.withOpacity(0.0) : Colors.transparent,
+                        color: isSelected ? Colors.blue.withValues(alpha: 0.0) : Colors.transparent,
                       ),
                       child: Center(
                         child: AnimatedContainer(
@@ -8448,7 +8448,7 @@ class _PollGridWidgetState extends State<PollGridWidget> {
                     width: (_columns.length + 1) * 110,
                     child: DataTable(
                       columnSpacing: 24,
-                      headingRowColor: MaterialStateProperty.all(
+                      headingRowColor: WidgetStateProperty.all(
                         colorScheme.surfaceVariant,
                       ),
                       columns: [
@@ -8493,18 +8493,18 @@ class _PollGridWidgetState extends State<PollGridWidget> {
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         color: isSelected
-                                            ? Colors.teal.withOpacity(0.10)
+                                            ? Colors.teal.withValues(alpha: 0.10)
                                             : Colors.transparent,
                                         border: Border.all(
                                           color: isSelected
                                               ? Colors.teal.shade900
-                                              : colorScheme.outline.withOpacity(0.6),
+                                              : colorScheme.outline.withValues(alpha: 0.6),
                                           width: isSelected ? 2.2 : 1.5,
                                         ),
                                         // boxShadow: isSelected
                                         //     ? [
                                         //   BoxShadow(
-                                        //     color: Colors.teal.withOpacity(0.25),
+                                        //     color: Colors.teal.withValues(alpha: 0.25),
                                         //     blurRadius: 6,
                                         //     spreadRadius: 1,
                                         //   ),
@@ -8746,7 +8746,7 @@ class _PollCheckboxGridWidgetState extends State<PollCheckboxGridWidget> {
                         headingRowHeight: 44,
                         dataRowHeight: 52,
                         headingRowColor:
-                        MaterialStateProperty.all(colorScheme.surfaceVariant),
+                        WidgetStateProperty.all(colorScheme.surfaceVariant),
                         columns: [
                           DataColumn(
                             label: SizedBox(
@@ -9912,17 +9912,17 @@ class _CommentsScreenState extends State<CommentsScreen> {
                             border: Border(
                                 bottom: BorderSide(
                                   color: Colors.grey
-                                      .withOpacity(0.5), // border color
+                                      .withValues(alpha: 0.5), // border color
                                   width: 2,
                                 ),
                                 left: BorderSide(
                                   color: Colors.grey
-                                      .withOpacity(0.5), // border color
+                                      .withValues(alpha: 0.5), // border color
                                   width: 2,
                                 ),
                                 top: BorderSide(
                                   color: Colors.grey
-                                      .withOpacity(0.5), // border color
+                                      .withValues(alpha: 0.5), // border color
                                   width: 2,
                                 )),
                             borderRadius: BorderRadius.circular(
@@ -9980,7 +9980,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                           top: BorderSide(
                             width: 2,
                             color:
-                                Theme.of(context).dividerColor.withOpacity(0.5),
+                                Theme.of(context).dividerColor.withValues(alpha: 0.5),
                           ),
                         ),
                       ),
@@ -10025,7 +10025,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                       color: Theme.of(context).cardColor,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha: 0.06),
                           blurRadius: 6,
                         ),
                       ],
@@ -10231,7 +10231,7 @@ class _CommentTileState extends State<CommentTile> {
               borderRadius: BorderRadius.circular(0),
               // boxShadow: [
               //   BoxShadow(
-              //     color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
+              //     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
               //     blurRadius: 0,
               //     offset: const Offset(0, 2),
               //   ),
@@ -10247,7 +10247,7 @@ class _CommentTileState extends State<CommentTile> {
                     CircleAvatar(
                       radius: 12,
                       backgroundColor:
-                          theme.colorScheme.primary.withOpacity(0.2),
+                          theme.colorScheme.primary.withValues(alpha: 0.2),
                       child: const Icon(Icons.person, size: 14),
                     ),
                     const SizedBox(width: 6),
@@ -10425,7 +10425,7 @@ class ReplyTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border(
             left: BorderSide(
-              color: theme.dividerColor.withOpacity(0.35),
+              color: theme.dividerColor.withValues(alpha: 0.35),
               width: 1.5,
             ),
           ),
@@ -10722,7 +10722,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [
-                              theme.colorScheme.surface.withOpacity(0.85),
+                              theme.colorScheme.surface.withValues(alpha: 0.85),
                               Colors.transparent,
                             ],
                           ),
@@ -11672,7 +11672,7 @@ class _QuickCalcDismissibleItemState extends State<_QuickCalcDismissibleItem> {
     final ambientDirection = Directionality.of(context);
     final eased = Curves.easeOut.transform(_progress);
     final backgroundColor = Color.lerp(
-      Colors.red.withOpacity(0.08),
+      Colors.red.withValues(alpha: 0.08),
       Colors.red.shade600,
       eased,
     )!;
@@ -11684,7 +11684,7 @@ class _QuickCalcDismissibleItemState extends State<_QuickCalcDismissibleItem> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              backgroundColor.withOpacity(0.9),
+              backgroundColor.withValues(alpha: 0.9),
               backgroundColor,
             ],
             begin: Alignment.centerLeft,
@@ -12454,7 +12454,7 @@ class FacultiesScreen extends StatelessWidget {
           return Card(
             margin: EdgeInsets.zero,
             color: theme.colorScheme.surfaceVariant
-                .withOpacity(theme.brightness == Brightness.dark ? .35 : .6),
+                .withValues(alpha: theme.brightness == Brightness.dark ? .35 : .6),
             child: InkWell(
               borderRadius: BorderRadius.circular(18),
               onTap: () {
@@ -12467,7 +12467,7 @@ class FacultiesScreen extends StatelessWidget {
               child: ListTile(
                 leading: CircleAvatar(
                   radius: 24,
-                  backgroundColor: theme.colorScheme.primary.withOpacity(.12),
+                  backgroundColor: theme.colorScheme.primary.withValues(alpha: .12),
                   foregroundColor: theme.colorScheme.primary,
                   child: const Icon(Icons.apartment_rounded),
                 ),
@@ -12588,7 +12588,7 @@ class MajorTracksScreen extends StatelessWidget {
                             color: Theme.of(context)
                                 .colorScheme
                                 .outline
-                                .withOpacity(.4),
+                                .withValues(alpha: .4),
                           ),
                         ),
                         child: ListTile(
@@ -13732,8 +13732,8 @@ class _NoteCardState extends State<NoteCard> {
           color: moy == 0
               ? Theme.of(context).colorScheme.onSurface
               : moy < 10
-              ? Colors.red.withOpacity(0.7)
-              : Colors.green.withOpacity(0.7),
+              ? Colors.red.withValues(alpha: 0.7)
+              : Colors.green.withValues(alpha: 0.7),
         ),
 
       ),
@@ -13878,8 +13878,8 @@ class _NoteCardState extends State<NoteCard> {
             color: moy == 0
                 ? Theme.of(context).colorScheme.onSurface
                 : moy < 10
-                ? Colors.red.withOpacity(0.7)
-                : Colors.green.withOpacity(0.7),),
+                ? Colors.red.withValues(alpha: 0.7)
+                : Colors.green.withValues(alpha: 0.7),),
 
           Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -14423,7 +14423,7 @@ class ResultsScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 color: ann == 0
                     ? Theme.of(context).colorScheme.surface
-                    : decisionColor.withOpacity(0.10),
+                    : decisionColor.withValues(alpha: 0.10),
                 border: Border.all(
                   color: ann == 0
                       ? Theme.of(context).colorScheme.outline
@@ -14609,7 +14609,7 @@ class ResultsScreen extends StatelessWidget {
     final scheme = Theme.of(ctx).colorScheme;
 
     final Color color = moy == 0
-        ? scheme.onSurface.withOpacity(0.6)
+        ? scheme.onSurface.withValues(alpha: 0.6)
         : (moy < 10 ? Colors.red : Colors.green);
 
     return Row(
@@ -14683,7 +14683,7 @@ class ResultsScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             S.of(context).noSubjectsThisSemester,
-            style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
+            style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
           ),
         ],
       );

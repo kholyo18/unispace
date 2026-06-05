@@ -38,7 +38,7 @@ class InfoCard extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
           decoration: BoxDecoration(
-            color: backgroundColor ?? theme.colorScheme.primaryContainer.withOpacity(.6),
+            color: backgroundColor ?? theme.colorScheme.primaryContainer.withValues(alpha: .6),
             borderRadius: BorderRadius.circular(20),
           ),
           padding: const EdgeInsets.all(20),

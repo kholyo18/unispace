@@ -141,7 +141,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
                   center: Alignment.topRight,
                   radius: 1.4,
                   colors: [
-                    scheme.primary.withOpacity(0.08),
+                    scheme.primary.withValues(alpha: 0.08),
                     scheme.surface,
                   ],
                 ),
@@ -285,7 +285,7 @@ class _SmartReviewPlanPageState extends State<SmartReviewPlanPage> {
                             if (_plan == null)
                               Card(
                                 elevation: 0,
-                                color: scheme.surfaceVariant.withOpacity(0.6),
+                                color: scheme.surfaceVariant.withValues(alpha: 0.6),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                   side: BorderSide(color: scheme.outlineVariant),
@@ -380,7 +380,7 @@ class _HeroHeaderCard extends StatelessWidget {
     final t = S.of(context);
     return Card(
       elevation: 1,
-      shadowColor: scheme.shadow.withOpacity(0.1),
+      shadowColor: scheme.shadow.withValues(alpha: 0.1),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
@@ -393,7 +393,7 @@ class _HeroHeaderCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              scheme.primaryContainer.withOpacity(0.7),
+              scheme.primaryContainer.withValues(alpha: 0.7),
               scheme.surface,
             ],
           ),
@@ -404,7 +404,7 @@ class _HeroHeaderCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: scheme.primary.withOpacity(0.15),
+                color: scheme.primary.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -458,7 +458,7 @@ class _InfoChip extends StatelessWidget {
     return Chip(
       avatar: Icon(icon, size: 16, color: scheme.primary),
       label: Text(label, style: textStyle),
-      backgroundColor: scheme.surfaceVariant.withOpacity(0.6),
+      backgroundColor: scheme.surfaceVariant.withValues(alpha: 0.6),
       side: BorderSide(color: scheme.outlineVariant),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     );
@@ -490,7 +490,7 @@ class _PreviewCard extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: scheme.primary.withOpacity(0.1),
+            color: scheme.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: scheme.primary),
@@ -561,7 +561,7 @@ class _EmptyStateCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: scheme.surfaceVariant.withOpacity(0.5),
+      color: scheme.surfaceVariant.withValues(alpha: 0.5),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: scheme.outlineVariant),
@@ -615,7 +615,7 @@ class _PlanRangeCard extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: scheme.primary.withOpacity(0.1),
+            color: scheme.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(Icons.calendar_today_outlined, color: scheme.primary),
@@ -662,7 +662,7 @@ class _PlanDayCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: scheme.primary.withOpacity(0.08),
+                      color: scheme.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(task.icon, size: 18, color: scheme.primary),

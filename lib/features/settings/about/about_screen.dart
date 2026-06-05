@@ -132,7 +132,7 @@ class _HeaderSection extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 42,
-          backgroundColor: colorScheme.primary.withOpacity(0.08),
+          backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
           child: SvgPicture.asset(
             'assets/brand/logo-mark.svg',
             height: 48,
@@ -172,7 +172,7 @@ class _InfoCard extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.4),
+      color: Theme.of(context).colorScheme.surfaceVariant.withValues(alpha: 0.4),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: child,
