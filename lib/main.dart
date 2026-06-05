@@ -13151,88 +13151,90 @@ class _TrackSpecialtyCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         splashColor: MajorTracksScreen._primaryColor.withValues(alpha: .08),
         highlightColor: MajorTracksScreen._primaryColor.withValues(alpha: .04),
-        child: Ink(
+        child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 60),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark
-                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: .78)
-                : Colors.white.withValues(alpha: .96),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: (isDark ? Colors.white : MajorTracksScreen._primaryColor)
-                  .withValues(alpha: isDark ? .08 : .11),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? .18 : .045),
-                blurRadius: 14,
-                offset: const Offset(0, 8),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: .78)
+                  : Colors.white.withValues(alpha: .96),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: (isDark ? Colors.white : MajorTracksScreen._primaryColor)
+                    .withValues(alpha: isDark ? .08 : .11),
               ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                    colors: [
-                      MajorTracksScreen._primaryColor,
-                      MajorTracksScreen._blueColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? .18 : .045),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                      colors: [
+                        MajorTracksScreen._primaryColor,
+                        MajorTracksScreen._blueColor,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: MajorTracksScreen._primaryColor.withValues(alpha: .18),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: MajorTracksScreen._primaryColor.withValues(alpha: .18),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
+                  child: Icon(
+                    icon,
+                    size: 22,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    track.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w800,
+                      height: 1.25,
                     ),
-                  ],
-                ),
-                child: Icon(
-                  icon,
-                  size: 22,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  track.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                    height: 1.25,
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? MajorTracksScreen._primaryColor.withValues(alpha: .14)
-                      : MajorTracksScreen._lightBackgroundColor,
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(
-                    color: MajorTracksScreen._primaryColor.withValues(alpha: .12),
+                const SizedBox(width: 10),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? MajorTracksScreen._primaryColor.withValues(alpha: .14)
+                        : MajorTracksScreen._lightBackgroundColor,
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: MajorTracksScreen._primaryColor.withValues(alpha: .12),
+                    ),
+                  ),
+                  child: Icon(
+                    isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                    size: 24,
+                    color: MajorTracksScreen._primaryColor,
                   ),
                 ),
-                child: Icon(
-                  isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-                  size: 24,
-                  color: MajorTracksScreen._primaryColor,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
