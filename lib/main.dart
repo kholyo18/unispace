@@ -10351,264 +10351,135 @@ class CommentsScreen extends StatefulWidget {
 class _CommentsScreenState extends State<CommentsScreen> {
   final TextEditingController _commentController = TextEditingController();
   _Comment? _replyTo;
+
+  static const Color _primaryTeal = Color(0xFF0F7C80);
+  static const Color _primaryBlue = Color(0xFF1565C0);
+  static const Color _lightCyan = Color(0xFFEAF7F8);
+  static const Color _textDark = Color(0xFF1F2937);
+  static const Color _mutedText = Color(0xFF64748B);
+
   static String _timeAgo(DateTime dt) {
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
-    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w';
-    if (diff.inDays < 365) return '${(diff.inDays / 30).floor()}mo';
-    return '${(diff.inDays / 365).floor()}y';
+    if (diff.inSeconds < 60) return 'منذ ${diff.inSeconds}ث';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes}د';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours}س';
+    if (diff.inDays < 7) return 'منذ ${diff.inDays}ي';
+    if (diff.inDays < 30) return 'منذ ${(diff.inDays / 7).floor()}أ';
+    if (diff.inDays < 365) return 'منذ ${(diff.inDays / 30).floor()}ش';
+    return 'منذ ${(diff.inDays / 365).floor()}سنة';
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Directionality(
-        textDirection: TextDirection.ltr, // 🔒 قفل الاتجاه نهائيًا
-        child: Scaffold(
-          resizeToAvoidBottomInset: true,
-          appBar: AppBar(
-            title: const Text('Comments'),
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        backgroundColor: const Color(0xFFF7FBFC),
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          backgroundColor: const Color(0xFFF7FBFC),
+          centerTitle: true,
+          title: const Text(
+            'التعليقات',
+            style: TextStyle(
+              color: _textDark,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          body: CustomScrollView(
-            slivers: [
-              // =======================
-              // المنشور (يتحرك مع التمرير)
-              // =======================
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 1,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.post.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            widget.post.body,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          const SizedBox(height: 6),
-                          if (widget.post.imagePaths.isNotEmpty)
-                            PostImagesSlider(images: widget.post.imagePaths),
-                          const SizedBox(height: 12),
-                          Text(
-                            'طالب UniSpace • ${_timeAgo(widget.post.createdAt)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
+          leadingWidth: 58,
+          leading: Padding(
+            padding: const EdgeInsetsDirectional.only(start: 12),
+            child: Center(
+              child: InkWell(
+                onTap: () => Navigator.maybePop(context),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _primaryTeal.withValues(alpha: 0.10)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.045),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
                       ),
-                    ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 17,
+                    color: _textDark,
                   ),
                 ),
               ),
-
-              // =======================
-              // قائمة التعليقات (Scrollable طبيعي)
-              // =======================
-              SliverList(
+            ),
+          ),
+        ),
+        body: CustomScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          slivers: [
+            SliverToBoxAdapter(
+              child: _PostPreviewCard(
+                post: widget.post,
+                timeAgo: _timeAgo(widget.post.createdAt),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final comment = widget.post.comments[index];
-
                     return Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 20, 12, 20),
-                      child: Container(
-                          decoration: BoxDecoration(
-                            color:
-                                Theme.of(context).cardColor, // background color
-                            border: Border(
-                                bottom: BorderSide(
-                                  color: Colors.grey
-                                      .withValues(alpha: 0.5), // border color
-                                  width: 2,
-                                ),
-                                left: BorderSide(
-                                  color: Colors.grey
-                                      .withValues(alpha: 0.5), // border color
-                                  width: 2,
-                                ),
-                                top: BorderSide(
-                                  color: Colors.grey
-                                      .withValues(alpha: 0.5), // border color
-                                  width: 2,
-                                )),
-                            borderRadius: BorderRadius.circular(
-                                10), // optional rounded corners
-                          ),
-                          child: CommentTile(
-                            key: ValueKey(comment.id),
-                            comment: comment,
-                            depth: 0,
-                            onReply: (_Comment c) {
-                              setState(() {
-                                _replyTo = c;
-                                _commentController.text = '';
-                              });
-                            },
-                          )),
+                      padding: EdgeInsets.only(
+                        bottom: index == widget.post.comments.length - 1 ? 0 : 10,
+                      ),
+                      child: CommentTile(
+                        key: ValueKey(comment.id),
+                        comment: comment,
+                        depth: 0,
+                        onReply: (_Comment c) {
+                          setState(() {
+                            _replyTo = c;
+                            _commentController.clear();
+                          });
+                        },
+                      ),
                     );
                   },
                   childCount: widget.post.comments.length,
                 ),
               ),
-
-              // مسافة أسفل حتى لا يغطي حقل الإدخال
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 100),
-              ),
-            ],
-          ),
-
-          // =======================
-          // حقل كتابة التعليق (ثابت)
-          // =======================
-          bottomNavigationBar: SafeArea(
-            child: AnimatedPadding(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // =======================
-                  // شريط "الرد على"
-                  // =======================
-                  if (_replyTo != null)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border(
-                          top: BorderSide(
-                            width: 2,
-                            color:
-                                Theme.of(context).dividerColor.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: RichText(
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              text: TextSpan(
-                                style: Theme.of(context).textTheme.bodySmall,
-                                children: [
-                                  TextSpan(
-                                    text: 'رد على ${_replyTo!.author} : \n',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15),
-                                  ),
-                                  TextSpan(text: '     ${_replyTo!.text}'),
-                                ],
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, size: 20),
-                            onPressed: () {
-                              setState(() {
-                                _replyTo = null;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // =======================
-                  // صندوق كتابة التعليق
-                  // =======================
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.06),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minHeight: 40,
-                              maxHeight: 120, // ✅ ارتفاع ثابت أقصى
-                            ),
-                            child: Scrollbar(
-                              child: TextField(
-                                controller: _commentController,
-                                keyboardType: TextInputType.multiline,
-                                textInputAction: TextInputAction.newline,
-                                maxLines: null,
-                                minLines: 1,
-                                textAlignVertical: TextAlignVertical.top,
-                                decoration: InputDecoration(
-                                  hintText: _replyTo == null
-                                      ? 'Add a comment...'
-                                      : 'الرد على ${_replyTo!.author}',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.send),
-                          onPressed: _submitComment,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 116)),
+          ],
+        ),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: _CommentComposer(
+              controller: _commentController,
+              replyTo: _replyTo,
+              onCancelReply: () => setState(() => _replyTo = null),
+              onSubmit: _submitComment,
             ),
           ),
-        ));
+        ),
+      ),
+    );
   }
 
-  // =======================
-  // إضافة تعليق / رد
-  // =======================
   void _submitComment() {
     final txt = _commentController.text.trim();
     if (txt.isEmpty) return;
@@ -10634,6 +10505,278 @@ class _CommentsScreenState extends State<CommentsScreen> {
   }
 }
 
+class _PostPreviewCard extends StatelessWidget {
+  final _Post post;
+  final String timeAgo;
+
+  const _PostPreviewCard({required this.post, required this.timeAgo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.10)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.045),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: _CommentsScreenState._lightCyan,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(
+                  Icons.article_rounded,
+                  size: 16,
+                  color: _CommentsScreenState._primaryTeal,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  post.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _CommentsScreenState._textDark,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            post.body,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: _CommentsScreenState._textDark,
+              fontSize: 13.2,
+              height: 1.35,
+            ),
+          ),
+          if (post.imagePaths.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: SizedBox(
+                height: 156,
+                child: PostImagesSlider(images: post.imagePaths),
+              ),
+            ),
+          ],
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              const Icon(
+                Icons.school_rounded,
+                size: 14,
+                color: _CommentsScreenState._mutedText,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'طالب UniSpace • $timeAgo',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: _CommentsScreenState._mutedText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentComposer extends StatelessWidget {
+  final TextEditingController controller;
+  final _Comment? replyTo;
+  final VoidCallback onCancelReply;
+  final VoidCallback onSubmit;
+
+  const _CommentComposer({
+    required this.controller,
+    required this.replyTo,
+    required this.onCancelReply,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.08))),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 18,
+            offset: const Offset(0, -6),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (replyTo != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: _CommentsScreenState._lightCyan,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.14)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 3,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: _CommentsScreenState._primaryTeal,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              const TextSpan(text: 'رد على: '),
+                              TextSpan(
+                                text: replyTo!.author,
+                                style: const TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _CommentsScreenState._primaryTeal,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          replyTo!.text,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _CommentsScreenState._mutedText,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    onTap: onCancelReply,
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close_rounded, size: 17, color: _CommentsScreenState._mutedText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 46, maxHeight: 96),
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    maxLines: null,
+                    minLines: 1,
+                    textAlignVertical: TextAlignVertical.center,
+                    decoration: InputDecoration(
+                      hintText: replyTo == null ? 'أضف تعليقًا...' : 'اكتب ردك...',
+                      hintStyle: const TextStyle(color: _CommentsScreenState._mutedText, fontSize: 13),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FBFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide(color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.12)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide(color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.12)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: const BorderSide(color: _CommentsScreenState._primaryTeal, width: 1.2),
+                      ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                    style: const TextStyle(fontSize: 13.5, color: _CommentsScreenState._textDark, height: 1.25),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: onSubmit,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [_CommentsScreenState._primaryTeal, _CommentsScreenState._primaryBlue],
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.22),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.send_rounded, size: 19, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ==================== Comment Tile ====================
 
 class CommentTile extends StatefulWidget {
@@ -10654,14 +10797,9 @@ class CommentTile extends StatefulWidget {
 }
 
 class _CommentTileState extends State<CommentTile> {
-  static const double indent = 16.0;
-  static const double lineWidth = 1.1;
-
   bool _collapsed = false;
-  bool _isArabic(String text) {
-    final arabicRegex = RegExp(r'[\u0600-\u06FF]');
-    return arabicRegex.hasMatch(text);
-  }
+
+  bool get _isReply => widget.depth > 0;
 
   void _upvote() {
     setState(() {
@@ -10698,38 +10836,44 @@ class _CommentTileState extends State<CommentTile> {
   void _showMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.flag_outlined),
-              title: Text(S.of(context).report),
-              onTap: () => Navigator.pop(context),
+      backgroundColor: Colors.transparent,
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.10)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.report_gmailerrorred),
-              title: Text(S.of(context).blockAccount),
-              onTap: () => Navigator.pop(context),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _CommentMenuAction(
+                  icon: Icons.copy_rounded,
+                  label: 'نسخ النص',
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: widget.comment.text));
+                    Navigator.pop(context);
+                  },
+                ),
+                _CommentMenuAction(
+                  icon: Icons.flag_outlined,
+                  label: 'تبليغ',
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.follow_the_signs_sharp),
-              title: Text(S.of(context).followComment),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: Text(S.of(context).copyText),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: Text(S.of(context).share),
-              onTap: () => Navigator.pop(context),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -10737,139 +10881,377 @@ class _CommentTileState extends State<CommentTile> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    //final hasReplies = widget.comment.replies.isNotEmpty;
+    final hasReplies = widget.comment.replies.isNotEmpty;
+    final radius = _isReply ? 16.0 : 18.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () {
-            // عند الضغط على التعليق الرئيسي، يتم فتح أو غلق الردود
-            if (widget.comment.replies.isNotEmpty) {
-              setState(() {
-                _collapsed = !_collapsed;
-              });
-            }
-          },
+        InkWell(
+          onTap: hasReplies ? () => setState(() => _collapsed = !_collapsed) : null,
+          borderRadius: BorderRadius.circular(radius),
           child: Container(
+            padding: EdgeInsets.all(_isReply ? 11 : 13),
             decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(0),
-              // boxShadow: [
-              //   BoxShadow(
-              //     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
-              //     blurRadius: 0,
-              //     offset: const Offset(0, 2),
-              //   ),
-              //],
+              color: _isReply ? const Color(0xFFFCFEFF) : Colors.white,
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: _isReply
+                    ? _CommentsScreenState._primaryBlue.withValues(alpha: 0.08)
+                    : _CommentsScreenState._primaryTeal.withValues(alpha: 0.10),
+              ),
+              boxShadow: _isReply
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.035),
+                        blurRadius: 14,
+                        offset: const Offset(0, 7),
+                      ),
+                    ],
             ),
-            padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor:
-                          theme.colorScheme.primary.withValues(alpha: 0.2),
-                      child: const Icon(Icons.person, size: 14),
+                    _CommentAvatar(isReply: _isReply),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  widget.comment.author == 'you' ? 'أنت' : widget.comment.author,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: _CommentsScreenState._textDark,
+                                    fontSize: _isReply ? 12.5 : 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                '• ${widget.comment.timeAgo}',
+                                style: TextStyle(
+                                  color: _CommentsScreenState._mutedText,
+                                  fontSize: _isReply ? 10.8 : 11.2,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (widget.comment.replyToAuthor != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                'رد على ${widget.comment.replyToAuthor}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _CommentsScreenState._primaryTeal,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 6),
-                    // النص الذي يظهر اسم الكاتب أو الرد
-                    Text(
-                      widget.comment.replyToAuthor != null
-                          ? '${widget.comment.author} '
-                          //'→ ${widget.comment.replyToAuthor}'
-                          : widget.comment.author,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-
-                    const SizedBox(width: 6),
-                    Text(
-                      widget.comment.timeAgo,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: Colors.grey),
-                    ),
-                    const Spacer(),
-                    // زر الثلاث نقاط
-                    IconButton(
-                      icon: const Icon(Icons.more_vert, size: 18),
-                      onPressed: () => _showMenu(context),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
+                    _MoreButton(onTap: () => _showMenu(context)),
                   ],
                 ),
-
-                const SizedBox(height: 0),
-
-                // النص
+                const SizedBox(height: 8),
                 ExpandableText(
                   text: widget.comment.text,
+                  style: TextStyle(
+                    color: _CommentsScreenState._textDark,
+                    fontSize: _isReply ? 12.8 : 13.5,
+                    height: 1.35,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
-
-                // const SizedBox(height: 6),
-
-                // Actions
+                const SizedBox(height: 8),
                 Row(
-                  textDirection: TextDirection.rtl,
-                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
-                    // Upvote
-                    IconButton(
-                      icon: Icon(
-                        Icons.arrow_upward,
-                        size: 18,
-                        color:
-                            widget.comment.upvoted ? Colors.teal : Colors.grey,
+                    _ReplyAction(onTap: () => widget.onReply(widget.comment)),
+                    const SizedBox(width: 8),
+                    _VotePill(
+                      votes: widget.comment.votes,
+                      upvoted: widget.comment.upvoted,
+                      downvoted: widget.comment.downvoted,
+                      onUpvote: _upvote,
+                      onDownvote: _downvote,
+                    ),
+                    if (hasReplies) ...[
+                      const SizedBox(width: 8),
+                      _RepliesToggle(
+                        count: widget.comment.replies.length,
+                        collapsed: _collapsed,
                       ),
-                      onPressed: _upvote,
-                    ),
-
-                    Text(
-                      widget.comment.votes.toString(),
-                      style: theme.textTheme.bodySmall,
-                    ),
-
-                    // Downvote
-                    IconButton(
-                      icon: Icon(
-                        Icons.arrow_downward,
-                        size: 18,
-                        color:
-                            widget.comment.downvoted ? Colors.red : Colors.grey,
-                      ),
-                      onPressed: _downvote,
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // Reply
-
-                    TextButton(
-                      onPressed: () => widget.onReply(widget.comment),
-                      child: const Text('Reply'),
-                    ),
+                    ],
                   ],
                 ),
               ],
             ),
           ),
         ),
-
-        // ===== الردود =====
-        if (!_collapsed && widget.comment.replies.isNotEmpty)
+        if (!_collapsed && hasReplies)
           RepliesRenderer(
             replies: widget.comment.replies,
             depth: widget.depth + 1,
             onReply: widget.onReply,
           ),
       ],
+    );
+  }
+}
+
+class _CommentAvatar extends StatelessWidget {
+  final bool isReply;
+
+  const _CommentAvatar({required this.isReply});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = isReply ? 28.0 : 32.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _CommentsScreenState._primaryTeal.withValues(alpha: 0.95),
+            _CommentsScreenState._primaryBlue.withValues(alpha: 0.90),
+          ],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(isReply ? 11 : 12),
+      ),
+      child: Icon(Icons.person_rounded, size: isReply ? 15 : 17, color: Colors.white),
+    );
+  }
+}
+
+class _MoreButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _MoreButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F8FA),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _CommentsScreenState._mutedText.withValues(alpha: 0.08)),
+        ),
+        child: const Icon(Icons.more_horiz_rounded, size: 18, color: _CommentsScreenState._mutedText),
+      ),
+    );
+  }
+}
+
+class _ReplyAction extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ReplyAction({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: _CommentsScreenState._lightCyan,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.10)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.reply_rounded, size: 15, color: _CommentsScreenState._primaryTeal),
+            SizedBox(width: 4),
+            Text(
+              'رد',
+              style: TextStyle(
+                color: _CommentsScreenState._primaryTeal,
+                fontSize: 11.8,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VotePill extends StatelessWidget {
+  final int votes;
+  final bool upvoted;
+  final bool downvoted;
+  final VoidCallback onUpvote;
+  final VoidCallback onDownvote;
+
+  const _VotePill({
+    required this.votes,
+    required this.upvoted,
+    required this.downvoted,
+    required this.onUpvote,
+    required this.onDownvote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8FA),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _CommentsScreenState._mutedText.withValues(alpha: 0.09)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _VoteIcon(
+            icon: Icons.keyboard_arrow_up_rounded,
+            selected: upvoted,
+            selectedColor: _CommentsScreenState._primaryTeal,
+            onTap: onUpvote,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              votes.toString(),
+              style: const TextStyle(
+                color: _CommentsScreenState._textDark,
+                fontSize: 11.8,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          _VoteIcon(
+            icon: Icons.keyboard_arrow_down_rounded,
+            selected: downvoted,
+            selectedColor: Color(0xFFE53935),
+            onTap: onDownvote,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoteIcon extends StatelessWidget {
+  final IconData icon;
+  final bool selected;
+  final Color selectedColor;
+  final VoidCallback onTap;
+
+  const _VoteIcon({
+    required this.icon,
+    required this.selected,
+    required this.selectedColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Padding(
+        padding: const EdgeInsets.all(1),
+        child: Icon(
+          icon,
+          size: 18,
+          color: selected ? selectedColor : _CommentsScreenState._mutedText,
+        ),
+      ),
+    );
+  }
+}
+
+class _RepliesToggle extends StatelessWidget {
+  final int count;
+  final bool collapsed;
+
+  const _RepliesToggle({required this.count, required this.collapsed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _CommentsScreenState._primaryBlue.withValues(alpha: 0.10)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            collapsed ? Icons.unfold_more_rounded : Icons.unfold_less_rounded,
+            size: 15,
+            color: _CommentsScreenState._mutedText,
+          ),
+          const SizedBox(width: 3),
+          Text(
+            '$count ردود',
+            style: const TextStyle(
+              color: _CommentsScreenState._mutedText,
+              fontSize: 11.3,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentMenuAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _CommentMenuAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, size: 20, color: _CommentsScreenState._primaryTeal),
+      title: Text(
+        label,
+        style: const TextStyle(
+          color: _CommentsScreenState._textDark,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      onTap: onTap,
     );
   }
 }
@@ -10888,84 +11270,41 @@ class RepliesRenderer extends StatelessWidget {
     this.maxDepth = 8,
   });
 
-  static const double indentStep = 6.0;
-  static const double replyWidthFactor = 0.95; // عرض ثابت نسبي
-
   @override
   Widget build(BuildContext context) {
     if (replies.isEmpty) return const SizedBox.shrink();
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final replyWidth = screenWidth * replyWidthFactor;
-    final indent = depth * indentStep;
+    final indent = (depth * 10.0).clamp(10.0, 34.0);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: replies.map((reply) {
-        return Padding(
-          padding: const EdgeInsets.only(top: 0),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Padding(
-              padding: EdgeInsets.only(left: indent),
-              child: SizedBox(
-                width: replyWidth, // 🔴 عرض ثابت (مهم جداً)
-                child: ReplyTile(
-                  reply: reply,
+    return Padding(
+      padding: EdgeInsetsDirectional.only(start: indent, top: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          border: BorderDirectional(
+            start: BorderSide(
+              color: _CommentsScreenState._primaryTeal.withValues(alpha: 0.16),
+              width: 2,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.only(start: 8),
+          child: Column(
+            children: [
+              for (final reply in replies) ...[
+                CommentTile(
+                  key: ValueKey(reply.id),
+                  comment: reply,
                   depth: depth,
                   onReply: onReply,
-                  maxDepth: maxDepth,
                 ),
-              ),
-            ),
+                if (reply != replies.last) const SizedBox(height: 8),
+              ],
+            ],
           ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-class ReplyTile extends StatelessWidget {
-  final _Comment reply;
-  final int depth;
-  final int maxDepth;
-  final void Function(_Comment) onReply;
-
-  const ReplyTile({
-    super.key,
-    required this.reply,
-    required this.depth,
-    required this.onReply,
-    this.maxDepth = 1000000,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.all(0),
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border(
-            left: BorderSide(
-              color: theme.dividerColor.withValues(alpha: 0.35),
-              width: 1.5,
-            ),
-          ),
-        ),
-        child: CommentTile(
-          key: ValueKey(reply.id),
-          comment: reply,
-          depth: depth,
-          onReply: onReply,
         ),
       ),
-      const SizedBox(height: 10),
-    ]);
+    );
   }
 }
 
@@ -11079,7 +11418,7 @@ class _ExpandableTextState extends State<ExpandableText> {
                 child: Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    _expanded ? 'Show less' : 'Show more',
+                    _expanded ? 'عرض أقل' : 'عرض المزيد',
                     style: widget.style?.copyWith(
                       color: Colors.blue,
                       fontWeight: FontWeight.bold,
