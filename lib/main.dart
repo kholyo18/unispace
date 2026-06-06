@@ -3837,7 +3837,7 @@ class _PostCardState extends State<_PostCard> {
         ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         child: path.startsWith('assets/')
             ? Image.asset(path, fit: BoxFit.cover, width: double.infinity)
             : Image.file(
@@ -3845,8 +3845,13 @@ class _PostCardState extends State<_PostCard> {
                 fit: BoxFit.cover,
                 width: double.infinity,
                 errorBuilder: (_, __, ___) => Container(
-                  color: Colors.grey[200],
-                  child: const Center(child: Icon(Icons.broken_image_rounded)),
+                  color: const Color(0xFFEAF7F8),
+                  child: const Center(
+                    child: Icon(
+                      Icons.broken_image_rounded,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
                 ),
               ),
       ),
@@ -3920,26 +3925,41 @@ class _PostCardState extends State<_PostCard> {
   Widget build(BuildContext context) {
     final post = widget.post;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final titleColor =
+        isDark ? theme.colorScheme.onSurface : const Color(0xFF1F2937);
+    final bodyColor = isDark
+        ? theme.colorScheme.onSurfaceVariant
+        : const Color(0xFF475569);
+    final metaColor = isDark
+        ? theme.colorScheme.onSurfaceVariant
+        : const Color(0xFF64748B);
     final slides = _mediaSlides(post);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: _openComments,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         child: Ink(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(22),
+            color: isDark ? theme.colorScheme.surface : const Color(0xFFFBFEFF),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.32),
+              color: const Color(0xFF0F7C80).withValues(alpha: 0.12),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.055),
-                blurRadius: 22,
-                offset: const Offset(0, 12),
+                color: const Color(0xFF0F7C80).withValues(alpha: 0.075),
+                blurRadius: 24,
+                spreadRadius: -8,
+                offset: const Offset(0, 14),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.025),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -3952,17 +3972,33 @@ class _PostCardState extends State<_PostCard> {
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(17),
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF14B8A6), Color(0xFF38BDF8)],
+                        begin: Alignment.topRight,
+                        end: Alignment.bottomLeft,
+                        colors: [Color(0xFF0F7C80), Color(0xFF1565C0)],
                       ),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(
+                            0xFF0F7C80,
+                          ).withValues(alpha: 0.18),
+                          blurRadius: 12,
+                          offset: const Offset(0, 7),
+                        ),
+                      ],
                     ),
                     child: const Icon(
                       Icons.person_rounded,
                       color: Colors.white,
+                      size: 25,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 11),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3972,22 +4008,32 @@ class _PostCardState extends State<_PostCard> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall?.copyWith(
+                            color: titleColor,
                             fontWeight: FontWeight.w900,
+                            height: 1.15,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 5),
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(
                               Icons.auto_stories_rounded,
-                              size: 14,
-                              color: Color(0xFF0E7490),
+                              size: 13.5,
+                              color: Color(0xFF0F7C80),
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              'نقاش جامعي • ${post.timeAgo}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                            Flexible(
+                              child: Text(
+                                'منذ ${post.timeAgo} • نقاش جامعي',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: metaColor,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11.5,
+                                  height: 1.2,
+                                ),
                               ),
                             ),
                           ],
@@ -3995,76 +4041,91 @@ class _PostCardState extends State<_PostCard> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: _sharePost,
-                    icon: const Icon(Icons.ios_share_rounded),
-                    color: const Color(0xFF0E7490),
-                    tooltip: 'مشاركة',
+                  const SizedBox(width: 8),
+                  Material(
+                    color: const Color(0xFFEAF7F8),
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      onTap: _sharePost,
+                      borderRadius: BorderRadius.circular(14),
+                      child: const SizedBox(
+                        width: 34,
+                        height: 34,
+                        child: Icon(
+                          Icons.ios_share_rounded,
+                          color: Color(0xFF0F7C80),
+                          size: 18,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
               if (post.title.trim().isNotEmpty) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 13),
                 Text(
                   post.title.trim(),
+                  textAlign: TextAlign.start,
                   style: theme.textTheme.titleMedium?.copyWith(
+                    color: titleColor,
                     fontWeight: FontWeight.w900,
-                    height: 1.35,
+                    fontSize: 16.4,
+                    height: 1.36,
+                    letterSpacing: -0.1,
                   ),
                 ),
               ],
               if (post.body.trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 7),
                 Text(
                   post.body.trim(),
+                  textAlign: TextAlign.start,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.55,
+                    color: bodyColor,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13.4,
+                    height: 1.58,
                   ),
                 ),
               ],
               if (slides.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: _MediaCarousel(slides: slides),
+                const SizedBox(height: 13),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(21),
+                    border: Border.all(
+                      color: const Color(0xFF0F7C80).withValues(alpha: 0.10),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF1565C0).withValues(alpha: 0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: _MediaCarousel(slides: slides),
+                  ),
                 ),
               ],
               if (post.tags.isNotEmpty) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 13),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: 7,
+                  runSpacing: 7,
                   children: post.tags
-                      .map(
-                        (tag) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE0F2FE),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: const Color(0xFF7DD3FC).withValues(alpha: 0.7),
-                            ),
-                          ),
-                          child: Text(
-                            '#$tag',
-                            style: const TextStyle(
-                              color: Color(0xFF0369A1),
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      )
+                      .map((tag) => _CommunityPostTagChip(label: tag))
                       .toList(),
                 ),
               ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 11),
               Divider(
                 height: 1,
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.30),
+                color: const Color(0xFF0F7C80).withValues(alpha: 0.10),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 9),
               _CommunityPostActionBar(
                 voteLabel: '${formatVotes(post.votes)} تصويت',
                 isUpvoted: post.upvoted,
@@ -4077,6 +4138,46 @@ class _PostCardState extends State<_PostCard> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CommunityPostTagChip extends StatelessWidget {
+  const _CommunityPostTagChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF7F8),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: const Color(0xFF0F7C80).withValues(alpha: 0.13),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.school_rounded,
+            size: 12.5,
+            color: Color(0xFF0F7C80),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '#$label',
+            style: const TextStyle(
+              color: Color(0xFF0F7C80),
+              fontWeight: FontWeight.w800,
+              fontSize: 11.5,
+              height: 1.15,
+            ),
+          ),
+        ],
       ),
     );
   }
