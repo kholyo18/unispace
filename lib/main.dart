@@ -3261,6 +3261,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
     final List<String> imagePaths = [];
     final List<String> videoPaths = [];
     List<PollData> pollDataList = [];
+    List<String> postTags = [];
 
     // ✅ افصل الـ imageBytes items عن الباقي
     final List<MapEntry<int, Uint8List>> imageByteItems = [];
@@ -3291,6 +3292,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
         case PostItemType.poll:
           pollDataList = item.pollDataList ?? [];
           break;
+        case PostItemType.tags:
+          postTags = item.tags ?? [];
+          break;
       }
     }
 
@@ -3312,13 +3316,14 @@ class _CommunityScreenState extends State<CommunityScreen> {
         0,
         _Post(
           author: 'current_user',
+          authorId: FirebaseAuth.instance.currentUser?.uid ?? 'local_current_user',
           title: title,
           body: body,
           createdAt: DateTime.now(),
           imagePaths: List.from(imagePaths),
           videoPaths: List.from(videoPaths),
           pollDataList: List.from(pollDataList),
-          tags: const [],
+          tags: List.unmodifiable(postTags),
         ),
       );
     });
@@ -3405,6 +3410,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                         return _PostCard(
                           post: _posts[postIndex],
                           onChanged: () => setState(() {}),
+                          onDelete: () => setState(() => _posts.removeAt(postIndex)),
                         );
                       },
                       childCount: _posts.length * 2 - 1,
@@ -3740,13 +3746,14 @@ class _CommunityEmptyState extends StatelessWidget {
 //=========================================================
 class _Post {
   final String author;
-  final String title;
-  final String body;
+  final String? authorId;
+  String title;
+  String body;
   final DateTime createdAt;
   final List<String> imagePaths;
   final List<String> videoPaths;
   final List<PollData> pollDataList;
-  final List<String> tags;
+  List<String> tags;
   final String? mediaUrl;
   int votes;
   bool upvoted;
@@ -3755,6 +3762,7 @@ class _Post {
 
   _Post({
     required this.author,
+    this.authorId,
     required this.title,
     required this.body,
     required this.createdAt,
@@ -3782,14 +3790,18 @@ class _Post {
   }
 }
 
+enum _PostMenuAction { edit, delete, save, share, copy, report }
+
 // ==================== PostCard ====================
 class _PostCard extends StatefulWidget {
   final _Post post;
   final VoidCallback onChanged;
+  final VoidCallback onDelete;
 
   const _PostCard({
     required this.post,
     required this.onChanged,
+    required this.onDelete,
   });
 
   @override
@@ -3911,13 +3923,394 @@ class _PostCardState extends State<_PostCard> {
     return votes.toString();
   }
 
+  bool get _isOwner {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final ownerId = widget.post.authorId?.trim();
+    if (ownerId == null || ownerId.isEmpty) return false;
+    return ownerId == currentUserId ||
+        (currentUserId == null && ownerId == 'local_current_user');
+  }
+
+  String _postShareText() {
+    final parts = [
+      widget.post.title.trim(),
+      widget.post.body.trim(),
+    ].where((part) => part.isNotEmpty).join('\n');
+    return parts.isEmpty ? 'منشور UniSpace' : parts;
+  }
+
   void _sharePost() {
-    Share.share('UniSpace: ${widget.post.title}\n${widget.post.body}');
+    final text = 'UniSpace: ${_postShareText()}';
+    if (text.trim().isEmpty) {
+      Clipboard.setData(const ClipboardData(text: 'UniSpace'));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم نسخ محتوى المنشور للمشاركة')),
+      );
+      return;
+    }
+    Share.share(text);
+  }
+
+  void _copyPostText() {
+    Clipboard.setData(ClipboardData(text: _postShareText()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم نسخ نص المنشور')),
+    );
   }
 
   void _showSavedMessage() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('تم حفظ المنشور')),
+    );
+  }
+
+  Future<void> _reportPost() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
+      );
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance.collection('community_reports').add({
+        'postId': '${widget.post.authorId ?? widget.post.author}_${widget.post.createdAt.millisecondsSinceEpoch}',
+        'reporterId': user.uid,
+        'ownerId': widget.post.authorId,
+        'reason': 'general',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إرسال التبليغ للمراجعة')),
+      );
+    } catch (error) {
+      debugPrint('Community report failed: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إرسال التبليغ للمراجعة')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeletePost() async {
+    if (!_isOwner) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          title: const Text('حذف المنشور؟'),
+          content: const Text(
+            'سيتم حذف هذا المنشور نهائيًا ولا يمكن التراجع عن العملية.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('حذف'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+    try {
+      widget.onDelete();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف المنشور')),
+      );
+    } catch (error) {
+      debugPrint('Community delete failed: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر حذف المنشور، حاول مجددًا')),
+      );
+    }
+  }
+
+  Future<void> _editPost() async {
+    if (!_isOwner) return;
+    final titleController = TextEditingController(text: widget.post.title);
+    final bodyController = TextEditingController(text: widget.post.body);
+    final editableTags = widget.post.tags.toSet();
+    const suggestedTags = [
+      'أسئلة',
+      'مواد',
+      'امتحانات',
+      'نصائح',
+      'تخصصات',
+      'نقاش جامعي',
+    ];
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: StatefulBuilder(
+          builder: (context, setSheetState) => Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: Material(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(24),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.edit_rounded,
+                          color: Color(0xFF0F7C80),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'تعديل المنشور',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w900,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: titleController,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'العنوان',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: bodyController,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'النص',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: suggestedTags.map((tag) {
+                        final selected = editableTags.contains(tag);
+                        return FilterChip(
+                          label: Text(tag),
+                          selected: selected,
+                          onSelected: (value) => setSheetState(() {
+                            value ? editableTags.add(tag) : editableTags.remove(tag);
+                          }),
+                          selectedColor: const Color(0xFFE0F7FA),
+                          checkmarkColor: const Color(0xFF0F7C80),
+                          side: BorderSide(
+                            color: const Color(0xFF0F7C80).withValues(alpha: 0.18),
+                          ),
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? const Color(0xFF0F7C80)
+                                : const Color(0xFF475569),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('إلغاء'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('حفظ'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final updatedTitle = titleController.text.trim();
+    final updatedBody = bodyController.text.trim();
+    titleController.dispose();
+    bodyController.dispose();
+
+    if (saved != true) return;
+    try {
+      setState(() {
+        widget.post.title = updatedTitle;
+        widget.post.body = updatedBody;
+        widget.post.tags = editableTags.toList(growable: false);
+      });
+      widget.onChanged();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تعديل المنشور')),
+      );
+    } catch (error) {
+      debugPrint('Community edit failed: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر تعديل المنشور، حاول مجددًا')),
+      );
+    }
+  }
+
+  PopupMenuItem<_PostMenuAction> _menuItem({
+    required _PostMenuAction value,
+    required IconData icon,
+    required String label,
+    Color? color,
+  }) {
+    final itemColor = color ?? const Color(0xFF475569);
+    return PopupMenuItem<_PostMenuAction>(
+      value: value,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
+        textDirection: TextDirection.rtl,
+        children: [
+          Icon(icon, size: 18, color: itemColor),
+          const SizedBox(width: 9),
+          Text(
+            label,
+            style: TextStyle(
+              color: itemColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptionsMenu() {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF7F8),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF0F7C80).withValues(alpha: 0.12),
+        ),
+      ),
+      child: PopupMenuButton<_PostMenuAction>(
+        tooltip: 'خيارات المنشور',
+        padding: EdgeInsets.zero,
+        child: const SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(
+            Icons.more_vert_rounded,
+            color: Color(0xFF0F7C80),
+            size: 20,
+          ),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        color: Theme.of(context).colorScheme.surface,
+        position: PopupMenuPosition.under,
+        onSelected: (action) {
+          switch (action) {
+            case _PostMenuAction.edit:
+              _editPost();
+              break;
+            case _PostMenuAction.delete:
+              _confirmDeletePost();
+              break;
+            case _PostMenuAction.save:
+              _showSavedMessage();
+              break;
+            case _PostMenuAction.share:
+              _sharePost();
+              break;
+            case _PostMenuAction.copy:
+              _copyPostText();
+              break;
+            case _PostMenuAction.report:
+              _reportPost();
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          if (_isOwner) ...[
+            _menuItem(
+              value: _PostMenuAction.edit,
+              icon: Icons.edit_rounded,
+              label: 'تعديل المنشور',
+              color: const Color(0xFF0F7C80),
+            ),
+            _menuItem(
+              value: _PostMenuAction.delete,
+              icon: Icons.delete_outline_rounded,
+              label: 'حذف المنشور',
+              color: const Color(0xFFDC2626),
+            ),
+            const PopupMenuDivider(height: 6),
+          ],
+          _menuItem(
+            value: _PostMenuAction.save,
+            icon: Icons.bookmark_border_rounded,
+            label: 'حفظ المنشور',
+          ),
+          _menuItem(
+            value: _PostMenuAction.share,
+            icon: Icons.ios_share_rounded,
+            label: 'مشاركة',
+          ),
+          _menuItem(
+            value: _PostMenuAction.copy,
+            icon: Icons.copy_rounded,
+            label: 'نسخ النص',
+          ),
+          if (!_isOwner)
+            _menuItem(
+              value: _PostMenuAction.report,
+              icon: Icons.flag_outlined,
+              label: 'تبليغ',
+            ),
+        ],
+      ),
     );
   }
 
@@ -4042,23 +4435,7 @@ class _PostCardState extends State<_PostCard> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Material(
-                    color: const Color(0xFFEAF7F8),
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      onTap: _sharePost,
-                      borderRadius: BorderRadius.circular(14),
-                      child: const SizedBox(
-                        width: 34,
-                        height: 34,
-                        child: Icon(
-                          Icons.ios_share_rounded,
-                          color: Color(0xFF0F7C80),
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
+                  _buildOptionsMenu(),
                 ],
               ),
               if (post.title.trim().isNotEmpty) ...[
@@ -4148,28 +4525,47 @@ class _CommunityPostTagChip extends StatelessWidget {
 
   final String label;
 
+  IconData get _icon {
+    switch (label.trim()) {
+      case 'نقاش جامعي':
+        return Icons.forum_rounded;
+      case 'أسئلة':
+        return Icons.help_outline_rounded;
+      case 'مواد':
+        return Icons.menu_book_rounded;
+      case 'امتحانات':
+        return Icons.assignment_rounded;
+      case 'نصائح':
+        return Icons.lightbulb_outline_rounded;
+      case 'تخصصات':
+        return Icons.school_rounded;
+      default:
+        return Icons.sell_rounded;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: const Color(0xFFEAF7F8),
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: const Color(0xFF0F7C80).withValues(alpha: 0.13),
+          color: const Color(0xFF0F7C80).withValues(alpha: 0.15),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.school_rounded,
-            size: 12.5,
-            color: Color(0xFF0F7C80),
+          Icon(
+            _icon,
+            size: 13.5,
+            color: const Color(0xFF0F7C80),
           ),
           const SizedBox(width: 4),
           Text(
-            '#$label',
+            label,
             style: const TextStyle(
               color: Color(0xFF0F7C80),
               fontWeight: FontWeight.w800,
@@ -4509,7 +4905,7 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
 }
 
 //==============================================================
-enum PostItemType { text, image, video, poll }
+enum PostItemType { text, image, video, poll, tags }
 
 class PostItem {
   final PostItemType type;
@@ -4518,6 +4914,7 @@ class PostItem {
   final Uint8List? imageBytes;          // ✅ جديد
   final List<String>? pollOptions;
   final List<PollData>? pollDataList;
+  final List<String>? tags;
 
   PostItem({
     required this.type,
@@ -4526,6 +4923,7 @@ class PostItem {
     this.imageBytes,                    // ✅
     this.pollOptions,
     this.pollDataList,
+    this.tags,
   });
 }
 
@@ -4550,7 +4948,14 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
   PollData? _poll;
   int currentPage = 0;
   int get totalPages => _blocks.length + (_pollDataList.isNotEmpty ? 1 : 0);
-  final List<String> _suggestedTags = [];
+  final List<String> _suggestedTags = const [
+    'أسئلة',
+    'مواد',
+    'امتحانات',
+    'نصائح',
+    'تخصصات',
+    'نقاش جامعي',
+  ];
   List<File> _pickedVideos = [];
   int _currentVideoIndex = 0;
   List<VideoPlayerController> _videoControllers = [];
@@ -4609,6 +5014,19 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
         type: PostItemType.video,
         title: '',
         mediaPath: _pickedVideos[i].path,
+      ));
+    }
+
+    final selectedTags = _tags
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (selectedTags.isNotEmpty) {
+      items.add(PostItem(
+        type: PostItemType.tags,
+        title: '',
+        tags: selectedTags,
       ));
     }
 
@@ -4763,6 +5181,8 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
                                 item.pollDataList!.isNotEmpty) {
                               _pollDataList = item.pollDataList!;
                             }
+                            break;
+                          case PostItemType.tags:
                             break;
                         }
                       }
@@ -4962,14 +5382,28 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
               PollPostWidget(polls: _pollDataList),
             ],
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'وسوم المنشور',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: const Color(0xFF0F7C80),
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _tagController,
               decoration: InputDecoration(
-                labelText: 'Add Tag',
-                border: const OutlineInputBorder(),
+                hintText: 'أضف وسمًا مخصصًا',
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.add),
+                  icon: const Icon(Icons.add_rounded),
                   onPressed: () {
                     _addTag(_tagController.text);
                     _tagController.clear();
@@ -4983,13 +5417,28 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
             ),
             const SizedBox(height: 8),
             Wrap(
-              spacing: 6,
+              spacing: 7,
+              runSpacing: 7,
               children: _suggestedTags.map((tag) {
                 final isAdded = _tags.contains(tag);
-                return ChoiceChip(
+                return FilterChip(
                   label: Text(tag),
                   selected: isAdded,
                   onSelected: (_) => isAdded ? _removeTag(tag) : _addTag(tag),
+                  selectedColor: const Color(0xFFE0F7FA),
+                  checkmarkColor: const Color(0xFF0F7C80),
+                  side: BorderSide(
+                    color: const Color(0xFF0F7C80).withValues(alpha: 0.16),
+                  ),
+                  labelStyle: TextStyle(
+                    color: isAdded
+                        ? const Color(0xFF0F7C80)
+                        : const Color(0xFF475569),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
                 );
               }).toList(),
             ),
@@ -4997,12 +5446,9 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
             if (_tags.isNotEmpty)
               Wrap(
                 spacing: 6,
+                runSpacing: 6,
                 children: _tags
-                    .map((tag) => Chip(
-                  label: Text(tag),
-                  deleteIcon: const Icon(Icons.close),
-                  onDeleted: () => _removeTag(tag),
-                ))
+                    .map((tag) => _CommunityPostTagChip(label: tag))
                     .toList(),
               ),
             const SizedBox(height: 12),
@@ -6700,7 +7146,11 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
                 _pollQuestions.add(PollQuestion.fromPollData(data));
               }
             }
-            break;}
+            break;
+
+          case PostItemType.tags:
+            break;
+        }
         }
     }
   }
