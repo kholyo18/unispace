@@ -3075,7 +3075,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
     final List<String> imagePaths = [];
     final List<String> videoPaths = [];
     List<PollData> pollDataList = [];
-    final List<PostItem> pollBlocks = [];
 
     // ✅ افصل الـ imageBytes items عن الباقي
     final List<MapEntry<int, Uint8List>> imageByteItems = [];
@@ -3087,19 +3086,20 @@ class _CommunityScreenState extends State<CommunityScreen> {
           if (title.isEmpty) {
             title = item.title;
           } else {
-            pollBlocks.add(item); // ✅ النصوص الإضافية → pollBlocks
+            body = item.title;
           }
           break;
         case PostItemType.image:
           if (item.mediaPath != null) {
-            pollBlocks.add(item); // ✅ صور PollBuilder → pollBlocks
+            imagePaths.add(item.mediaPath!);
           } else if (item.imageBytes != null) {
+            // نحفظ للمعالجة لاحقاً
             imageByteItems.add(MapEntry(idx, item.imageBytes!));
           }
           break;
         case PostItemType.video:
           if (item.mediaPath != null) {
-            pollBlocks.add(item); // ✅ فيديوهات PollBuilder → pollBlocks
+            videoPaths.add(item.mediaPath!);
           }
           break;
         case PostItemType.poll:
@@ -3132,7 +3132,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
           imagePaths: List.from(imagePaths),
           videoPaths: List.from(videoPaths),
           pollDataList: List.from(pollDataList),
-          //pollBlocks: pollBlocks,
           tags: const [],
         ),
       );
@@ -3252,7 +3251,6 @@ class _Post {
   final List<String> imagePaths;
   final List<String> videoPaths;
   final List<PollData> pollDataList;
-  //final List<PostItem> pollBlocks; // بلوكات PollBuilder
   final List<String> tags;
   final String? mediaUrl;
   int votes;
@@ -3268,14 +3266,12 @@ class _Post {
     this.imagePaths = const [],
     this.videoPaths = const [],
     this.pollDataList = const [],
-    //this.pollBlocks = const [],
     this.tags = const [],
     this.mediaUrl,
     this.votes = 0,
     this.upvoted = false,
     this.downvoted = false,
     List<_Comment>? comments,
-
   }) : comments = comments ?? [];
 
   String get timeAgo {
@@ -3312,7 +3308,6 @@ class _PostCard extends StatefulWidget {
 class _PostCardState extends State<_PostCard> {
   bool _isNavigating = false;
   Timer? _updateTimer;
-
 
   @override
   void initState() {
@@ -3383,30 +3378,6 @@ class _PostCardState extends State<_PostCard> {
         child: SingleChildScrollView(
           physics: const NeverScrollableScrollPhysics(),
           child: PollPostWidget(polls: [poll]),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextSlide(String text) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Directionality(
-        textDirection: RegExp(r'[\u0600-\u06FF]').hasMatch(text)
-            ? TextDirection.rtl
-            : TextDirection.ltr,
-        child: Center(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 15),
-            textAlign: RegExp(r'[\u0600-\u06FF]').hasMatch(text)
-                ? TextAlign.right
-                : TextAlign.left,
-          ),
         ),
       ),
     );
@@ -3808,26 +3779,8 @@ class _PostCardState extends State<_PostCard> {
                     slides.add(_buildVideoSlide(path));
                   }
 
-
                   for (final poll in post.pollDataList) {
-                    switch (poll.type) {
-                      case PollQuestionType.textBlock:
-                        slides.add(_buildTextSlide(poll.blockText ?? ''));
-                        break;
-                      case PollQuestionType.imageBlock:
-                        if (poll.blockMediaPath != null) {
-                          slides.add(_buildImageSlide(poll.blockMediaPath!));
-                        }
-                        break;
-                      case PollQuestionType.videoBlock:
-                        if (poll.blockMediaPath != null) {
-                          slides.add(_buildVideoSlide(poll.blockMediaPath!));
-                        }
-                        break;
-                      default:
-                        slides.add(_buildPollSlide(poll));
-                        break;
-                    }
+                    slides.add(_buildPollSlide(poll));
                   }
 
                   if (slides.isEmpty) return const SizedBox.shrink();
@@ -4376,37 +4329,7 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
       );
       return;
     }
-// ✅ بلوكات من PollBuilder
-    for (final block in _blocks) {
-      switch (block.type) {
-        case BlockType.text:
-          if ((block.textController?.text ?? '').trim().isNotEmpty) {
-            items.add(PostItem(
-              type: PostItemType.text,
-              title: block.textController!.text.trim(),
-            ));
-          }
-          break;
-        case BlockType.image:
-          if (block.image != null) {
-            items.add(PostItem(
-              type: PostItemType.image,
-              title: '',
-              mediaPath: block.image!.path,
-            ));
-          }
-          break;
-        case BlockType.video:
-          if (block.video != null) {
-            items.add(PostItem(
-              type: PostItemType.video,
-              title: '',
-              mediaPath: block.video!.path,
-            ));
-          }
-          break;
-      }
-    }
+
     Navigator.pop(context, items);
   }
 
@@ -4573,36 +4496,6 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
             ),
             const SizedBox(height: 8),
 
-// ===== عرض بلوكات النص والصورة والفيديو من PollBuilder =====
-            if (_blocks.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _blocks.length,
-                itemBuilder: (context, index) {
-                  final block = _blocks[index];
-                  return Dismissible(
-                    key: ValueKey(block),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    onDismissed: (_) => setState(() {
-                      block.videoController?.dispose();
-                      _blocks.removeAt(index);
-                    }),
-                    child: _buildBlock(block),
-                  );
-                },
-              ),
-            ],
             // ===== عرض الصور + الفيديوهات (الشكل القديم) =====
             if (_pickedImages.isNotEmpty || _pickedVideos.isNotEmpty)
               SizedBox(
@@ -4861,76 +4754,100 @@ class __CreatePostSheetState extends State<_CreatePostSheet> {
 
   Widget _buildBlock(PostBlock block) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.all(12),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // TEXT
-            if (block.type == BlockType.text)
-              (block.textController?.text ?? '').trim().isNotEmpty
-                  ? Text(
-                block.textController!.text,
-                style: const TextStyle(fontSize: 15),
-              )
-                  : const Text(
-                'نص فارغ',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-
-            // IMAGE
-            if (block.type == BlockType.image && block.image != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.file(
-                  block.image!,
-                  height: 160,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
+            if ((block.textController?.text ?? '').isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  block.textController!.text,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
-
-            // VIDEO
-            if (block.type == BlockType.video && block.videoController != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  height: 160,
-                  width: double.infinity,
-                  color: Colors.black,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (block.videoController!.value.isInitialized)
-                        FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: block.videoController!.value.size.width,
-                            height: block.videoController!.value.size.height,
-                            child: VideoPlayer(block.videoController!),
-                          ),
-                        )
-                      else
-                        const CircularProgressIndicator(color: Colors.white),
-                      IconButton(
-                        iconSize: 48,
-                        color: Colors.white,
-                        icon: Icon(
-                          block.videoController!.value.isPlaying
-                              ? Icons.pause_circle
-                              : Icons.play_circle,
-                        ),
-                        onPressed: () => setState(() {
-                          block.videoController!.value.isPlaying
-                              ? block.videoController!.pause()
-                              : block.videoController!.play();
-                        }),
-                      ),
-                    ],
+            if (block.type == BlockType.image && block.image != null)
+              GestureDetector(
+                onTap: () => Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute(
+                    builder: (_) => FullscreenImageViewer(
+                        images: [block.image!.path], initialIndex: 0),
                   ),
                 ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(block.image!,
+                      height: 200,
+                      width: double.infinity,
+                      fit: BoxFit.cover),
+                ),
+              ),
+            if (block.type == BlockType.video &&
+                block.videoController != null)
+              Column(
+                children: [
+                  GestureDetector(
+                    onTap: () =>
+                        Navigator.of(context, rootNavigator: true).push(
+                          MaterialPageRoute(
+                            builder: (_) => FullscreenVideoViewer(
+                                controller: block.videoController!),
+                          ),
+                        ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        height: 180,
+                        width: double.infinity,
+                        color: Colors.black,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width:
+                                block.videoController!.value.size.width,
+                                height:
+                                block.videoController!.value.size.height,
+                                child: VideoPlayer(block.videoController!),
+                              ),
+                            ),
+                            IconButton(
+                              iconSize: 56,
+                              color: Colors.white,
+                              icon: Icon(
+                                block.videoController!.value.isPlaying
+                                    ? Icons.pause_circle
+                                    : Icons.play_circle,
+                              ),
+                              onPressed: () => setState(() {
+                                block.videoController!.value.isPlaying
+                                    ? block.videoController!.pause()
+                                    : block.videoController!.play();
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  VideoProgressIndicator(
+                    block.videoController!,
+                    allowScrubbing: true,
+                    colors: const VideoProgressColors(
+                      playedColor: Colors.red,
+                      bufferedColor: Colors.white38,
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
+                ],
               ),
           ],
         ),
@@ -4990,7 +4907,6 @@ class _PollPostWidgetState extends State<PollPostWidget> {
     for (int i = 0; i < widget.polls.length; i++) {
       final poll = widget.polls[i];
       switch (poll.type) {
-
         case PollQuestionType.checkbox:
         case PollQuestionType.multipleChoice:
           _setSelections[i] = <int>{};
@@ -5129,29 +5045,6 @@ class _PollPostWidgetState extends State<PollPostWidget> {
   Widget _buildInput(int i, PollData poll) {
     switch (poll.type) {
 
-      case PollQuestionType.textBlock:
-        return Center(
-          child: Text(poll.blockText ?? '', style: const TextStyle(fontSize: 15)),
-        );
-
-      case PollQuestionType.imageBlock:
-        if (poll.blockMediaPath != null) {
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.file(
-              File(poll.blockMediaPath!),
-              fit: BoxFit.cover,
-              width: double.infinity,
-            ),
-          );
-        }
-        return const SizedBox.shrink();
-
-      case PollQuestionType.videoBlock:
-        if (poll.blockMediaPath != null) {
-          return _VideoSlideWidget(videoPath: poll.blockMediaPath!);
-        }
-        return const SizedBox.shrink();
     // ===== نص قصير =====
       case PollQuestionType.shortText:
         _textControllers.putIfAbsent(i, () {
@@ -6421,65 +6314,50 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
 
   void _savePoll() {
     final List<PostItem> items = [];
-      final List<PollData> allSlides = [];
 
-      // ✅ البلوكات → PollData مباشرة
-      for (final block in _blocks) {
-        switch (block.type) {
-          case BlockType.text:
-            final text = block.textController?.text.trim() ?? '';
-            if (text.isNotEmpty) {
-              allSlides.add(PollData(
-                question: '',
-                type: PollQuestionType.textBlock,
-                options: const [],
-                gridRows: const [],
-                gridColumns: const [],
-                blockText: text,
-              ));
-            }
-            break;
-          case BlockType.image:
-            if (block.image != null) {
-              allSlides.add(PollData(
-                question: '',
-                type: PollQuestionType.imageBlock,
-                options: const [],
-                gridRows: const [],
-                gridColumns: const [],
-                blockMediaPath: block.image!.path,
-              ));
-            }
-            break;
-          case BlockType.video:
-            if (block.video != null) {
-              allSlides.add(PollData(
-                question: '',
-                type: PollQuestionType.videoBlock,
-                options: const [],
-                gridRows: const [],
-                gridColumns: const [],
-                blockMediaPath: block.video!.path,
-              ));
-            }
-            break;
-        }
+    for (final block in _blocks) {
+      switch (block.type) {
+        case BlockType.text:
+          if ((block.textController?.text ?? '').trim().isNotEmpty) {
+            items.add(PostItem(
+              type: PostItemType.text,
+              title: block.textController!.text.trim(),
+            ));
+          }
+          break;
+        case BlockType.image:
+          if (block.image != null) {
+            items.add(PostItem(
+              type: PostItemType.image,
+              title: block.textController?.text ?? '',
+              mediaPath: block.image!.path,
+            ));
+          }
+          break;
+        case BlockType.video:
+          if (block.video != null) {
+            items.add(PostItem(
+              type: PostItemType.video,
+              title: block.textController?.text ?? '',
+              mediaPath: block.video!.path,
+            ));
+          }
+          break;
       }
+    }
 
-      // ✅ أسئلة البول
-      for (final q in _pollQuestions) {
-        allSlides.add(PollData.fromQuestion(q));
-      }
+    // ✅ تحويل كل _pollQuestions إلى PollData مع الحفاظ على نوع كل سؤال
+    if (_pollQuestions.isNotEmpty) {
+      items.add(PostItem(
+        type: PostItemType.poll,
+        title: '',
+        pollDataList: _pollQuestions
+            .map((q) => PollData.fromQuestion(q))
+            .toList(),
+      ));
+    }
 
-      if (allSlides.isNotEmpty) {
-        items.add(PostItem(
-          type: PostItemType.poll,
-          title: '',
-          pollDataList: allSlides,
-        ));
-      }
-
-      Navigator.pop(context, items);
+    Navigator.pop(context, items);
   }
 
   @override
@@ -7131,11 +7009,6 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
   Widget _buildPollQuestionInput(PollQuestion q) {
     if (!q.confirmed) {
     switch (q.type) {
-
-      case PollQuestionType.textBlock:
-      case PollQuestionType.imageBlock:
-      case PollQuestionType.videoBlock:
-        return const SizedBox.shrink();
       case PollQuestionType.shortText:
         return const TextField(
           enabled: false,
@@ -8775,8 +8648,6 @@ class PollData {
   final String question;
   final PollQuestionType type;
 
-  final String? blockText;
-  final String? blockMediaPath;
   // checkbox / multipleChoice / dropdown
   final List<String> options;
 
@@ -8804,8 +8675,6 @@ class PollData {
     this.scaleSize,
     this.dateConfig,
     this.selectedTime,
-    this.blockText,
-    this.blockMediaPath,
   });
 
   // تحويل من PollQuestion إلى PollData
@@ -9081,9 +8950,6 @@ enum PollQuestionType {
   checkboxGrid,
   date,
   time,
-  textBlock,
-  imageBlock,
-  videoBlock,
 }
 
 enum LinearScaleStyle { numbers, line, emoji, emoji1 }
