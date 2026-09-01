@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../main.dart';
+import '../core/branding.dart';
 
 class AppTheme {
   // ────────────────────────────── ثوابت الألوان ──────────────────────────────
@@ -13,7 +15,7 @@ class AppTheme {
   // ────────────────────────────── بناء الثيم الرئيسي ──────────────────────────────
   static ThemeData _buildTheme(Brightness brightness) {
     final baseScheme = ColorScheme.fromSeed(
-      seedColor: _seed,
+      seedColor: AppPrimary.seed,
       brightness: brightness,
     );
 
@@ -104,7 +106,7 @@ class AppTheme {
         ),
       ),
 
-      bottomAppBarTheme: BottomAppBarTheme(
+      bottomAppBarTheme: BottomAppBarThemeData(
         elevation: brightness == Brightness.light ? 2 : 0,
         color: scheme.surface,
       ),

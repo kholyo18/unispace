@@ -12,7 +12,20 @@
           "package_name": "dz.fachub.fachub"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "696673984351-reb0rm8opmt4hja6ucvu2fgstr4sjsl2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "dz.fachub.fachub",
+            "certificate_hash": "29553f04a379ed2e10649bef54d417ac7af823fb"
+          }
+        },
+        {
+          "client_id": "696673984351-n857t18nmqv5bl8351i7ji84m9sj3mht.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyABaqWKk3wwyFtcRbUpIw2jMfQUtwrU0GM"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "696673984351-n857t18nmqv5bl8351i7ji84m9sj3mht.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

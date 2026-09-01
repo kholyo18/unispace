@@ -17,7 +17,7 @@ dependencies:
   font_awesome_flutter: ^11.0.0
   translator: ^1.0.4+1
   flutter_svg: ^2.2.3
-  flutter_cache_manager: ^3.4.1
+  flutter_cache_manager: ^3.4.2
 
   # واجهة التطبيق
   cupertino_icons: ^1.0.8
@@ -34,7 +34,7 @@ dependencies:
   google_sign_in: ^6.3.0
   cloud_firestore: ^5.4.4
   cloud_functions: ^5.1.3
-  firebase_messaging: ^15.1.3
+  firebase_messaging: 15.2.5
 
   file_selector: ^1.0.3
   firebase_storage: ^12.3.0
@@ -54,10 +54,19 @@ dependencies:
   open_filex: 4.7.0
   url_launcher: ^6.3.2
   gallery_saver_plus: ^3.2.9
-  image_cropper: ^11.0.0
+  image_cropper: ^12.2.1
   video_player: ^2.10.1
-  flutter_local_notifications: ^17.2.3
+  flutter_local_notifications: 18.0.1
   timezone: ^0.9.4
+  lucide_icons_flutter: ^3.1.15
+  visibility_detector: ^0.4.0+2
+  cached_network_image: ^3.4.1
+  app_links: ^7.2.1
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+  equatable: ^2.1.0
+  gal: ^2.3.3
+  flutter_chat_ui: 1.6.15
 
 
 
@@ -67,8 +76,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.2
-  hive_generator: ^2.0.1
-  build_runner: ^2.4.0
+  hive_generator: 2.0.1
+  build_runner: ^2.4.13
+  riverpod_generator: ^2.4.0
 
 flutter_launcher_icons:
   android: true

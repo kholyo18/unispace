@@ -19,11 +19,7 @@ class ModuleModelAdapter extends TypeAdapter<ModuleModel> {
     return ModuleModel(
       title: fields[0] as String,
       coef: fields[1] as num,
-      credits:fields[2] as num,
-      tdWeight:40 ,
-      tpWeight: 20,
-      examWeight: 60,
-
+      credits: fields[2] as num,
     )
       .._hasTD = fields[3] as bool
       .._hasTP = fields[4] as bool

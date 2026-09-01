@@ -190,6 +190,7 @@ class _ExamFormPageState extends State<ExamFormPage> {
                 value: _remindersEnabled,
                 onChanged: (value) => setState(() => _remindersEnabled = value),
               ),
+
               const SizedBox(height: 8),
               CheckboxListTile(
                 title: Text(s.reminder24h),

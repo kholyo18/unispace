@@ -11,6 +11,7 @@ class AppScaffold extends StatelessWidget {
     this.background,
     this.padding,
     this.extendBody = true,
+    this.safeAreaTop = true,
     required this.body,
   });
 
@@ -23,7 +24,7 @@ class AppScaffold extends StatelessWidget {
   final Color? background;
   final EdgeInsetsGeometry? padding;
   final bool extendBody;
-
+  final bool safeAreaTop;
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

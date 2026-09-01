@@ -1,12 +1,9 @@
-// lib/moduls.dart
-
-// lib/module_model.dart
 import 'package:hive/hive.dart';
 
-part 'moduls.g.dart';
+ part 'moduls.g.dart';
 
 @HiveType(typeId: 0)
-class ModuleModel {
+class ModuleModel extends HiveObject {
   @HiveField(0)
   String title;
 
@@ -17,7 +14,7 @@ class ModuleModel {
   double credits;
 
   @HiveField(3)
-  bool _hasTD; // ← غير final لأن Hive يحتاج لتعيينه
+  bool _hasTD;
 
   @HiveField(4)
   bool _hasTP;
@@ -40,14 +37,13 @@ class ModuleModel {
   @HiveField(10)
   double? exam;
 
-  // === المُنشئ الوحيد (يُستخدم من قبل التطبيق عند إنشاء جدول جديد) ===
   ModuleModel({
     required this.title,
     required num coef,
     required num credits,
-    required double tdWeight,
-    required double tpWeight,
-    required double examWeight,
+    double tdWeight = 0,
+    double tpWeight = 0,
+    double examWeight = 0,
   })  : coef = coef.toDouble(),
         credits = credits.toDouble(),
         _hasTD = tdWeight > 0,
@@ -59,19 +55,24 @@ class ModuleModel {
         tp = 0,
         exam = 0;
 
-  // === لا حاجة لمنشئ Hive — Hive يعيّن الحقول مباشرةً ===
-
-  // === الـ getters ===
   bool get hasTD => _hasTD;
+
   bool get hasTP => _hasTP;
 
   double get moy {
     final totalW = wTD + wTP + wEX;
+
     if (totalW <= 0) return 0;
-    double normalize(double weight) => weight / totalW;
-    final value = (td ?? 0) * normalize(wTD) +
-        (tp ?? 0) * normalize(wTP) +
-        (exam ?? 0) * normalize(wEX);
+
+    double normalize(double weight) {
+      return weight / totalW;
+    }
+
+    final value =
+        (td ?? 0) * normalize(wTD) +
+            (tp ?? 0) * normalize(wTP) +
+            (exam ?? 0) * normalize(wEX);
+
     return double.parse(value.toStringAsFixed(2));
   }
 }

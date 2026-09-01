@@ -7,10 +7,14 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import { error as logError, info as logInfo, warn as logWarn } from "firebase-functions/logger";
 import sgMail from "@sendgrid/mail";
+import { getStorage } from "firebase-admin/storage";
+import * as functionsV1 from "firebase-functions/v1";
+import type { CollectionReference } from "firebase-admin/firestore";
 
 initializeApp();
 const db = getFirestore();
 const auth = getAuth();
+
 
 const SUPPORT_EMAIL = "unispace.0.1.0@gmail.com";
 const EMAIL_SUBJECT = "[UniSpace] New Contact Message";
@@ -771,4 +775,112 @@ export const verifyOtpAndCreateAccount = onCall(async (request) => {
 
   const customToken = await auth.createCustomToken(userId);
   return { customToken };
+});
+async function deleteCollection(
+collectionRef: CollectionReference,
+): Promise<void> {
+  const batchSize = 400;
+  for (;;) {
+    const snap = await collectionRef.limit(batchSize).get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    if (snap.size < batchSize) break;
+  }
+}
+
+/**
+ * يُستدعى تلقائياً بعد user.delete() من التطبيق
+ */
+export const onUserDeleted = functionsV1.auth.user().onDelete(async (user) => {
+  const uid = user.uid;
+  const email = (user.email || "").trim().toLowerCase();
+  const bucket = getStorage().bucket();
+
+  logger.info("onUserDeleted start", { uid, email });
+
+  // منشورات المستخدم — غيّر authorId إن لزم
+  try {
+    const postsSnap = await db
+      .collection("community_posts")
+      .where("authorId", "==", uid)
+      .get();
+
+    for (const postDoc of postsSnap.docs) {
+      const postId = postDoc.id;
+      await deleteCollection(
+        db.collection("community_posts").doc(postId).collection("poll_responses"),
+      );
+      try {
+        await bucket.deleteFiles({ prefix: `community_posts/${postId}/` });
+      } catch (e) {
+        logWarn("storage post cleanup", {
+          postId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+      await postDoc.ref.delete();
+    }
+    logger.info("posts deleted", { count: postsSnap.size, uid });
+  } catch (e) {
+    logError("posts cleanup failed", {
+      uid,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  // username
+  try {
+    const userDoc = await db.doc(`users/${uid}`).get();
+    const username = userDoc.data()?.username;
+    if (username) {
+      const uname = String(username).trim().toLowerCase();
+      const unameRef = db.doc(`usernames/${uname}`);
+      const unameSnap = await unameRef.get();
+      if (unameSnap.exists && unameSnap.data()?.uid === uid) {
+        await unameRef.delete();
+      }
+    } else {
+      const byUid = await db
+        .collection("usernames")
+        .where("uid", "==", uid)
+        .limit(5)
+        .get();
+      for (const d of byUid.docs) {
+        await d.ref.delete();
+      }
+    }
+  } catch (e) {
+    logWarn("username cleanup", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  try {
+    await deleteCollection(
+      db.collection("users").doc(uid).collection("sessions"),
+    );
+  } catch (_) {}
+
+  try {
+    await db.doc(`login_2fa_challenges/${uid}`).delete();
+  } catch (_) {}
+  try {
+    await db.doc(`email_verification_otps/${uid}`).delete();
+  } catch (_) {}
+
+  try {
+    await db.doc(`users/${uid}`).delete();
+  } catch (e) {
+    logWarn("users doc delete", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  try {
+    await bucket.deleteFiles({ prefix: `users/${uid}/` });
+  } catch (_) {}
+
+  logger.info("onUserDeleted done", { uid });
 });

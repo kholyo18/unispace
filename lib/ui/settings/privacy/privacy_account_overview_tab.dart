@@ -12,1078 +12,771 @@ import '../../../models/security_audit.dart';
 import '../../../services/security_audit_service.dart';
 import '../session_service.dart';
 import 'privacy_account_repository.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
+import 'package:UniSpace/features/settings/privacy/privacy_policy_screen.dart';
+
+class PrivacySettings {
+  const PrivacySettings({
+    this.privateAccount = false,
+    this.appearInSearch = true,
+    this.suggestAccount = true,
+    this.findByEmail = false,
+    this.findByPhone = false,
+    this.hideLikeCounts = false,
+    this.messageRequests = true,
+    this.readReceipts = true,
+    this.typingIndicator = true,
+    this.showOnline = true,
+    this.showLastSeen = false,
+    this.showEmailOnProfile = false,
+    this.showAcademicInfo = true,
+    this.showSocialLinks = true,
+    this.followersVisibility = 'everyone',
+    this.followingVisibility = 'everyone',
+    this.whoCanComment = 'everyone',
+    this.whoCanRepost = 'everyone',
+    this.whoCanMention = 'everyone',
+    this.whoCanMessage = 'mutual',
+  });
+
+  final bool privateAccount;
+  final bool appearInSearch;
+  final bool suggestAccount;
+  final bool findByEmail;
+  final bool findByPhone;
+  final bool hideLikeCounts;
+  final bool messageRequests;
+  final bool readReceipts;
+  final bool typingIndicator;
+  final bool showOnline;
+  final bool showLastSeen;
+  final bool showEmailOnProfile;
+  final bool showAcademicInfo;
+  final bool showSocialLinks;
+  final String followersVisibility;
+  final String followingVisibility;
+  final String whoCanComment;
+  final String whoCanRepost;
+  final String whoCanMention;
+  final String whoCanMessage;
+
+  factory PrivacySettings.fromMap(Map<String, dynamic>? raw) {
+    final m = raw ?? const <String, dynamic>{};
+    bool b(String k, bool d) => m[k] is bool ? m[k] as bool : d;
+    String s(String k, String d) {
+      final v = m[k]?.toString().trim();
+      return (v == null || v.isEmpty) ? d : v;
+    }
+
+    return PrivacySettings(
+      privateAccount: b('privateAccount', false),
+      appearInSearch: b('appearInSearch', true),
+      suggestAccount: b('suggestAccount', true),
+      findByEmail: b('findByEmail', false),
+      findByPhone: b('findByPhone', false),
+      hideLikeCounts: b('hideLikeCounts', false),
+      messageRequests: b('messageRequests', true),
+      readReceipts: b('readReceipts', true),
+      typingIndicator: b('typingIndicator', true),
+      showOnline: b('showOnline', true),
+      showLastSeen: b('showLastSeen', false),
+      showEmailOnProfile: b('showEmailOnProfile', false),
+      showAcademicInfo: b('showAcademicInfo', true),
+      showSocialLinks: b('showSocialLinks', true),
+      followersVisibility: s('followersVisibility', 'everyone'),
+      followingVisibility: s('followingVisibility', 'everyone'),
+      whoCanComment: s('whoCanComment', 'everyone'),
+      whoCanRepost: s('whoCanRepost', 'everyone'),
+      whoCanMention: s('whoCanMention', 'everyone'),
+      whoCanMessage: s('whoCanMessage', 'mutual'),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'privateAccount': privateAccount,
+    'appearInSearch': appearInSearch,
+    'suggestAccount': suggestAccount,
+    'findByEmail': findByEmail,
+    'findByPhone': findByPhone,
+    'hideLikeCounts': hideLikeCounts,
+    'messageRequests': messageRequests,
+    'readReceipts': readReceipts,
+    'typingIndicator': typingIndicator,
+    'showOnline': showOnline,
+    'showLastSeen': showLastSeen,
+    'showEmailOnProfile': showEmailOnProfile,
+    'showAcademicInfo': showAcademicInfo,
+    'showSocialLinks': showSocialLinks,
+    'followersVisibility': followersVisibility,
+    'followingVisibility': followingVisibility,
+    'whoCanComment': whoCanComment,
+    'whoCanRepost': whoCanRepost,
+    'whoCanMention': whoCanMention,
+    'whoCanMessage': whoCanMessage,
+  };
+
+  PrivacySettings copyWith({
+    bool? privateAccount,
+    bool? appearInSearch,
+    bool? suggestAccount,
+    bool? findByEmail,
+    bool? findByPhone,
+    bool? hideLikeCounts,
+    bool? messageRequests,
+    bool? readReceipts,
+    bool? typingIndicator,
+    bool? showOnline,
+    bool? showLastSeen,
+    bool? showEmailOnProfile,
+    bool? showAcademicInfo,
+    bool? showSocialLinks,
+    String? followersVisibility,
+    String? followingVisibility,
+    String? whoCanComment,
+    String? whoCanRepost,
+    String? whoCanMention,
+    String? whoCanMessage,
+  }) {
+    return PrivacySettings(
+      privateAccount: privateAccount ?? this.privateAccount,
+      appearInSearch: appearInSearch ?? this.appearInSearch,
+      suggestAccount: suggestAccount ?? this.suggestAccount,
+      findByEmail: findByEmail ?? this.findByEmail,
+      findByPhone: findByPhone ?? this.findByPhone,
+      hideLikeCounts: hideLikeCounts ?? this.hideLikeCounts,
+      messageRequests: messageRequests ?? this.messageRequests,
+      readReceipts: readReceipts ?? this.readReceipts,
+      typingIndicator: typingIndicator ?? this.typingIndicator,
+      showOnline: showOnline ?? this.showOnline,
+      showLastSeen: showLastSeen ?? this.showLastSeen,
+      showEmailOnProfile: showEmailOnProfile ?? this.showEmailOnProfile,
+      showAcademicInfo: showAcademicInfo ?? this.showAcademicInfo,
+      showSocialLinks: showSocialLinks ?? this.showSocialLinks,
+      followersVisibility: followersVisibility ?? this.followersVisibility,
+      followingVisibility: followingVisibility ?? this.followingVisibility,
+      whoCanComment: whoCanComment ?? this.whoCanComment,
+      whoCanRepost: whoCanRepost ?? this.whoCanRepost,
+      whoCanMention: whoCanMention ?? this.whoCanMention,
+      whoCanMessage: whoCanMessage ?? this.whoCanMessage,
+    );
+  }
+}
+
+class PrivacySettingsRepository {
+  DocumentReference<Map<String, dynamic>>? _userRef() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance.collection('users').doc(uid);
+  }
+
+  Future<PrivacySettings> load() async {
+    final ref = _userRef();
+    if (ref == null) return const PrivacySettings();
+    try {
+      final snap = await ref.get();
+      final raw = snap.data()?['privacy'];
+      return PrivacySettings.fromMap(
+        raw is Map ? Map<String, dynamic>.from(raw) : null,
+      );
+    } catch (e) {
+      debugPrint('privacy load failed: $e');
+      return const PrivacySettings();
+    }
+  }
+
+  Future<void> save(PrivacySettings settings) async {
+    final ref = _userRef();
+    if (ref == null) throw StateError('not signed in');
+    await ref.set({
+      'privacy': settings.toMap(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+}
 
 class PrivacyAccountOverviewTab extends StatefulWidget {
   const PrivacyAccountOverviewTab({super.key});
 
   @override
-  State<PrivacyAccountOverviewTab> createState() => _PrivacyAccountOverviewTabState();
+  State<PrivacyAccountOverviewTab> createState() =>
+      _PrivacyAccountOverviewTabState();
 }
 
 class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
-  final PrivacyAccountRepository _repository = PrivacyAccountRepository();
-  final TextEditingController _currentPasswordController = TextEditingController();
-  final TextEditingController _newPasswordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-  final FocusNode _currentPasswordFocusNode = FocusNode();
-  final FocusNode _newPasswordFocusNode = FocusNode();
-  final FocusNode _confirmPasswordFocusNode = FocusNode();
-
-  PrivacyAccountData? _data;
+  final _repo = PrivacySettingsRepository();
+  PrivacySettings _settings = const PrivacySettings();
   bool _loading = true;
-  bool _busy = false;
-  bool _updatingPassword = false;
-  bool _sendingReset = false;
-  bool _showCurrentPassword = false;
-  bool _showNewPassword = false;
-  bool _showConfirmPassword = false;
-  bool _newPasswordTouched = false;
-  bool _confirmPasswordTouched = false;
-  bool _passwordExpanded = false;
-  bool _auditLoading = true;
-  SecurityAudit? _lastPasswordAudit;
-  StreamSubscription<User?>? _authStateSubscription;
-  String? _activeUserScope;
+
+  static const _audienceLabels = {
+    'everyone': 'الجميع',
+    'followers': 'المتابعون',
+    'mutual': 'المتبادلون',
+    'none': 'لا أحد',
+  };
+
+  String _label(String key) => _audienceLabels[key] ?? key;
 
   @override
   void initState() {
     super.initState();
-    _currentPasswordFocusNode.addListener(() {
-      if (!_currentPasswordFocusNode.hasFocus) setState(() {});
-    });
-    _newPasswordFocusNode.addListener(() {
-      if (!_newPasswordFocusNode.hasFocus) {
-        setState(() => _newPasswordTouched = true);
-      }
-    });
-    _confirmPasswordFocusNode.addListener(() {
-      if (!_confirmPasswordFocusNode.hasFocus) {
-        setState(() => _confirmPasswordTouched = true);
-      }
-    });
-    _activeUserScope = _repository.currentUserScope();
-    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((_) {
-      final nextScope = _repository.currentUserScope();
-      if (nextScope == _activeUserScope) return;
-      _activeUserScope = nextScope;
-      if (!mounted) return;
-      setState(() {
-        _data = null;
-        _loading = true;
-      });
-      _load();
-    });
     _load();
   }
 
-  @override
-  void dispose() {
-    _currentPasswordController.dispose();
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
-    _currentPasswordFocusNode.dispose();
-    _newPasswordFocusNode.dispose();
-    _confirmPasswordFocusNode.dispose();
-    _authStateSubscription?.cancel();
-    super.dispose();
-  }
-
   Future<void> _load() async {
-    final data = await _repository.load();
-    final audit = await SecurityAuditService.instance.loadLastPasswordChange();
+    final loaded = await _repo.load();
     if (!mounted) return;
     setState(() {
-      _data = data;
-      _lastPasswordAudit = audit;
+      _settings = loaded;
       _loading = false;
-      _auditLoading = false;
     });
   }
 
-  bool get _canEditName {
-    final changedAt = _data?.lastNameChangeAt;
-    if (changedAt == null) return true;
-    return DateTime.now().isAfter(changedAt.add(const Duration(days: 30)));
-  }
-
-  String _nameRuleText(S s) {
-    final changedAt = _data?.lastNameChangeAt;
-    if (changedAt == null || _canEditName) return s.privacyNameRuleAllowed;
-    final next = changedAt.add(const Duration(days: 30));
-    final remaining = next.difference(DateTime.now());
-    final days = remaining.inDays;
-    final hours = remaining.inHours % 24;
-    if (days > 0) {
-      return s.privacyNameRuleBlockedDays('$days', '$hours');
-    }
-    return s.privacyNameRuleBlockedHours('$hours');
-  }
-
-  String _maskedEmail(String email) {
-    final trimmed = email.trim();
-    if (!trimmed.contains('@')) return '***';
-    final parts = trimmed.split('@');
-    final local = parts.first;
-    final domain = parts.last;
-    if (local.isEmpty) return '***@$domain';
-    if (local.length <= 3) return '${local[0]}***@$domain';
-    return '${local.substring(0, 3)}***@$domain';
-  }
-
-  String get _currentPassword => _currentPasswordController.text;
-  String get _newPassword => _newPasswordController.text;
-  String get _confirmPassword => _confirmPasswordController.text;
-
-  bool get _isNewPasswordLengthValid => _newPassword.trim().length >= 8;
-  bool get _isNewPasswordDifferent => _newPassword.trim().isNotEmpty && _newPassword != _currentPassword;
-  bool get _isConfirmMatch => _newPassword.isNotEmpty && _confirmPassword == _newPassword;
-  bool get _canSubmitPasswordChange =>
-      _currentPassword.trim().isNotEmpty &&
-      _isNewPasswordLengthValid &&
-      _isNewPasswordDifferent &&
-      _isConfirmMatch &&
-      !_updatingPassword;
-
-  String? get _newPasswordError {
-    final s = S.of(context);
-    if (!_newPasswordTouched && _newPasswordFocusNode.hasFocus) return null;
-    if (_newPassword.isEmpty) return null;
-    if (!_isNewPasswordLengthValid) return s.privacyPasswordNewLengthError;
-    if (!_isNewPasswordDifferent) return s.privacyPasswordMustDifferError;
-    return null;
-  }
-
-  String? get _confirmPasswordError {
-    final s = S.of(context);
-    if (!_confirmPasswordTouched && _confirmPasswordFocusNode.hasFocus) return null;
-    if (_confirmPassword.isEmpty) return null;
-    if (!_isConfirmMatch) return s.privacyPasswordMismatchError;
-    return null;
-  }
-
-  ({String label, Color color}) _passwordStrength(S s) {
-    final value = _newPassword;
-    if (value.isEmpty) {
-      return (label: '—', color: Colors.grey);
-    }
-    int score = 0;
-    if (value.length >= 8) score++;
-    if (RegExp(r'\d').hasMatch(value)) score++;
-    if (RegExp(r'[A-Z]').hasMatch(value) && RegExp(r'[a-z]').hasMatch(value)) score++;
-    if (RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-\\/\[\]]').hasMatch(value)) score++;
-    if (score <= 1) return (label: s.privacyPasswordStrengthWeak, color: Colors.red);
-    if (score <= 3) return (label: s.privacyPasswordStrengthMedium, color: Colors.orange);
-    return (label: s.privacyPasswordStrengthStrong, color: Colors.green);
-  }
-
-  Future<void> _handleChangePassword() async {
-    final s = S.of(context);
-    final shouldProceed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(s.privacyPasswordUpdateConfirmTitle),
-          content: Text(s.privacyPasswordUpdateConfirmBody),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(s.cancel)),
-            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(s.privacyPasswordUpdateAction)),
-          ],
-        );
-      },
-    );
-
-    if (shouldProceed != true) return;
-
-    setState(() => _updatingPassword = true);
+  Future<void> _apply(PrivacySettings next) async {
+    final prev = _settings;
+    setState(() => _settings = next);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null || user.email == null) {
-        _snack(s.privacyPasswordUpdateRequiresSignin);
-        return;
-      }
-
-      final credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: _currentPassword,
+      await _repo.save(next);
+    } catch (e) {
+      debugPrint('privacy save failed: $e');
+      if (!mounted) return;
+      setState(() => _settings = prev);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر حفظ الإعداد')),
       );
-
-      try {
-        await user.reauthenticateWithCredential(credential);
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-          _snack(s.wrongPasswordError);
-          return;
-        }
-        _snack(s.privacyPasswordReauthFailedGeneric);
-        return;
-      }
-
-      await user.updatePassword(_newPassword);
-      final audit = await SecurityAuditService.instance.buildAuditRecord();
-      await SecurityAuditService.instance.saveLastPasswordChange(audit);
-      _currentPasswordController.clear();
-      _newPasswordController.clear();
-      _confirmPasswordController.clear();
-      setState(() {
-        _newPasswordTouched = false;
-        _confirmPasswordTouched = false;
-        _lastPasswordAudit = audit;
-      });
-      _snack(s.privacyPasswordUpdateSuccess);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'network-request-failed') {
-        _snack(s.networkError);
-      } else {
-        _snack(s.privacyPasswordUpdateFailed);
-      }
-    } catch (_) {
-      _snack(s.genericAuthError);
-    } finally {
-      if (mounted) setState(() => _updatingPassword = false);
     }
-  }
-
-  Future<void> _handleForgotPassword() async {
-    final s = S.of(context);
-    final user = FirebaseAuth.instance.currentUser;
-    final email = user?.email;
-    final maskedEmail = email == null ? s.privacyNotAvailable : _maskedEmail(email);
-
-    final send = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(s.resetPasswordTitle),
-          content: Text(s.privacyResetPasswordDialogBody(maskedEmail)),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(s.cancel)),
-            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(s.privacySendResetLinkAction)),
-          ],
-        );
-      },
-    );
-
-    if (send != true) return;
-    setState(() => _sendingReset = true);
-    try {
-      if (email == null || email.trim().isEmpty) {
-        _snack(s.privacyNoEmailLinked);
-        return;
-      }
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      _snack(s.privacyResetLinkSent);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'network-request-failed') {
-        _snack(s.networkError);
-      } else {
-        _snack(s.privacyResetLinkFailed);
-      }
-    } catch (_) {
-      _snack(s.privacyResetLinkFailed);
-    } finally {
-      if (mounted) setState(() => _sendingReset = false);
-    }
-  }
-
-  Future<void> _handleEditName() async {
-    final s = S.of(context);
-    if (_busy || _data == null) return;
-    if (!_canEditName) {
-      _snack(_nameRuleText(s));
-      return;
-    }
-    final authenticated = await _showReauthSheet();
-    if (!authenticated) return;
-
-    final result = await _showNameEditSheet(_data!);
-    if (result == null) return;
-
-    setState(() => _busy = true);
-    final changedAt = DateTime.now();
-    try {
-      await _repository.saveName(
-        firstName: result.$1,
-        lastName: result.$2,
-        changedAt: changedAt,
-      );
-      if (!mounted) return;
-      setState(() {
-        _data = _data!.copyWith(
-          firstName: result.$1,
-          lastName: result.$2,
-          lastNameChangeAt: changedAt,
-        );
-      });
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-    _snack(s.privacyNameSaved);
-  }
-
-  Future<void> _handleEditEmail() async {
-    final s = S.of(context);
-    if (_busy || _data == null) return;
-    final authenticated = await _showReauthSheet();
-    if (!authenticated) return;
-
-    final updatedEmail = await _showEmailFlowSheet(_data!.email);
-    if (updatedEmail == null) return;
-
-    setState(() => _busy = true);
-    try {
-      await _repository.saveEmail(updatedEmail);
-      if (!mounted) return;
-      setState(() {
-        _data = _data!.copyWith(email: updatedEmail);
-      });
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-    _snack(s.privacyEmailSaved);
-  }
-
-  Future<bool> _showReauthSheet() async {
-    final s = S.of(context);
-    final passwordController = TextEditingController();
-    String? error;
-    bool loading = false;
-
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AnimatedPadding(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(s.privacyReauthTitle, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 8),
-                    Text(s.privacyReauthSubtitle, style: Theme.of(context).textTheme.bodyMedium),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: passwordController,
-                      obscureText: true,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        labelText: s.password,
-                        errorText: error,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: loading ? null : () => Navigator.of(context).pop(false),
-                            child: Text(s.cancel),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: loading
-                                ? null
-                                : () async {
-                                    setModalState(() {
-                                      loading = true;
-                                      error = null;
-                                    });
-                                    final ok = await _reauthenticate(passwordController.text);
-                                    if (!context.mounted) return;
-                                    if (ok) {
-                                      Navigator.of(context).pop(true);
-                                    } else {
-                                      setModalState(() {
-                                        loading = false;
-                                        error = s.privacyReauthFailed;
-                                      });
-                                    }
-                                  },
-                            child: loading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : Text(s.privacyContinue),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    return result == true;
-  }
-
-  Future<bool> _reauthenticate(String password) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (password.trim().isEmpty) return false;
-    if (user == null) return false;
-
-    final hasPasswordProvider = user.providerData.any((provider) => provider.providerId == 'password');
-    if (hasPasswordProvider && user.email != null) {
-      try {
-        final credential = EmailAuthProvider.credential(email: user.email!, password: password);
-        await user.reauthenticateWithCredential(credential);
-        return true;
-      } catch (_) {
-        return false;
-      }
-    }
-
-    // TODO(dev): Replace this fallback with a backend-issued ephemeral re-auth token flow.
-    return password.trim().length >= 6;
-  }
-
-  Future<(String, String)?> _showNameEditSheet(PrivacyAccountData data) async {
-    final s = S.of(context);
-    final firstController = TextEditingController(text: data.firstName);
-    final lastController = TextEditingController(text: data.lastName);
-    final formKey = GlobalKey<FormState>();
-
-    return showModalBottomSheet<(String, String)>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(s.privacyEditNameTitle, style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: firstController,
-                    decoration: InputDecoration(labelText: s.privacyFirstName),
-                    validator: (value) => _validateName(value, s),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: lastController,
-                    decoration: InputDecoration(labelText: s.privacyLastName),
-                    validator: (value) => _validateName(value, s),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      if (!(formKey.currentState?.validate() ?? false)) return;
-                      Navigator.of(context).pop((firstController.text.trim(), lastController.text.trim()));
-                    },
-                    child: Text(s.save),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  String? _validateName(String? value, S s) {
-    final input = value?.trim() ?? '';
-    if (input.isEmpty) return s.privacyNameValidationRequired;
-    if (input.length < 2) return s.privacyNameValidationShort;
-    if (input.length > 40) return s.privacyNameValidationLong;
-    return null;
-  }
-
-  Future<String?> _showEmailFlowSheet(String currentEmail) async {
-    final s = S.of(context);
-    final currentController = TextEditingController();
-    final newEmailController = TextEditingController();
-    final confirmEmailController = TextEditingController();
-
-    int step = 1;
-    bool loading = false;
-    String? error;
-
-    return showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AnimatedPadding(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOut,
-              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: Column(
-                      key: ValueKey(step),
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text('${s.privacyEmailFlowTitle} (${s.privacyStepOf('$step', '4')})', style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 6),
-                        Text(s.privacyEmailFlowSecurityNote, style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 16),
-                        if (step == 1) ...[
-                          Text(s.privacyEmailFlowStep1Help(_maskedEmail(currentEmail))),
-                          const SizedBox(height: 12),
-                          TextField(controller: currentController, decoration: InputDecoration(labelText: s.privacyEmailCurrentLabel)),
-                        ] else if (step == 2) ...[
-                          Text(s.privacyEmailFlowStep2Help),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: loading
-                                      ? null
-                                      : () async {
-                                          setModalState(() {
-                                            loading = true;
-                                            error = null;
-                                          });
-                                          await Future<void>.delayed(const Duration(milliseconds: 1200));
-                                          if (!context.mounted) return;
-                                          setModalState(() {
-                                            loading = false;
-                                            step = 3;
-                                          });
-                                        },
-                                  child: loading
-                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                      : Text(s.privacyEmailFlowSendLink),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ] else if (step == 3) ...[
-                          Text(s.privacyEmailFlowStep3Help),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: newEmailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(labelText: s.privacyEmailNewLabel),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: confirmEmailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(labelText: s.privacyEmailConfirmLabel),
-                          ),
-                        ] else ...[
-                          Text(s.privacyEmailFlowStep4Help(_maskedEmail(newEmailController.text.trim()))),
-                        ],
-                        if (error != null) ...[
-                          const SizedBox(height: 10),
-                          Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                        ],
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: loading ? null : () => Navigator.of(context).pop(),
-                                child: Text(s.cancel),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: loading
-                                    ? null
-                                    : () {
-                                        final validation = _validateStep(
-                                          step: step,
-                                          currentEmail: currentEmail,
-                                          currentInput: currentController.text,
-                                          newEmail: newEmailController.text,
-                                          confirmEmail: confirmEmailController.text,
-                                          s: s,
-                                        );
-                                        if (validation != null) {
-                                          setModalState(() => error = validation);
-                                          return;
-                                        }
-                                        setModalState(() => error = null);
-                                        if (step < 4) {
-                                          setModalState(() => step += 1);
-                                          return;
-                                        }
-                                        Navigator.of(context).pop(newEmailController.text.trim());
-                                      },
-                                child: Text(step == 4 ? s.save : s.privacyContinue),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  String? _validateStep({
-    required int step,
-    required String currentEmail,
-    required String currentInput,
-    required String newEmail,
-    required String confirmEmail,
-    required S s,
-  }) {
-    if (step == 1 && currentInput.trim().toLowerCase() != currentEmail.trim().toLowerCase()) {
-      return s.privacyEmailCurrentMismatch;
-    }
-    if (step == 3) {
-      final next = newEmail.trim();
-      final confirm = confirmEmail.trim();
-      if (next.isEmpty || confirm.isEmpty) return s.privacyEmailValidationRequired;
-      if (!next.contains('@')) return s.invalidEmailValidation;
-      if (next.toLowerCase() != confirm.toLowerCase()) return s.privacyEmailConfirmMismatch;
-    }
-    return null;
-  }
-
-
-  String _networkLabel(String value) {
-    final s = S.of(context);
-    switch (value) {
-      case 'wifi':
-        return 'Wi-Fi';
-      case 'cellular':
-        return s.privacyNetworkCellular;
-      default:
-        return s.privacyUnknown;
-    }
-  }
-
-  String _dateWithDzTimezone(SecurityAudit audit) {
-    final local = audit.timestampUtc.toLocal();
-    final formatted = DateFormat('yyyy/MM/dd - HH:mm:ss').format(local);
-    return '$formatted (GMT+1 ${S.of(context).algeriaLabel})';
-  }
-
-  String _compactAuditDate(SecurityAudit audit) {
-    final local = audit.timestampUtc.toLocal();
-    final formatted = DateFormat('dd/MM/yyyy – HH:mm').format(local);
-    return '$formatted (GMT+1)';
-  }
-
-  Future<void> _showPasswordAuditDetails() async {
-    final audit = _lastPasswordAudit;
-    if (audit == null) {
-      _snack(S.of(context).privacyNoAuditDataYet);
-      return;
-    }
-
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        final s = S.of(context);
-        Widget detailRow(String title, String value) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 4, child: Text(title, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
-                const SizedBox(width: 8),
-                Expanded(flex: 6, child: Text(value, style: Theme.of(context).textTheme.bodyMedium)),
-              ],
-            ),
-          );
-        }
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(s.privacyLastPasswordChangeTitle, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              detailRow(s.privacyDateTimeLabel, _dateWithDzTimezone(audit)),
-              detailRow(s.privacyDeviceLabel, [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ').isEmpty ? s.privacyNotAvailable : [audit.deviceName, audit.deviceModel].whereType<String>().where((v) => v.trim().isNotEmpty).join(' - ')),
-              detailRow(s.privacyManufacturerLabel, audit.deviceManufacturer?.trim().isNotEmpty == true ? audit.deviceManufacturer! : s.privacyNotAvailable),
-              detailRow(s.privacyOperatingSystemLabel, '${audit.osName ?? s.privacyNotAvailable} ${audit.osVersion ?? ''}'.trim()),
-              detailRow(s.privacyAppVersionLabel, '${audit.appVersion ?? s.privacyNotAvailable} (${audit.buildNumber ?? '-'})'),
-              detailRow(s.privacyConnectionTypeLabel, _networkLabel(audit.networkType)),
-              detailRow(s.privacyApproxLocationLabel, audit.locationApprox?.trim().isNotEmpty == true ? audit.locationApprox! : s.privacyNotAvailable),
-              detailRow(s.privacyIpAddressLabel, audit.maskedIp),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _copyFullIpSecurely,
-                  icon: const Icon(Icons.copy_outlined),
-                  label: Text(s.privacyCopyFullIp),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  onPressed: _handleThisWasNotMe,
-                  icon: const Icon(Icons.warning_amber_rounded),
-                  label: Text(s.privacyThisWasNotMe),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _copyFullIpSecurely() async {
-    final audit = _lastPasswordAudit;
-    final ip = audit?.ipAddress?.trim();
-    if (ip == null || ip.isEmpty) {
-      _snack(S.of(context).privacyIpUnavailable);
-      return;
-    }
-
-    final reAuthed = await _promptSensitiveReAuth();
-    if (!reAuthed) return;
-
-    await Clipboard.setData(ClipboardData(text: ip));
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    _snack(S.of(context).privacyCopyIpSuccess);
-  }
-
-  Future<bool> _promptSensitiveReAuth() async {
-    final localAuth = LocalAuthentication();
-    try {
-      final canUseBiometric = await localAuth.canCheckBiometrics && await localAuth.isDeviceSupported();
-      if (canUseBiometric) {
-        final didAuth = await localAuth.authenticate(
-          localizedReason: S.of(context).privacyReauthCopyIpReason,
-          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
-        );
-        if (didAuth) return true;
-      }
-    } catch (_) {
-      // fallback to password prompt below
-    }
-
-    return _showReauthSheet();
-  }
-
-  Future<void> _handleThisWasNotMe() async {
-    final s = S.of(context);
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(s.privacySecurityAlertTitle),
-          content: Text(s.privacySecurityAlertBody),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(s.cancel)),
-            ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: Text(s.privacyContinueAction)),
-          ],
-        );
-      },
-    );
-
-    if (confirm != true) return;
-    final reAuthed = await _promptSensitiveReAuth();
-    if (!reAuthed) return;
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final currentSessionId = await SessionService.instance.getCurrentSessionId(user.uid) ??
-            await SessionService.instance.getOrCreateSessionId(user.uid);
-        await SessionService.instance.revokeAllOtherSessions(uid: user.uid, currentSessionId: currentSessionId);
-      } else {
-        throw StateError('No active user');
-      }
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      _snack(s.privacyOtherSessionsRevokedPrecaution);
-    } catch (_) {
-      _snack(s.privacyRevokeSessionsFailed);
-    }
-
-    if (!mounted) return;
-    setState(() => _passwordExpanded = true);
-    _snack(s.privacyChangePasswordNowNote);
-  }
-
-  void _snack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = S.of(context);
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    final theme = Theme.of(context);
+    final muted = theme.hintColor;
 
-    final data = _data;
-    if (data == null) {
-      return Center(child: Text(s.privacyLoadFailed));
+    if (_loading) {
+      return const Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+      );
     }
 
     return Directionality(
       textDirection: ui.TextDirection.rtl,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          Text(s.privacyTabTitle, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text(s.privacyTabSubtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700)),
-          const SizedBox(height: 20),
-          Text(s.privacyAccountOverviewSection, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-                    title: Text(s.privacyNameRowTitle),
-                    subtitle: Text(data.fullName.isEmpty ? '-' : data.fullName),
-                    trailing: IconButton(
-                      onPressed: _busy ? null : _handleEditName,
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 72, end: 16, bottom: 10),
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Text(_nameRuleText(s), style: Theme.of(context).textTheme.bodySmall),
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.email_outlined)),
-                    title: Text(s.privacyEmailRowTitle),
-                    subtitle: Text(_maskedEmail(data.email)),
-                    trailing: IconButton(
-                      onPressed: _busy ? null : _handleEditEmail,
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ),
-                ],
-              ),
+          Text(
+            'الخصوصية',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 14),
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: ExpansionTile(
-              title: Text(s.privacyChangePasswordTitle, style: const TextStyle(fontWeight: FontWeight.w700)),
-              leading: const Icon(Icons.password_outlined),
-              trailing: Icon(_passwordExpanded ? Icons.expand_less : Icons.expand_more),
-              initiallyExpanded: _passwordExpanded,
-              onExpansionChanged: (value) => setState(() => _passwordExpanded = value),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [
-                TextField(
-                  controller: _currentPasswordController,
-                  focusNode: _currentPasswordFocusNode,
-                  obscureText: !_showCurrentPassword,
-                  autofillHints: const [AutofillHints.password],
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) => _newPasswordFocusNode.requestFocus(),
-                  decoration: InputDecoration(
-                    labelText: s.privacyCurrentPasswordLabel,
-                    helperText: s.privacyCurrentPasswordHelper,
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _showCurrentPassword = !_showCurrentPassword),
-                      icon: Icon(_showCurrentPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                    ),
-                  ),
-                ),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: TextButton(
-                    onPressed: _sendingReset ? null : _handleForgotPassword,
-                    child: _sendingReset
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(s.forgotPassword),
-                  ),
-                ),
-                Text(
-                  s.privacyResetEmailHint,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _newPasswordController,
-                  focusNode: _newPasswordFocusNode,
-                  obscureText: !_showNewPassword,
-                  autofillHints: const [AutofillHints.newPassword],
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) => setState(() => _newPasswordTouched = true),
-                  onSubmitted: (_) => _confirmPasswordFocusNode.requestFocus(),
-                  decoration: InputDecoration(
-                    labelText: s.privacyNewPasswordLabel,
-                    helperText: s.privacyNewPasswordHelper,
-                    errorText: _newPasswordError,
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _showNewPassword = !_showNewPassword),
-                      icon: Icon(_showNewPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Builder(
-                  builder: (context) {
-                    final strength = _passwordStrength(s);
-                    return Row(
-                      children: [
-                        const Icon(Icons.shield_outlined, size: 16),
-                        const SizedBox(width: 6),
-                        Text(s.privacyPasswordStrengthLabel, style: Theme.of(context).textTheme.bodySmall),
-                        Text(
-                          strength.label,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: strength.color, fontWeight: FontWeight.w700),
+          const SizedBox(height: 4),
+          Text(
+            'تحكم في من يرى حسابك ومن يمكنه التفاعل معك.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+          ),
+          const SizedBox(height: 22),
+
+          _header('الحساب'),
+          _card([
+            _switchTile(
+              icon: Icons.lock_outline_rounded,
+              title: 'حساب خاص',
+              subtitle:
+              'المتابعة بموافقتك. المنشورات والمتابعون يظهرون للموافق عليهم فقط.',
+              value: _settings.privateAccount,
+              onChanged: (v) async {
+                if (v) {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('تحويل الحساب إلى خاص؟'),
+                      content: const Text(
+                        'المتابعون الحاليون يبقون. أي متابعة جديدة تحتاج موافقتك، ولن تظهر منشوراتك لغير المتابعين.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('إلغاء'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('تأكيد'),
                         ),
                       ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _confirmPasswordController,
-                  focusNode: _confirmPasswordFocusNode,
-                  obscureText: !_showConfirmPassword,
-                  autofillHints: const [AutofillHints.newPassword],
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) => setState(() => _confirmPasswordTouched = true),
-                  onSubmitted: (_) {
-                    FocusScope.of(context).unfocus();
-                    if (_canSubmitPasswordChange) _handleChangePassword();
-                  },
-                  decoration: InputDecoration(
-                    labelText: s.privacyConfirmNewPasswordLabel,
-                    helperText: s.privacyConfirmNewPasswordHelper,
-                    errorText: _confirmPasswordError,
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _showConfirmPassword = !_showConfirmPassword),
-                      icon: Icon(_showConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(
-                      _confirmPassword.isEmpty ? Icons.info_outline : (_isConfirmMatch ? Icons.check_circle : Icons.error_outline),
-                      size: 16,
-                      color: _confirmPassword.isEmpty ? Colors.grey : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _confirmPassword.isEmpty
-                          ? s.privacyEnterConfirmToMatch
-                          : (_isConfirmMatch ? s.privacyPasswordsMatch : s.privacyPasswordMismatchError),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: _confirmPassword.isEmpty
-                                ? Colors.grey.shade700
-                                : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
-                          ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.history_rounded,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _auditLoading
-                                  ? s.privacyLoadingLastChange
-                                  : (_lastPasswordAudit == null
-                                      ? s.privacyLastPasswordChangeUnavailable
-                                      : s.privacyLastPasswordChangeAt(_compactAuditDate(_lastPasswordAudit!))),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _lastPasswordAudit == null ? 'IP: —' : 'IP: ${_lastPasswordAudit!.maskedIp}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _lastPasswordAudit == null ? null : _showPasswordAuditDetails,
-                        child: Text(s.privacyViewDetails),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _canSubmitPasswordChange ? _handleChangePassword : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _confirmPassword.isEmpty
-                        ? null
-                        : (_isConfirmMatch ? Colors.green : Theme.of(context).colorScheme.error),
-                    foregroundColor: _confirmPassword.isEmpty ? null : Colors.white,
-                  ),
-                  child: _updatingPassword
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text(s.privacySaveNewPassword),
-                ),
-              ],
+                  );
+                  if (ok != true) return;
+                }
+                await _apply(_settings.copyWith(privateAccount: v));
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid != null) {
+                  await syncAuthorPrivateOnPosts(uid: uid, isPrivate: v);
+                }
+              },
             ),
-          ),
+            _navTile(
+              icon: Icons.groups_outlined,
+              title: 'من يرى قائمة المتابعين',
+              value: _label(_settings.followersVisibility),
+              onTap: () => _pickAudience(
+                title: 'من يرى قائمة المتابعين',
+                current: _settings.followersVisibility,
+                onSave: (v) =>
+                    _apply(_settings.copyWith(followersVisibility: v)),
+              ),
+            ),
+            _navTile(
+              icon: Icons.person_add_alt_outlined,
+              title: 'من يرى قائمة المتابَعين',
+              value: _label(_settings.followingVisibility),
+              onTap: () => _pickAudience(
+                title: 'من يرى قائمة المتابَعين',
+                current: _settings.followingVisibility,
+                onSave: (v) =>
+                    _apply(_settings.copyWith(followingVisibility: v)),
+              ),
+            ),
+          ]),
+
+          _header('الظهور والبحث'),
+          _card([
+            _switchTile(
+              icon: Icons.search_rounded,
+              title: 'الظهور في البحث',
+              subtitle: 'السماح بظهور حسابك عند البحث بالاسم.',
+              value: _settings.appearInSearch,
+              onChanged: (v) async {
+                await _apply(_settings.copyWith(appearInSearch: v));
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid != null) {
+                  await syncAuthorSearchFlagOnPosts(
+                    uid: uid,
+                    appearInSearch: v,
+                  );
+                }
+              },
+            ),
+            _switchTile(
+              icon: Icons.recommend_outlined,
+              title: 'اقتراح حسابي للآخرين',
+              subtitle: 'قد يظهر حسابك في اقتراحات المتابعة.',
+              value: _settings.suggestAccount,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(suggestAccount: v)),
+            ),
+            _switchTile(
+              icon: Icons.alternate_email_rounded,
+              title: 'العثور عليّ عبر البريد',
+              subtitle: 'من يملك بريدك يمكنه إيجاد حسابك.',
+              value: _settings.findByEmail,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(findByEmail: v)),
+            ),
+            _switchTile(
+              icon: Icons.phone_outlined,
+              title: 'العثور عليّ عبر الهاتف',
+              subtitle: 'من يملك رقمك يمكنه إيجاد حسابك.',
+              value: _settings.findByPhone,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(findByPhone: v)),
+            ),
+          ]),
+
+          _header('المنشورات والتفاعل'),
+          _card([
+            _navTile(
+              icon: Icons.mode_comment_outlined,
+              title: 'من يمكنه التعليق',
+              value: _label(_settings.whoCanComment),
+              onTap: () => _pickAudience(
+                title: 'من يمكنه التعليق',
+                current: _settings.whoCanComment,
+                onSave: (v) =>
+                    _apply(_settings.copyWith(whoCanComment: v)),
+              ),
+            ),
+            _navTile(
+              icon: Icons.repeat_rounded,
+              title: 'من يمكنه إعادة النشر',
+              value: _label(_settings.whoCanRepost),
+              onTap: () => _pickAudience(
+                title: 'من يمكنه إعادة النشر',
+                current: _settings.whoCanRepost,
+                onSave: (v) =>
+                    _apply(_settings.copyWith(whoCanRepost: v)),
+              ),
+            ),
+            _navTile(
+              icon: Icons.alternate_email,
+              title: 'من يمكنه الإشارة إليّ',
+              subtitle: 'الوسوم والإشارات في المنشورات والتعليقات.',
+              value: _label(_settings.whoCanMention),
+              onTap: () => _pickAudience(
+                title: 'من يمكنه الإشارة إليّ',
+                current: _settings.whoCanMention,
+                onSave: (v) =>
+                    _apply(_settings.copyWith(whoCanMention: v)),
+              ),
+            ),
+
+            _switchTile(
+              icon: Icons.favorite_border_rounded,
+              title: 'إخفاء عدد الإعجابات',
+              subtitle: 'لا يظهر عدد التصويتات على منشوراتك للآخرين.',
+              value: _settings.hideLikeCounts,
+              onChanged: (v) async {
+                await _apply(_settings.copyWith(hideLikeCounts: v));
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid != null) {
+                  await syncAuthorHideLikesOnPosts(uid: uid, hide: v);
+                }
+              },
+            ),
+            _navTile(
+              icon: Icons.filter_alt_outlined,
+              title: 'الكلمات المخفية',
+              subtitle: 'إخفاء تعليقات تحتوي كلمات معيّنة.',
+              value: 'غير مفعّل',
+            ),
+          ]),
+
+          _header('الرسائل'),
+          _card([
+            _navTile(
+              icon: Icons.chat_bubble_outline_rounded,
+              title: 'من يمكنه مراسلتي',
+              value: _label(_settings.whoCanMessage),
+              onTap: () => _pickAudience(
+                title: 'من يمكنه مراسلتي',
+                current: _settings.whoCanMessage,
+                onSave: (v) =>
+                    _apply(_settings.copyWith(whoCanMessage: v)),
+              ),
+            ),
+            _switchTile(
+              icon: Icons.mark_email_unread_outlined,
+              title: 'طلبات الرسائل',
+              subtitle: 'رسائل الغرباء تذهب إلى الطلبات بدل الصندوق.',
+              value: _settings.messageRequests,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(messageRequests: v)),
+            ),
+            _switchTile(
+              icon: Icons.done_all_rounded,
+              title: 'إيصالات القراءة',
+              subtitle:
+              'إظهار أنك قرأت الرسالة. إن أوقفتها لن تراها عند الآخرين.',
+              value: _settings.readReceipts,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(readReceipts: v)),
+            ),
+            _switchTile(
+              icon: Icons.more_horiz_rounded,
+              title: 'مؤشر الكتابة',
+              subtitle: 'إظهار أنك تكتب الآن.',
+              value: _settings.typingIndicator,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(typingIndicator: v)),
+            ),
+          ]),
+
+          _header('النشاط'),
+          _card([
+            _switchTile(
+              icon: Icons.circle,
+              title: 'إظهار أنني متصل',
+              subtitle: 'المتابعون أو من تراسلهم يرون حالة الاتصال.',
+              value: _settings.showOnline,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(showOnline: v)),
+            ),
+            _switchTile(
+              icon: Icons.schedule_rounded,
+              title: 'آخر ظهور',
+              subtitle: 'إظهار وقت آخر نشاط على الحساب.',
+              value: _settings.showLastSeen,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(showLastSeen: v)),
+            ),
+          ]),
+
+          _header('معلومات الملف الشخصي'),
+          _card([
+            _switchTile(
+              icon: Icons.email_outlined,
+              title: 'إظهار البريد في الملف',
+              subtitle: 'يظهر بريدك للزائرين في صفحة الحساب.',
+              value: _settings.showEmailOnProfile,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(showEmailOnProfile: v)),
+            ),
+            _switchTile(
+              icon: Icons.school_outlined,
+              title: 'إظهار المعلومات الأكاديمية',
+              subtitle: 'الجامعة، الكلية، والتخصص.',
+              value: _settings.showAcademicInfo,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(showAcademicInfo: v)),
+            ),
+            _switchTile(
+              icon: Icons.link_rounded,
+              title: 'إظهار الروابط الاجتماعية',
+              subtitle: 'GitHub وLinkedIn والمعرض.',
+              value: _settings.showSocialLinks,
+              onChanged: (v) =>
+                  _apply(_settings.copyWith(showSocialLinks: v)),
+            ),
+          ]),
+
+          _header('البيانات والسلامة'),
+          _card([
+            _navTile(
+              icon: Icons.block_rounded,
+              title: 'الحسابات المحظورة',
+              subtitle: 'إدارة من حظرتهم.',
+            ),
+            _navTile(
+              icon: Icons.visibility_off_outlined,
+              title: 'المنشورات المخفية',
+              subtitle: 'منشورات أخفيتها من الفيد.',
+            ),
+            _navTile(
+              icon: Icons.download_outlined,
+              title: 'تنزيل بياناتي',
+              subtitle: 'نسخة من منشوراتك وإعداداتك.',
+            ),
+            _navTile(
+              icon: Icons.privacy_tip_outlined,
+              title: 'سياسة الخصوصية',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PrivacyPolicyScreen(),
+                  ),
+                );
+              },
+            ),
+          ]),
         ],
       ),
     );
   }
+
+  Widget _header(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          fontSize: 13.5,
+          color: Theme.of(context).hintColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _card(List<Widget> children) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Material(
+        color: theme.colorScheme.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.35),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              children[i],
+              if (i != children.length - 1)
+                Divider(
+                  height: 1,
+                  indent: 56,
+                  color: theme.dividerColor.withValues(alpha: 0.25),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _switchTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      secondary: Icon(icon),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle, style: TextStyle(color: Theme.of(context).hintColor)),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+
+  Future<void> _pickAudience({
+    required String title,
+    required String current,
+    required Future<void> Function(String value) onSave,
+  }) async {
+    const options = <(String, String, String)>[
+      ('everyone', 'الجميع', 'أي شخص في UniSpace'),
+      ('followers', 'المتابعون', 'من يتابعك فقط'),
+      ('mutual', 'المتبادلون', 'من تتابعانه بعضكما'),
+      ('none', 'لا أحد', 'أنت فقط'),
+    ];
+
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              for (final o in options)
+                ListTile(
+                  title: Text(
+                    o.$2,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(o.$3),
+                  trailing: current == o.$1
+                      ? const Icon(Icons.check_rounded)
+                      : null,
+                  onTap: () => Navigator.pop(ctx, o.$1),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || picked == current) return;
+    await onSave(picked);
+  }
+
+  Widget _navTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    String? value,
+    VoidCallback? onTap,
+  }) {
+    final theme = Theme.of(context);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      leading: Icon(icon),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: subtitle == null
+          ? (value == null
+          ? null
+          : Text(value, style: TextStyle(color: theme.hintColor)))
+          : Text(
+        value == null ? subtitle : '$subtitle\n$value',
+        style: TextStyle(color: theme.hintColor),
+      ),
+      trailing: const Icon(Icons.chevron_left_rounded),
+      onTap: onTap,
+    );
+  }
+}
+
+Future<void> syncAuthorPrivateOnPosts({
+  required String uid,
+  required bool isPrivate,
+}) async {
+  final snap = await FirebaseFirestore.instance
+      .collection('community_posts')
+      .where('authorId', isEqualTo: uid)
+      .get();
+  if (snap.docs.isEmpty) return;
+
+  var batch = FirebaseFirestore.instance.batch();
+  var n = 0;
+  for (final d in snap.docs) {
+    batch.update(d.reference, {'authorPrivate': isPrivate});
+    n++;
+    if (n == 400) {
+      await batch.commit();
+      batch = FirebaseFirestore.instance.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+}
+
+Future<void> syncAuthorSearchFlagOnPosts({
+  required String uid,
+  required bool appearInSearch,
+}) async {
+  final snap = await FirebaseFirestore.instance
+      .collection('community_posts')
+      .where('authorId', isEqualTo: uid)
+      .get();
+  if (snap.docs.isEmpty) return;
+
+  var batch = FirebaseFirestore.instance.batch();
+  var n = 0;
+  for (final d in snap.docs) {
+    batch.update(d.reference, {'authorAppearInSearch': appearInSearch});
+    n++;
+    if (n == 400) {
+      await batch.commit();
+      batch = FirebaseFirestore.instance.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+}
+
+Future<void> syncAuthorHideLikesOnPosts({
+  required String uid,
+  required bool hide,
+}) async {
+  final snap = await FirebaseFirestore.instance
+      .collection('community_posts')
+      .where('authorId', isEqualTo: uid)
+      .get();
+  if (snap.docs.isEmpty) return;
+  var batch = FirebaseFirestore.instance.batch();
+  var n = 0;
+  for (final d in snap.docs) {
+    batch.update(d.reference, {'authorHideLikeCounts': hide});
+    n++;
+    if (n == 400) {
+      await batch.commit();
+      batch = FirebaseFirestore.instance.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
 }
