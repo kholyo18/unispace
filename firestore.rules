@@ -1,6 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Only Admin SDK code may publish a revocation cutoff.
+    match /authRevocations/{userId} {
+      allow read, write: if false;
+    }
+
+    // Recovery verifiers, attempt limits and operation state are server-only.
+    match /mfaRecovery/{userId} { allow read, write: if false; }
+    match /mfaRecoveryAttempts/{attemptId} { allow read, write: if false; }
+
+    function hasActiveAuthentication() {
+      return request.auth != null
+        && (!exists(/databases/$(database)/documents/authRevocations/$(request.auth.uid))
+          || request.auth.token.auth_time >
+            get(/databases/$(database)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore);
+    }
+
     match /supportMessages/{messageId} {
       allow create: if isValidSupportMessage();
       allow read, update, delete: if false;
@@ -15,16 +31,34 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow read, update, delete: if hasActiveAuthentication() && request.auth.uid == userId;
       allow create: if false;
 
       match /sessions/{sessionId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
+        allow read: if hasActiveAuthentication() && request.auth.uid == userId;
+        allow create: if hasActiveAuthentication()
           && request.auth.uid == userId
-          && isValidSessionDoc(userId, sessionId);
+          && isValidSessionDoc(userId, sessionId)
+          && request.resource.data.isRevoked == false;
+        allow update: if hasActiveAuthentication()
+          && request.auth.uid == userId
+          && (resource.data.get('isRevoked', false) != true
+              || request.resource.data.isRevoked == true)
+          && (isSessionRevocation() || isValidSessionDoc(userId, sessionId));
         allow delete: if false;
       }
+    }
+
+    // Older installations wrote a different schema. They may be revoked without
+    // permitting arbitrary changes to those records or relaxing normal validation.
+    function isSessionRevocation() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'isRevoked', 'revokedAt', 'revokeReason', 'updatedAt'
+        ])
+        && request.resource.data.isRevoked == true
+        && request.resource.data.revokedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.revokeReason is string;
     }
 
     function isValidSessionDoc(userId, sessionId) {

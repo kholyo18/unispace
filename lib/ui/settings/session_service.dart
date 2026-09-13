@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/auth_session_service.dart';
+import 'session_record.dart';
 
 class SessionService with WidgetsBindingObserver {
   SessionService._();
@@ -18,7 +19,6 @@ class SessionService with WidgetsBindingObserver {
 
   static const _installationIdKey = 'auth_installation_id';
   static const _sessionIdKeyPrefix = 'auth_current_session_id_';
-  static const _lastUidKey = 'auth_last_session_uid';
   static const Duration _heartbeatInterval = Duration(seconds: 55);
   static const Duration _heartbeatThrottle = Duration(seconds: 45);
   static const Duration onlineWindow = Duration(minutes: 2);
@@ -30,7 +30,8 @@ class SessionService with WidgetsBindingObserver {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _sessionSubscription;
   Timer? _heartbeatTimer;
   DateTime? _lastHeartbeatAt;
-  String? _lastKnownUid;
+  String? _lastHeartbeatSession;
+  Future<void> _initialization = Future<void>.value();
   bool _isObservingLifecycle = false;
 
   Future<String> getOrCreateInstallationId() async {
@@ -67,16 +68,38 @@ class SessionService with WidgetsBindingObserver {
     await prefs.remove('$_sessionIdKeyPrefix$uid');
   }
 
-  Future<void> initSession(String uid, {bool forceNew = false}) async {
+  Future<void> initSession(String uid, {bool forceNew = false}) {
+    final next = _initialization.then((_) => _initSession(uid, forceNew: forceNew));
+    _initialization = next.catchError((Object error, StackTrace stack) {
+      debugPrint('[Session] initialization failed: $error');
+    });
+    return next;
+  }
+
+  Future<void> _initSession(String uid, {bool forceNew = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.uid != uid) return;
 
     if (forceNew) {
+      _stopHeartbeat();
+      await _sessionSubscription?.cancel();
+      _sessionSubscription = null;
+      final previous = await getCurrentSessionId(uid);
+      if (previous != null) {
+        final ref = _firestore.collection('users').doc(uid).collection('sessions').doc(previous);
+        if ((await ref.get()).exists) await revokeSession(user: user, sessionId: previous);
+      }
       await clearCurrentSessionId(uid);
     }
     final sessionId = await getOrCreateSessionId(uid);
     final info = await readCurrentDeviceInfo();
-    await _upsertSession(user: user, sessionId: sessionId, info: info, forceCreatedAt: forceNew);
+    final accepted = await _upsertSession(user: user, sessionId: sessionId, info: info);
+    if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+    if (!accepted) {
+      await clearCurrentSessionId(uid);
+      await AuthSessionService.signOutFully();
+      return;
+    }
     await markCurrentSession(uid, sessionId);
     await _attachSessionRevocationListener(uid);
     _startHeartbeat();
@@ -107,19 +130,18 @@ class SessionService with WidgetsBindingObserver {
     required String sessionId,
     bool force = false,
   }) async {
+    if (FirebaseAuth.instance.currentUser?.uid != user.uid) return;
+    final key = '${user.uid}:$sessionId';
     final now = DateTime.now();
-    if (!force && _lastHeartbeatAt != null && now.difference(_lastHeartbeatAt!) < _heartbeatThrottle) {
+    if (!force && _lastHeartbeatSession == key && _lastHeartbeatAt != null &&
+        now.difference(_lastHeartbeatAt!) < _heartbeatThrottle) {
       return;
     }
+    // Update only activity: never recreate a missing record or undo revocation.
+    await _firestore.collection('users').doc(user.uid).collection('sessions')
+        .doc(sessionId).update(sessionHeartbeat());
+    _lastHeartbeatSession = key;
     _lastHeartbeatAt = now;
-    await _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId).set({
-      'sessionId': sessionId,
-      'isRevoked': false,
-      'revokedAt': null,
-      'revokeReason': null,
-      'lastSeenAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
   }
 
   Stream<List<SessionModel>> watchActiveSessions({required User user}) {
@@ -127,7 +149,6 @@ class SessionService with WidgetsBindingObserver {
         .collection('users')
         .doc(user.uid)
         .collection('sessions')
-        .orderBy('lastSeenAt', descending: true)
         .snapshots()
         .map((snapshot) => _dedupeSessions(snapshot.docs.map(SessionModel.fromFirestore).toList())
           ..removeWhere((session) => session.isRevoked));
@@ -138,18 +159,17 @@ class SessionService with WidgetsBindingObserver {
         .collection('users')
         .doc(user.uid)
         .collection('sessions')
-        .orderBy('lastSeenAt', descending: true)
         .snapshots()
         .map((snapshot) => _dedupeSessions(snapshot.docs.map(SessionModel.fromFirestore).toList()));
   }
 
   Future<void> revokeSession({required User user, required String sessionId}) {
-    return _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId).set({
+    return _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId).update({
       'isRevoked': true,
       'revokedAt': FieldValue.serverTimestamp(),
       'revokeReason': 'manual',
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   Future<void> updateSessionAlias({required String uid, required String sessionId, required String alias}) {
@@ -193,33 +213,32 @@ class SessionService with WidgetsBindingObserver {
         .snapshots();
   }
 
-  Future<void> revokeAllOtherSessions({required String uid, required String currentSessionId}) async {
-    final snapshot = await _firestore.collection('users').doc(uid).collection('sessions').get();
-    final batch = _firestore.batch();
-    for (final doc in snapshot.docs) {
-      if (doc.id == currentSessionId) continue;
-      batch.set(doc.reference, {
-        'isRevoked': true,
-        'revokedAt': FieldValue.serverTimestamp(),
-        'revokeReason': 'logout_all_other',
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    }
-    await batch.commit();
+  Future<void> revokeAllOtherSessions({required String uid, required String currentSessionId}) {
+    if (currentSessionId.isEmpty) throw StateError('Current session is unavailable');
+    return _revokeSessions(uid, except: currentSessionId, reason: 'logout_all_other');
   }
 
-  Future<void> revokeAllSessions(String uid) async {
+  Future<void> revokeAllSessions(String uid) => _revokeSessions(uid, reason: 'logout_all');
+
+  Future<void> _revokeSessions(String uid, {String? except, required String reason}) async {
     final snapshot = await _firestore.collection('users').doc(uid).collection('sessions').get();
-    final batch = _firestore.batch();
+    var batch = _firestore.batch();
+    var count = 0;
     for (final doc in snapshot.docs) {
-      batch.set(doc.reference, {
+      if (doc.id == except || doc.data()['isRevoked'] == true) continue;
+      batch.update(doc.reference, {
         'isRevoked': true,
         'revokedAt': FieldValue.serverTimestamp(),
-        'revokeReason': 'logout_all',
+        'revokeReason': reason,
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
+      if (++count == 400) {
+        await batch.commit();
+        batch = _firestore.batch();
+        count = 0;
+      }
     }
-    await batch.commit();
+    if (count > 0) await batch.commit();
   }
 
   Future<void> revokeCurrentSession(String uid) async {
@@ -237,7 +256,6 @@ class SessionService with WidgetsBindingObserver {
   void _ensureAuthListener() {
     _authSubscription ??= FirebaseAuth.instance.authStateChanges().listen((user) async {
       if (user != null) {
-        _lastKnownUid = user.uid;
         _startHeartbeat();
         await _attachSessionRevocationListener(user.uid);
         _ensureLifecycleObserver();
@@ -260,7 +278,11 @@ class SessionService with WidgetsBindingObserver {
       }
       final sessionId = await getCurrentSessionId(user.uid);
       if (sessionId == null) return;
-      await updateHeartbeat(user: user, sessionId: sessionId);
+      try {
+        await updateHeartbeat(user: user, sessionId: sessionId);
+      } catch (error) {
+        debugPrint('[Session] heartbeat failed: $error');
+      }
     });
   }
 
@@ -295,10 +317,34 @@ class SessionService with WidgetsBindingObserver {
           await AuthSessionService.signOutFully();
         }
       },
-      onError: (Object error, StackTrace st) {
-        debugPrint('[Session] listen ignored: $error');
+      onError: (Object error, StackTrace st) async {
+        debugPrint('[Session] listener failed: $error');
+        if (error is FirebaseException && error.code == 'permission-denied') {
+          await _checkRevokedAuthentication(uid);
+        }
       },
     );
+  }
+
+  Future<void> _checkRevokedAuthentication(String uid) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid != uid) return;
+    try {
+      // A permission error alone may be a rules issue. Sign out only when
+      // Firebase confirms that the current authentication is no longer valid.
+      await user.getIdToken(true);
+    } on FirebaseAuthException catch (error) {
+      if (!const {'user-token-expired', 'invalid-user-token', 'user-disabled', 'user-not-found'}
+          .contains(error.code)) {
+        return;
+      }
+      if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+      _stopHeartbeat();
+      await clearCurrentSessionId(uid);
+      await AuthSessionService.signOutFully();
+    } catch (error) {
+      debugPrint('[Session] credential check unavailable: $error');
+    }
   }
 
   void _stopHeartbeat() {
@@ -306,45 +352,59 @@ class SessionService with WidgetsBindingObserver {
     _heartbeatTimer = null;
   }
 
-  Future<void> _upsertSession({
+  Future<bool> _upsertSession({
     required User user,
     required String sessionId,
     required DeviceInfo info,
-    bool forceCreatedAt = false,
   }) async {
     final packageInfo = await PackageInfo.fromPlatform();
     final locale = WidgetsBinding.instance.platformDispatcher.locale.toLanguageTag();
+    final deviceId = await getOrCreateInstallationId();
     final docRef = _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId);
-
-    final data = <String, dynamic>{
-      'sessionId': sessionId,
-      'deviceId': sessionId,
-      'alias': info.model,
-      'platform': info.platform,
-      'model': info.model,
-      'manufacturer': info.manufacturer,
-      'osVersion': info.osVersion,
-      'appVersion': packageInfo.version,
-      'buildNumber': packageInfo.buildNumber,
-      'locale': locale,
-      'isTrusted': false,
-      'isRevoked': false,
-      'revokedAt': null,
-      'revokeReason': null,
-      'lastSeenAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-
-    if (forceCreatedAt) {
-      data['createdAt'] = FieldValue.serverTimestamp();
-    } else {
-      final existing = await docRef.get();
-      if (!existing.exists || existing.data()?['createdAt'] == null) {
-        data['createdAt'] = FieldValue.serverTimestamp();
+    var created = false;
+    final accepted = await _firestore.runTransaction<bool>((transaction) async {
+      final existing = await transaction.get(docRef);
+      final record = sessionInitialization(
+        existing: existing.data(),
+        sessionId: sessionId,
+        deviceId: deviceId,
+        metadata: {
+          'model': info.model,
+          'platform': info.platform,
+          'manufacturer': info.manufacturer,
+          'osVersion': info.osVersion,
+          'appVersion': packageInfo.version,
+          'buildNumber': packageInfo.buildNumber,
+          'locale': locale,
+        },
+      );
+      created = !existing.exists;
+      if (record == null) return false;
+      transaction.set(docRef, record, SetOptions(merge: true));
+      return true;
+    });
+    if (accepted && created) {
+      // Alert delivery is best effort; it must not turn a successful login into a failure.
+      try {
+        final ref = _firestore.collection('users').doc(user.uid);
+        final profile = await ref.get();
+        if (profile.data()?['security']?['loginAlerts'] != false) {
+          await ref.set({
+            'security': {
+              'lastLoginAlert': {
+                'sessionId': sessionId,
+                'deviceName': info.model,
+                'platform': info.platform,
+                'at': FieldValue.serverTimestamp(),
+              },
+            },
+          }, SetOptions(merge: true));
+        }
+      } catch (error) {
+        debugPrint('[Session] login alert failed: $error');
       }
     }
-
-    await docRef.set(data, SetOptions(merge: true));
+    return accepted;
   }
 
   List<SessionModel> _dedupeSessions(List<SessionModel> sessions) {
@@ -424,9 +484,13 @@ class SessionService with WidgetsBindingObserver {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     if (state == AppLifecycleState.resumed) {
-      updateLastSeen(user.uid, force: true);
+      unawaited(updateLastSeen(user.uid, force: true).catchError((Object error) {
+        debugPrint('[Session] activity update failed: $error');
+      }));
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      updateLastSeen(user.uid, force: true);
+      unawaited(updateLastSeen(user.uid, force: true).catchError((Object error) {
+        debugPrint('[Session] activity update failed: $error');
+      }));
     }
   }
 }
@@ -482,12 +546,15 @@ class SessionModel {
   });
 
   factory SessionModel.fromFirestore(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final model = (data['model'] as String?) ?? (data['deviceModel'] as String?) ?? 'Android device';
+    return SessionModel.fromMap(doc.id, doc.data());
+  }
+
+  factory SessionModel.fromMap(String id, Map<String, dynamic> data) {
+    final model = (data['model'] as String?) ?? (data['deviceModel'] as String?) ?? (data['deviceName'] as String?) ?? 'Unknown device';
     return SessionModel(
-      id: doc.id,
-      sessionId: (data['sessionId'] as String?) ?? doc.id,
-      deviceId: (data['deviceId'] as String?) ?? doc.id,
+      id: id,
+      sessionId: (data['sessionId'] as String?) ?? id,
+      deviceId: (data['deviceId'] as String?) ?? id,
       alias: (data['alias'] as String?)?.trim().isNotEmpty == true
           ? (data['alias'] as String).trim()
           : model,
@@ -499,7 +566,7 @@ class SessionModel {
       locale: data['locale'] as String?,
       createdAt: data['createdAt'] as Timestamp?,
       lastSeenAt: (data['lastSeenAt'] as Timestamp?) ?? (data['lastActiveAt'] as Timestamp?),
-      isTrusted: data['isTrusted'] as bool? ?? false,
+      isTrusted: data['isTrusted'] as bool? ?? data['trusted'] as bool? ?? false,
       isRevoked: data['isRevoked'] as bool? ?? false,
       revokedAt: data['revokedAt'] as Timestamp?,
       revokeReason: data['revokeReason'] as String?,
@@ -510,8 +577,9 @@ class SessionModel {
 
   bool get isOnline {
     final seen = lastSeenAt?.toDate();
-    if (seen == null) return false;
-    return DateTime.now().difference(seen) <= SessionService.onlineWindow;
+    if (seen == null || isRevoked) return false;
+    final elapsed = DateTime.now().difference(seen);
+    return !elapsed.isNegative && elapsed <= SessionService.onlineWindow;
   }
 
   final String id;

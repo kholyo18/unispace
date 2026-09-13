@@ -1,3 +1,7 @@
+import '../auth/account_recovery_screen.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'private_totp_qr.dart';
+import 'security_checklist.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -26,8 +30,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:local_auth/local_auth.dart';
-import 'dart:math';
 
 
 class NotificationsSettingsScreen extends StatelessWidget {
@@ -133,6 +135,20 @@ class PrivacySettingsScreen extends StatefulWidget {
 }
 
 class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
+  bool _saving = false;
+  Future<void> _savePrivacy({ProfileVisibility? visibility, bool? showEmail}) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await UserProfileService.instance.updateProfile(profileVisibility: visibility, showEmailInProfile: showEmail);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر حفظ إعدادات الخصوصية. حاول مجددًا.')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _promptBlockUser() async {
     final s = S.of(context);
     final user = FirebaseAuth.instance.currentUser;
@@ -198,31 +214,20 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 value: ProfileVisibility.public,
                 groupValue: profile.profileVisibility,
                 title: Text(S.of(context).profileVisibilityPublic),
-                onChanged: (value) {
-                  if (value != null) {
-                    UserProfileService.instance
-                        .updateProfile(profileVisibility: value);
-                  }
-                },
+                onChanged: _saving ? null : (value) => _savePrivacy(visibility: value),
               ),
               RadioListTile<ProfileVisibility>(
                 value: ProfileVisibility.private,
                 groupValue: profile.profileVisibility,
                 title: Text(S.of(context).profileVisibilityPrivate),
-                onChanged: (value) {
-                  if (value != null) {
-                    UserProfileService.instance
-                        .updateProfile(profileVisibility: value);
-                  }
-                },
+                onChanged: _saving ? null : (value) => _savePrivacy(visibility: value),
               ),
               const SizedBox(height: 16),
               SwitchListTile.adaptive(
                 value: profile.showEmailInProfile,
                 title: Text(S.of(context).showEmailInProfileTitle),
                 subtitle: Text(S.of(context).showEmailInProfileHint),
-                onChanged: (value) => UserProfileService.instance
-                    .updateProfile(showEmailInProfile: value),
+                onChanged: _saving ? null : (value) => _savePrivacy(showEmail: value),
               ),
               const SizedBox(height: 16),
               Row(
@@ -939,6 +944,9 @@ class ManageDevicesScreen extends StatefulWidget {
 
 class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   String? _localSessionId;
+  bool _loadingSession = true;
+  bool _sessionLoadFailed = false;
+  bool _working = false;
 
   @override
   void initState() {
@@ -947,12 +955,17 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
   }
 
   Future<void> _loadSessionId() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    final id = await SessionService.instance.getCurrentSessionId(user.uid) ??
-        await SessionService.instance.getOrCreateSessionId(user.uid);
-    if (!mounted) return;
-    setState(() => _localSessionId = id);
+    setState(() { _loadingSession = true; _sessionLoadFailed = false; });
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final id = user == null ? null : await SessionService.instance.getCurrentSessionId(user.uid);
+      if (!mounted) return;
+      setState(() { _localSessionId = id; _sessionLoadFailed = id == null; });
+    } catch (_) {
+      if (mounted) setState(() => _sessionLoadFailed = true);
+    } finally {
+      if (mounted) setState(() => _loadingSession = false);
+    }
   }
 
   String _relativeSince(Timestamp? timestamp, BuildContext context) {
@@ -972,36 +985,55 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
         .format(timestamp.toDate());
   }
 
-  Future<void> _logoutSession(User user, String sessionId) async {
+  Future<bool> _confirmSessionAction(String message) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد إنهاء الجلسات'),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إنهاء')),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Future<bool> _runSessionAction(Future<void> Function() action, {required String confirmation, required String success}) async {
+    if (_working) return false;
+    setState(() => _working = true);
     try {
-      await SessionService.instance.revokeSession(user: user, sessionId: sessionId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context).sessionSignedOutSuccess)),
-      );
+      if (!await _confirmSessionAction(confirmation) || !mounted) return false;
+      await action();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
+      return true;
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(S.of(context).sessionSignOutFailed)),
       );
+      return false;
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
+  }
+
+  Future<bool> _logoutSession(User user, String sessionId) async {
+    if (sessionId == _localSessionId) return false;
+    return _runSessionAction(
+      () => SessionService.instance.revokeSession(user: user, sessionId: sessionId),
+      confirmation: 'سيُطلب من هذا الجهاز تسجيل الدخول مجددًا عند اتصاله بالخدمة.',
+      success: S.of(context).sessionSignedOutSuccess,
+    );
   }
 
   Future<void> _logoutAllOther(String uid) async {
     final current = _localSessionId;
     if (current == null) return;
-    try {
-      await SessionService.instance.revokeAllOtherSessions(uid: uid, currentSessionId: current);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context).otherSessionsSignedOutSuccess)),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context).sessionSignOutFailed)),
-      );
-    }
+    await _runSessionAction(
+      () => SessionService.instance.revokeAllOtherSessions(uid: uid, currentSessionId: current),
+      confirmation: 'إنهاء الجلسات الأخرى مع إبقاء هذا الجهاز؟ تُطبّق التغييرات على الأجهزة عند اتصالها بالخدمة.',
+      success: S.of(context).otherSessionsSignedOutSuccess,
+    );
   }
 
   Future<void> _showSessionDetails({
@@ -1053,12 +1085,16 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     SwitchListTile.adaptive(
                       value: trusted,
                       onChanged: (value) async {
-                        setSheetState(() => trusted = value);
-                        await SessionService.instance.setSessionTrusted(
-                          uid: user.uid,
-                          sessionId: session.id,
-                          trusted: value,
-                        );
+                        try {
+                          await SessionService.instance.setSessionTrusted(
+                            uid: user.uid, sessionId: session.id, trusted: value,
+                          );
+                          if (context.mounted) setSheetState(() => trusted = value);
+                        } catch (_) {
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('تعذر حفظ حالة الجهاز')),
+                          );
+                        }
                       },
                       title: Text(S.of(context).sessionTrustedDevice),
                     ),
@@ -1073,13 +1109,23 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     const SizedBox(height: 12),
                     FilledButton.tonal(
                       onPressed: () async {
-                        await SessionService.instance.updateSessionAlias(
-                          uid: user.uid,
-                          sessionId: session.id,
-                          alias: aliasController.text,
-                        );
-                        if (!mounted) return;
-                        Navigator.of(context).pop();
+                        final alias = aliasController.text.trim();
+                        if (alias.isEmpty || alias.length > 100) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('اسم الجهاز يجب أن يكون بين حرف و100 حرف')),
+                          );
+                          return;
+                        }
+                        try {
+                          await SessionService.instance.updateSessionAlias(
+                            uid: user.uid, sessionId: session.id, alias: alias,
+                          );
+                          if (context.mounted) Navigator.of(context).pop();
+                        } catch (_) {
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('تعذر حفظ اسم الجهاز')),
+                          );
+                        }
                       },
                       child: Text(S.of(context).save),
                     ),
@@ -1087,9 +1133,8 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     if (!isCurrent)
                       FilledButton(
                         onPressed: () async {
-                          await _logoutSession(user, session.id);
-                          if (!mounted) return;
-                          Navigator.of(context).pop();
+                          final ok = await _logoutSession(user, session.id);
+                          if (ok && context.mounted) Navigator.of(context).pop();
                         },
                         child: Text(S.of(context).signOut),
                       ),
@@ -1102,7 +1147,11 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     ),
                     OutlinedButton(
                       onPressed: () async {
-                        await SecurityService.instance.logoutAllDevices();
+                        await _runSessionAction(
+                          () async { await SecurityService.instance.logoutAllDevices(); },
+                          confirmation: 'إنهاء جميع الجلسات، بما فيها هذا الجهاز؟',
+                          success: S.of(context).sessionSignedOutSuccess,
+                        );
                       },
                       child: Text(S.of(context).logoutAllDevices),
                     ),
@@ -1114,6 +1163,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
         );
       },
     );
+    aliasController.dispose();
   }
 
   @override
@@ -1129,7 +1179,13 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
           : StreamBuilder<List<SessionModel>>(
               stream: allSessionsStream,
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting || _localSessionId == null) {
+                if (snapshot.hasError || _sessionLoadFailed) {
+                  return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Text('تعذر تحميل الجلسات. حاول مجددًا.'),
+                    TextButton(onPressed: _loadSessionId, child: const Text('إعادة المحاولة')),
+                  ]));
+                }
+                if (snapshot.connectionState == ConnectionState.waiting || _loadingSession) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final sessions = (snapshot.data ?? const <SessionModel>[]).where((s) => !s.isRevoked).toList()
@@ -1164,7 +1220,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         title: Text(S.of(context).currentDeviceTitle, textDirection: m.TextDirection.rtl),
                         subtitle: Text(
                           currentSession == null
-                              ? S.of(context).activeSessionNow
+                              ? 'لم تتوفر بيانات هذا الجهاز بعد'
                               : '${currentSession.alias}\n${_relativeSince(currentSession.lastSeenAt, context)}',
                           textDirection: m.TextDirection.rtl,
                         ),
@@ -1319,54 +1375,6 @@ class _FontScaleOptionTile extends StatelessWidget {
 
 const Color kSecurityAccent = Color(0xFF0D9488);
 
-const _sessionPrefKey = 'security_session_id';
-
-Future<void> ensureSecuritySession() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    var id = prefs.getString(_sessionPrefKey);
-    final userRef =
-    FirebaseFirestore.instance.collection('users').doc(user.uid);
-    final col = userRef.collection('sessions');
-    if (id == null || id.isEmpty) {
-      id = col.doc().id;
-      await prefs.setString(_sessionPrefKey, id);
-    }
-
-    final existing = await col.doc(id).get();
-    final isNew = !existing.exists;
-
-    await col.doc(id).set({
-      'deviceName': securityDeviceLabel(),
-      'platform': defaultTargetPlatform.name,
-      'lastActiveAt': FieldValue.serverTimestamp(),
-      if (isNew) 'createdAt': FieldValue.serverTimestamp(),
-      'app': 'unispace',
-    }, SetOptions(merge: true));
-
-    if (!isNew) return;
-
-    final profile = await userRef.get();
-    final alertsOn = profile.data()?['security']?['loginAlerts'] != false;
-    if (!alertsOn) return;
-
-    await userRef.set({
-      'security': {
-        'lastLoginAlert': {
-          'sessionId': id,
-          'deviceName': securityDeviceLabel(),
-          'platform': defaultTargetPlatform.name,
-          'at': FieldValue.serverTimestamp(),
-        },
-      },
-    }, SetOptions(merge: true));
-  } catch (e) {
-    debugPrint('ensureSecuritySession: $e');
-  }
-}
-
 String securityDeviceLabel() {
   switch (defaultTargetPlatform) {
     case TargetPlatform.iOS:
@@ -1380,16 +1388,6 @@ String securityDeviceLabel() {
     default:
       return 'هذا الجهاز';
   }
-}
-
-String _securityTimeAgo(DateTime? dt) {
-  if (dt == null) return '';
-  final d = DateTime.now().difference(dt);
-  if (d.inSeconds < 60) return 'الآن';
-  if (d.inMinutes < 60) return 'قبل ${d.inMinutes} د';
-  if (d.inHours < 24) return 'قبل ${d.inHours} س';
-  if (d.inDays < 7) return 'قبل ${d.inDays} ي';
-  return '${dt.day}/${dt.month}/${dt.year}';
 }
 
 bool _hasPasswordProvider(User user) {
@@ -1407,9 +1405,9 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
   User? _user;
   bool _alerts = true;
   bool _loadingAlerts = true;
-  String? _sessionId;
-  bool _appLockOn = false;
   bool _twoFactorOn = false;
+  bool _loadingSecurity = true;
+  bool _securityLoadFailed = false;
   bool _frozen = false;
 
   DocumentReference<Map<String, dynamic>>? get _userRef {
@@ -1426,28 +1424,31 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
   }
 
   Future<void> _boot() async {
-    await ensureSecuritySession();
-    final prefs = await SharedPreferences.getInstance();
-    await _user?.reload();
     if (!mounted) return;
-    setState(() {
-      _user = FirebaseAuth.instance.currentUser;
-      _sessionId = prefs.getString(_sessionPrefKey);
-    });
-    await _loadAlerts();
-
-    final lock = prefs.getBool('security_app_lock_on') ?? false;
-    if (mounted) setState(() => _appLockOn = lock);
-
+    setState(() { _loadingSecurity = true; _securityLoadFailed = false; });
     try {
-      final u = FirebaseAuth.instance.currentUser;
-      if (u != null) {
-        final factors = await u.multiFactor.getEnrolledFactors();
-        if (mounted) {
-          setState(() => _twoFactorOn = factors.isNotEmpty);
-        }
-      }
-    } catch (_) {}
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      await user.reload();
+      final current = FirebaseAuth.instance.currentUser;
+      if (current == null || current.uid != user.uid) return;
+      final factors = await current.multiFactor.getEnrolledFactors();
+      final profile = await FirebaseFirestore.instance.collection('users').doc(current.uid)
+          .get(const GetOptions(source: Source.server));
+      final security = Map<String, dynamic>.from(profile.data()?['security'] ?? {});
+      if (!mounted) return;
+      setState(() {
+        _user = current;
+        _twoFactorOn = factors.any((factor) => factor.factorId == 'totp');
+        _alerts = security['loginAlerts'] != false;
+        _frozen = security['frozen'] == true;
+        _loadingAlerts = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _securityLoadFailed = true);
+    } finally {
+      if (mounted) setState(() => _loadingSecurity = false);
+    }
   }
 
   Future<void> _loadAlerts() async {
@@ -1469,12 +1470,6 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
     } catch (_) {
       if (mounted) setState(() => _loadingAlerts = false);
     }
-  }
-
-  Future<void> _reloadUser() async {
-    await _user?.reload();
-    if (!mounted) return;
-    setState(() => _user = FirebaseAuth.instance.currentUser);
   }
 
   Future<void> _toggleAlerts(bool value) async {
@@ -1504,8 +1499,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
     await Navigator.of(context).push(
       MaterialPageRoute<T>(builder: (_) => page),
     );
-    await _reloadUser();
-    if (mounted) setState(() {});
+    if (mounted) await _boot();
   }
 
   @override
@@ -1513,6 +1507,14 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
     final user = _user;
     if (user == null) {
       return const Center(child: Text('سجّل الدخول أولًا'));
+    }
+
+    if (_loadingSecurity) return const Center(child: CircularProgressIndicator());
+    if (_securityLoadFailed) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('تعذر قراءة حالة الأمان. لم تُغيّر إعداداتك.'),
+        TextButton(onPressed: _boot, child: const Text('إعادة المحاولة')),
+      ]));
     }
 
     final email = (user.email ?? '').trim();
@@ -1527,12 +1529,6 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
           'فعّل التأكيد بخطوتين',
           Icons.verified_user_outlined,
               () => _open(const _TwoFactorPage()),
-        ),
-      if (!_appLockOn)
-        _SecMissingStep(
-          'فعّل قفل التطبيق',
-          Icons.lock_outline_rounded,
-              () => _open(const _AppLockPage()),
         ),
       if (email.isNotEmpty && !emailVerified)
         _SecMissingStep(
@@ -1554,15 +1550,9 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
         ),
     ];
 
-    const totalChecks = 6;
-    var done = 0;
-    if (email.isNotEmpty) done++;
-    if (emailVerified) done++;
-    if (hasPhone) done++;
-    if (_alerts) done++;
-    if (_appLockOn) done++;
-    if (_appLockOn) done++;
-    final score = done.clamp(0, totalChecks);
+    const totalChecks = SecurityChecklist.total;
+    final score = SecurityChecklist(hasEmail: email.isNotEmpty, emailVerified: emailVerified,
+      hasPhone: hasPhone, loginAlerts: _alerts, twoFactor: _twoFactorOn).completed;
 
     return RefreshIndicator(
       color: kSecurityAccent,
@@ -1603,7 +1593,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
                     final factors =
                         await u?.multiFactor.getEnrolledFactors() ?? [];
                     if (!mounted) return;
-                    setState(() => _twoFactorOn = factors.isNotEmpty);
+                    setState(() => _twoFactorOn = factors.any((factor) => factor.factorId == 'totp'));
                   } catch (_) {}
                 },
               ),
@@ -1643,11 +1633,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
             children: [
               _SecSessionsPreview(
                 uid: user.uid,
-                currentSessionId: _sessionId,
-                onOpenAll: () => _open(_SessionsPage(
-                  uid: user.uid,
-                  currentSessionId: _sessionId,
-                )),
+                onOpenAll: () => _open(const ManageDevicesScreen()),
               ),
             ],
           ),
@@ -1679,31 +1665,6 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
             ],
           ),
 
-          const SizedBox(height: 18),
-          _SecGroup(
-            title: 'قفل التطبيق',
-            children: [
-              _SecRowTile(
-                icon: Icons.lock_outline_rounded,
-                title: 'قفل UniSpace',
-                subtitle: _appLockOn
-                    ? 'مطلوب بصمة أو PIN بعد مغادرة التطبيق'
-                    : 'أي شخص يفتح الهاتف يصل لحسابك',
-                badge: _appLockOn ? 'مفعّل' : 'غير مفعّل',
-                badgeTone:
-                _appLockOn ? _SecBadgeTone.ok : _SecBadgeTone.warn,
-                onTap: () async {
-                  await _open(const _AppLockPage());
-                  final prefs = await SharedPreferences.getInstance();
-                  if (!mounted) return;
-                  setState(() {
-                    _appLockOn =
-                        prefs.getBool('security_app_lock_on') ?? false;
-                  });
-                },
-              ),
-            ],
-          ),
           const SizedBox(height: 18),
           _SecGroup(
             title: 'حالات الطوارئ',
@@ -2041,41 +2002,31 @@ class _SecBadge extends StatelessWidget {
 }
 
 class _SecSessionsPreview extends StatelessWidget {
-  const _SecSessionsPreview({
-    required this.uid,
-    required this.currentSessionId,
-    required this.onOpenAll,
-  });
-
+  const _SecSessionsPreview({required this.uid, required this.onOpenAll});
   final String uid;
-  final String? currentSessionId;
   final VoidCallback onOpenAll;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('sessions')
-          .snapshots(),
-      builder: (context, snap) {
-        final docs = snap.data?.docs ?? const [];
-        final count = docs.length;
-        String subtitle;
-        if (!snap.hasData) {
-          subtitle = 'جاري التحميل…';
-        } else if (count <= 1) {
-          subtitle = 'جهاز واحد نشط — ${securityDeviceLabel()}';
-        } else {
-          subtitle = '$count أجهزة متصلة';
-        }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid != uid) return const SizedBox.shrink();
+    return StreamBuilder<List<SessionModel>>(
+      stream: SessionService.instance.watchActiveSessions(user: user),
+      builder: (context, snapshot) {
+        final sessions = snapshot.data ?? const <SessionModel>[];
+        final subtitle = snapshot.hasError
+            ? 'تعذر تحميل الجلسات — افتح القائمة لإعادة المحاولة'
+            : !snapshot.hasData
+                ? 'جاري تحميل الجلسات…'
+                : sessions.isEmpty
+                    ? 'لا توجد جلسات مسجّلة'
+                    : '${sessions.length} جلسات مسجّلة — عرض الأجهزة وآخر نشاط';
         return _SecRowTile(
           icon: Icons.devices_rounded,
-          title: 'الأجهزة المتصلة',
+          title: 'الأجهزة والجلسات',
           subtitle: subtitle,
-          badge: count > 1 ? '$count' : null,
-          badgeTone: count > 1 ? _SecBadgeTone.warn : _SecBadgeTone.ok,
+          badge: snapshot.hasData && sessions.isNotEmpty ? '${sessions.length}' : null,
+          badgeTone: snapshot.hasError ? _SecBadgeTone.warn : null,
           onTap: onOpenAll,
         );
       },
@@ -2129,11 +2080,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
 
     setState(() => _busy = true);
     try {
-      final cred = EmailAuthProvider.credential(
-        email: email,
-        password: _current.text,
-      );
-      await user.reauthenticateWithCredential(cred);
+      if (!await _secReauthWithPassword(context, password: _current.text)) return;
       await user.updatePassword(_next.text);
 
       if (!mounted) return;
@@ -2331,17 +2278,13 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
       _snack('هذا هو بريدك الحالي');
       return;
     }
-    if (_password.text.isEmpty) {
+    if (_hasPasswordProvider(user) && _password.text.isEmpty) {
       _snack('أدخل كلمة المرور لتأكيد التغيير');
       return;
     }
     setState(() => _busy = true);
     try {
-      final cred = EmailAuthProvider.credential(
-        email: current,
-        password: _password.text,
-      );
-      await user.reauthenticateWithCredential(cred);
+      if (!await _secReauthWithPassword(context, password: _password.text)) return;
       await user.verifyBeforeUpdateEmail(next);
       if (!mounted) return;
       _snack(
@@ -2413,7 +2356,7 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
+          if (user != null && _hasPasswordProvider(user)) TextField(
             controller: _password,
             obscureText: true,
             decoration: InputDecoration(
@@ -2652,219 +2595,12 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
   }
 }
 
-class _SessionsPage extends StatelessWidget {
-  const _SessionsPage({
-    required this.uid,
-    required this.currentSessionId,
-  });
-
-  final String uid;
-  final String? currentSessionId;
-
-  CollectionReference<Map<String, dynamic>> get _col => FirebaseFirestore
-      .instance
-      .collection('users')
-      .doc(uid)
-      .collection('sessions');
-
-  Future<void> _endOne(BuildContext context, String id) async {
-    if (id == currentSessionId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا يمكن إنهاء جلسة هذا الجهاز من هنا')),
-      );
-      return;
-    }
-    await _col.doc(id).delete();
-  }
-
-  Future<void> _endOthers(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('إنهاء الأجهزة الأخرى؟'),
-        content: const Text(
-          'ستُغلق الجلسات على كل الأجهزة ما عدا هذا الجهاز.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('إنهاء'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await _revokeOtherSessions();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إنهاء الجلسات الأخرى')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('الأجهزة المتصلة'),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final snap = await _col.get();
-              final batch = FirebaseFirestore.instance.batch();
-              for (final d in snap.docs) {
-                batch.set(
-                  d.reference,
-                  {'trusted': false},
-                  SetOptions(merge: true),
-                );
-              }
-              await batch.commit();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('أُلغي توثيق كل الأجهزة')),
-                );
-              }
-            },
-            child: const Text('نسيان الموثوقة'),
-          ),
-          TextButton(
-            onPressed: () => _endOthers(context),
-            child: const Text('إنهاء الأخرى'),
-          ),
-        ],
-      ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _col.snapshots(),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return const Center(child: Text('تعذر تحميل الجلسات'));
-          }
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final docs = [...snap.data!.docs];
-          docs.sort((a, b) {
-            final at = a.data()['lastActiveAt'];
-            final bt = b.data()['lastActiveAt'];
-            if (at is Timestamp && bt is Timestamp) return bt.compareTo(at);
-            return 0;
-          });
-          if (docs.isEmpty) {
-            return const Center(child: Text('لا توجد جلسات مسجّلة بعد'));
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            itemCount: docs.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, i) {
-              final d = docs[i];
-              final data = d.data();
-              final mine = d.id == currentSessionId;
-              final trusted = data['trusted'] == true;
-              final name = (data['deviceName'] ?? 'جهاز').toString();
-              final platform = (data['platform'] ?? '').toString();
-              final last = data['lastActiveAt'];
-              final lastDt = last is Timestamp ? last.toDate() : null;
-              final loc = [
-                if ((data['city'] ?? '').toString().isNotEmpty) data['city'],
-                if ((data['country'] ?? '').toString().isNotEmpty)
-                  data['country'],
-              ].join('، ');
-
-              return Material(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF16181C)
-                    : Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  leading: CircleAvatar(
-                    backgroundColor: kSecurityAccent.withValues(alpha: 0.12),
-                    child: Icon(
-                      mine
-                          ? Icons.phone_iphone_rounded
-                          : Icons.devices_rounded,
-                      color: kSecurityAccent,
-                    ),
-                  ),
-                  title: Text(
-                    mine
-                        ? (trusted
-                        ? '$name (هذا الجهاز · موثوق)'
-                        : '$name (هذا الجهاز)')
-                        : (trusted ? '$name · موثوق' : name),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  subtitle: Text(
-                    [
-                      if (platform.isNotEmpty) platform,
-                      if (loc.isNotEmpty) loc,
-                      _securityTimeAgo(lastDt),
-                    ].where((e) => e.toString().isNotEmpty).join(' · '),
-                  ),
-                  trailing: mine
-                      ? TextButton(
-                    onPressed: () async {
-                      await _col.doc(d.id).set(
-                        {'trusted': !trusted},
-                        SetOptions(merge: true),
-                      );
-                    },
-                    child: Text(trusted ? 'إلغاء التوثيق' : 'توثيق الجهاز'),
-                  )
-                      : IconButton(
-                    tooltip: 'إنهاء الجلسة',
-                    onPressed: () => _endOne(context, d.id),
-                    icon: const Icon(
-                      Icons.logout_rounded,
-                      color: Color(0xFFDC2626),
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
 Future<void> _revokeOtherSessions() async {
   final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
-  final prefs = await SharedPreferences.getInstance();
-  final mine = prefs.getString(_sessionPrefKey);
-  final col = FirebaseFirestore.instance
-      .collection('users')
-      .doc(user.uid)
-      .collection('sessions');
-  final snap = await col.get();
-  final batch = FirebaseFirestore.instance.batch();
-  for (final d in snap.docs) {
-    if (d.id != mine) batch.delete(d.reference);
-  }
-  batch.set(
-    FirebaseFirestore.instance.collection('users').doc(user.uid),
-    {
-      'security': {
-        'sessionsRevokedAt': FieldValue.serverTimestamp(),
-      },
-    },
-    SetOptions(merge: true),
-  );
-  await batch.commit();
+  if (user == null) throw StateError('No signed in user');
+  final mine = await SessionService.instance.getCurrentSessionId(user.uid);
+  if (mine == null) throw StateError('Current session is unavailable');
+  await SessionService.instance.revokeAllOtherSessions(uid: user.uid, currentSessionId: mine);
 }
 
 String _secAuthError(FirebaseAuthException e) {
@@ -2894,530 +2630,6 @@ String _secAuthError(FirebaseAuthException e) {
 }
 
 
-const _lockOnKey = 'security_app_lock_on';
-const _lockPinKey = 'security_app_lock_pin';
-const _lockHideNotifKey = 'security_hide_notif_preview';
-
-String _hashPin(String pin) {
-  return pin.codeUnits
-      .fold<int>(0, (a, b) => (a * 31 + b) & 0x7fffffff)
-      .toString();
-}
-
-class _AppLockPage extends StatefulWidget {
-  const _AppLockPage();
-
-  @override
-  State<_AppLockPage> createState() => _AppLockPageState();
-}
-
-class _AppLockPageState extends State<_AppLockPage> {
-  bool _on = false;
-  bool _hideNotif = true;
-  bool _hasPin = false;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _on = prefs.getBool(_lockOnKey) ?? false;
-      _hideNotif = prefs.getBool(_lockHideNotifKey) ?? true;
-      _hasPin = (prefs.getString(_lockPinKey) ?? '').isNotEmpty;
-    });
-  }
-
-  Future<void> _setOn(bool value) async {
-    if (value && !_hasPin) {
-      final ok = await _askNewPin();
-      if (ok != true) return;
-    }
-    if (value) {
-      final bioOk = await _tryBiometric(reason: 'فعّل قفل UniSpace');
-      if (!bioOk) {
-        // البصمة اختيارية؛ PIN يكفي
-      }
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_lockOnKey, value);
-    if (!mounted) return;
-    setState(() => _on = value);
-  }
-
-  Future<void> _setHideNotif(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_lockHideNotifKey, value);
-    if (!mounted) return;
-    setState(() => _hideNotif = value);
-  }
-
-  Future<bool?> _askNewPin() async {
-    final c1 = TextEditingController();
-    final c2 = TextEditingController();
-    final ok = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            0,
-            16,
-            16 + MediaQuery.viewInsetsOf(ctx).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'تعيين رمز PIN',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-              ),
-              const SizedBox(height: 6),
-              const Text('4 إلى 6 أرقام. يُستخدم إن تعذّرت البصمة.'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: c1,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(
-                  labelText: 'PIN',
-                  counterText: '',
-                ),
-              ),
-              TextField(
-                controller: c2,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(
-                  labelText: 'تأكيد PIN',
-                  counterText: '',
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: kSecurityAccent,
-                ),
-                onPressed: () {
-                  final a = c1.text.trim();
-                  final b = c2.text.trim();
-                  if (a.length < 4) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('4 أرقام على الأقل')),
-                    );
-                    return;
-                  }
-                  if (a != b) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('الرمزان غير متطابقين')),
-                    );
-                    return;
-                  }
-                  Navigator.pop(ctx, a);
-                },
-                child: const Text('حفظ'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    c1.dispose();
-    c2.dispose();
-    if (ok == null || ok.isEmpty) return false;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lockPinKey, _hashPin(ok));
-    if (mounted) setState(() => _hasPin = true);
-    return true;
-  }
-
-  Future<void> _changePin() async {
-    final saved = (await SharedPreferences.getInstance()).getString(_lockPinKey);
-    final current = TextEditingController();
-    final next = TextEditingController();
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            0,
-            16,
-            16 + MediaQuery.viewInsetsOf(ctx).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'تغيير PIN',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: current,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'PIN الحالي'),
-              ),
-              TextField(
-                controller: next,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(labelText: 'PIN الجديد'),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: kSecurityAccent,
-                ),
-                onPressed: () {
-                  if (_hashPin(current.text.trim()) != (saved ?? '')) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('PIN الحالي غير صحيح')),
-                    );
-                    return;
-                  }
-                  if (next.text.trim().length < 4) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('4 أرقام على الأقل')),
-                    );
-                    return;
-                  }
-                  Navigator.pop(ctx, true);
-                },
-                child: const Text('حفظ'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    final newPin = next.text.trim();
-    current.dispose();
-    next.dispose();
-    if (ok != true) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lockPinKey, _hashPin(newPin));
-    if (mounted) setState(() => _hasPin = true);
-  }
-
-  Future<bool> _tryBiometric({required String reason}) async {
-    setState(() => _busy = true);
-    try {
-      final auth = LocalAuthentication();
-      final can = await auth.canCheckBiometrics ||
-          await auth.isDeviceSupported();
-      if (!can) return false;
-      return await auth.authenticate(
-        localizedReason: reason,
-        options: const AuthenticationOptions(
-          biometricOnly: false,
-          stickyAuth: true,
-        ),
-      );
-    } catch (_) {
-      return false;
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('قفل التطبيق')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _on,
-            activeColor: kSecurityAccent,
-            title: const Text(
-              'قفل UniSpace',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            subtitle: const Text(
-              'يُطلب فتح القفل عند العودة إلى التطبيق',
-            ),
-            onChanged: _busy ? null : _setOn,
-          ),
-          const Divider(),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _hideNotif,
-            activeColor: kSecurityAccent,
-            title: const Text(
-              'إخفاء محتوى الإشعارات',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            subtitle: const Text(
-              'على شاشة القفل يظهر «رسالة جديدة» بدون النص',
-            ),
-            onChanged: _setHideNotif,
-          ),
-          const Divider(),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.pin_outlined, color: kSecurityAccent),
-            title: const Text('تغيير رمز PIN'),
-            subtitle: Text(_hasPin ? 'معيَّن' : 'غير معيَّن'),
-            trailing: const Icon(Icons.chevron_left_rounded),
-            onTap: _changePin,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'البصمة أو الوجه يُستخدمان إن كانا مفعّلين في الجهاز. PIN احتياطي إذا تعذّرا.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// غلّف به مادّة التطبيق (انظر الخطوة 6).
-class SecurityLockGate extends StatefulWidget {
-  const SecurityLockGate({super.key, required this.child});
-  final Widget child;
-
-  @override
-  State<SecurityLockGate> createState() => _SecurityLockGateState();
-}
-
-class _SecurityLockGateState extends State<SecurityLockGate>
-    with WidgetsBindingObserver {
-  bool _locked = false;
-  bool _checking = true;
-  bool _paused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _boot();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  Future<void> _boot() async {
-    final prefs = await SharedPreferences.getInstance();
-    final on = prefs.getBool(_lockOnKey) ?? false;
-    if (!mounted) return;
-    setState(() {
-      _locked = on;
-      _checking = false;
-    });
-    if (on) unawaited(_unlock());
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      _paused = true;
-    }
-    if (state == AppLifecycleState.resumed && _paused) {
-      _paused = false;
-      unawaited(_maybeLock());
-    }
-  }
-
-  Future<void> _maybeLock() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_lockOnKey) != true) return;
-    if (!mounted) return;
-    setState(() => _locked = true);
-    await _unlock();
-  }
-
-  Future<void> _unlock() async {
-    try {
-      final auth = LocalAuthentication();
-      final can =
-          await auth.canCheckBiometrics || await auth.isDeviceSupported();
-      if (can) {
-        final ok = await auth.authenticate(
-          localizedReason: 'افتح UniSpace',
-          options: const AuthenticationOptions(
-            biometricOnly: false,
-            stickyAuth: true,
-          ),
-        );
-        if (ok && mounted) {
-          setState(() => _locked = false);
-          return;
-        }
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _locked = true);
-  }
-
-  Future<void> _unlockWithPin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_lockPinKey) ?? '';
-    if (saved.isEmpty || _hashPin(pin) != saved) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN غير صحيح')),
-      );
-      return;
-    }
-    if (mounted) setState(() => _locked = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_checking) {
-      return const ColoredBox(
-        color: Colors.black,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    return Stack(
-      children: [
-        widget.child,
-        if (_locked) _LockScrim(onPin: _unlockWithPin, onBio: _unlock),
-      ],
-    );
-  }
-}
-
-class _LockScrim extends StatefulWidget {
-  const _LockScrim({required this.onPin, required this.onBio});
-  final ValueChanged<String> onPin;
-  final VoidCallback onBio;
-
-  @override
-  State<_LockScrim> createState() => _LockScrimState();
-}
-
-class _LockScrimState extends State<_LockScrim> {
-  String _pin = '';
-
-  void _digit(String d) {
-    if (_pin.length >= 6) return;
-    setState(() => _pin += d);
-    if (_pin.length >= 4) widget.onPin(_pin);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFF0B0B0D),
-      child: SafeArea(
-        child: Column(
-          children: [
-            const Spacer(),
-            const Icon(Icons.lock_rounded, color: Colors.white, size: 42),
-            const SizedBox(height: 12),
-            const Text(
-              'UniSpace مقفل',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 22,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'بصمة أو PIN للمتابعة',
-              style: TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(6, (i) {
-                final on = i < _pin.length;
-                return Container(
-                  width: 12,
-                  height: 12,
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: on ? kSecurityAccent : Colors.white24,
-                  ),
-                );
-              }),
-            ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
-              child: GridView.count(
-                crossAxisCount: 3,
-                shrinkWrap: true,
-                childAspectRatio: 1.6,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  for (final n in ['1', '2', '3', '4', '5', '6', '7', '8', '9'])
-                    TextButton(
-                      onPressed: () => _digit(n),
-                      child: Text(
-                        n,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  IconButton(
-                    onPressed: widget.onBio,
-                    icon: const Icon(
-                      Icons.fingerprint_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => _digit('0'),
-                    child: const Text(
-                      '0',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      if (_pin.isEmpty) return;
-                      setState(() => _pin = _pin.substring(0, _pin.length - 1));
-                    },
-                    icon: const Icon(Icons.backspace_outlined, color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
 class _TwoFactorPage extends StatefulWidget {
   const _TwoFactorPage();
 
@@ -3427,11 +2639,12 @@ class _TwoFactorPage extends StatefulWidget {
 
 class _TwoFactorPageState extends State<_TwoFactorPage> {
   bool _on = false;
+  bool _loading = true;
+  bool _loadFailed = false;
   bool _busy = false;
   TotpSecret? _secret;
   String? _otpauth;
   final _code = TextEditingController();
-  List<String>? _backupShownOnce;
 
   @override
   void initState() {
@@ -3446,12 +2659,17 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _loadFailed = false; });
     try {
       final u = FirebaseAuth.instance.currentUser;
       final factors = await u?.multiFactor.getEnrolledFactors() ?? [];
       if (!mounted) return;
-      setState(() => _on = factors.isNotEmpty);
-    } catch (_) {}
+      setState(() => _on = factors.any((factor) => factor.factorId == 'totp'));
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _snack(String m) {
@@ -3459,59 +2677,11 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
-  Future<String?> _askPassword() async {
-    final c = TextEditingController();
-    final ok = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('أكّد هويتك'),
-        content: TextField(
-          controller: c,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'كلمة المرور الحالية',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: kSecurityAccent),
-            onPressed: () => Navigator.pop(ctx, c.text),
-            child: const Text('متابعة'),
-          ),
-        ],
-      ),
-    );
-    c.dispose();
-    if (ok == null || ok.isEmpty) return null;
-    return ok;
-  }
-
-  Future<bool> _reauth(String password) async {
-    final user = FirebaseAuth.instance.currentUser;
-    final email = user?.email;
-    if (user == null || email == null) return false;
-    try {
-      await user.reauthenticateWithCredential(
-        EmailAuthProvider.credential(email: email, password: password),
-      );
-      return true;
-    } on FirebaseAuthException catch (e) {
-      _snack(_secAuthError(e));
-      return false;
-    }
-  }
-
   Future<void> _startEnroll() async {
-    final password = await _askPassword();
-    if (password == null) return;
-    if (!await _reauth(password)) return;
-
+    if (_busy) return;
     setState(() => _busy = true);
     try {
+      if (!await _secReauthWithPassword(context) || !mounted) return;
       final user = FirebaseAuth.instance.currentUser!;
       final session = await user.multiFactor.getSession();
       final secret = await TotpMultiFactorGenerator.generateSecret(session);
@@ -3528,13 +2698,43 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
       if (e.code == 'unsupported' ||
           (e.message ?? '').toLowerCase().contains('second factor')) {
         _snack(
-          'فعّل TOTP من Firebase Console ← Authentication ← Settings ← MFA',
+          'التأكيد بخطوتين غير متاح حاليًا. حاول لاحقًا.',
         );
       } else {
         _snack(_secAuthError(e));
       }
     } catch (e) {
-      _snack('تعذر بدء التفعيل. تأكد أن MFA مفعّل في Firebase.');
+      _snack('تعذر بدء التفعيل. تحقق من الاتصال وحاول مجددًا.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _generateRecoveryKey() async {
+    if (_busy) return;
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('إنشاء مفتاح استعادة'),
+      content: const Text('سيُلغى أي مفتاح سابق. سيُعرض المفتاح الجديد مرة واحدة لحفظه خارج هذا الجهاز.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('متابعة')),
+      ],
+    ));
+    if (confirmed != true || !mounted || _busy) return;
+    setState(() => _busy = true);
+    try {
+      if (!await _secReauthWithPassword(context) || !mounted) return;
+      await FirebaseAuth.instance.currentUser!.getIdToken(true);
+      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('generateTotpRecoveryKey').call<Map<String, dynamic>>();
+      final key = result.data['key'];
+      if (key is! String || !RegExp(r'^[0-9A-F]{4}(-[0-9A-F]{4}){7}$').hasMatch(key)) {
+        throw StateError('Recovery key not confirmed');
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => RecoveryKeyScreen(recoveryKey: key)));
+    } catch (error) {
+      _snack(recoveryError(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3543,8 +2743,8 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
   Future<void> _confirmEnroll() async {
     final secret = _secret;
     final code = _code.text.trim();
-    if (secret == null) return;
-    if (code.length < 6) {
+    if (_busy || secret == null) return;
+    if (!RegExp(r'^[0-9]{6}$').hasMatch(code)) {
       _snack('أدخل رمز 6 أرقام من التطبيق');
       return;
     }
@@ -3559,14 +2759,11 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
         assertion,
         displayName: 'Authenticator',
       );
-      final codes = _generateBackupCodes();
-      await _saveBackupHashes(codes);
       if (!mounted) return;
       setState(() {
         _on = true;
         _secret = null;
         _otpauth = null;
-        _backupShownOnce = codes;
       });
       _code.clear();
     } on FirebaseAuthException catch (e) {
@@ -3579,14 +2776,13 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
   }
 
   Future<void> _disable() async {
-    final password = await _askPassword();
-    if (password == null) return;
-    if (!await _reauth(password)) return;
+    if (_busy) return;
     setState(() => _busy = true);
     try {
+      if (!await _secReauthWithPassword(context) || !mounted) return;
       final user = FirebaseAuth.instance.currentUser!;
       final factors = await user.multiFactor.getEnrolledFactors();
-      for (final f in factors) {
+      for (final f in factors.where((f) => f.factorId == 'totp')) {
         await user.multiFactor.unenroll(factorUid: f.uid);
       }
       await FirebaseFirestore.instance
@@ -3601,38 +2797,32 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
       if (!mounted) return;
       setState(() {
         _on = false;
-        _backupShownOnce = null;
       });
       _snack('تم إيقاف التأكيد بخطوتين');
     } on FirebaseAuthException catch (e) {
       _snack(_secAuthError(e));
+    } catch (_) {
+      _snack('تعذر إكمال تحديث الإعدادات. راجع حالة التأكيد بخطوتين قبل المحاولة مجددًا.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        await _load();
+      }
     }
-  }
-
-  List<String> _generateBackupCodes() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final r = Random.secure();
-    return List.generate(8, (_) {
-      return List.generate(8, (_) => chars[r.nextInt(chars.length)]).join();
-    });
-  }
-
-  Future<void> _saveBackupHashes(List<String> codes) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'security': {
-        'mfaEnabled': true,
-        'backupCodes': codes.map(_hashPin).toList(),
-        'backupCodesCreatedAt': FieldValue.serverTimestamp(),
-      },
-    }, SetOptions(merge: true));
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading || _loadFailed) {
+      return Scaffold(appBar: AppBar(title: const Text('التأكيد بخطوتين')),
+        body: Center(child: _loading ? const CircularProgressIndicator() : Column(
+          mainAxisSize: MainAxisSize.min, children: [
+            const Text('تعذر قراءة حالة التأكيد بخطوتين.'),
+            TextButton(onPressed: _load, child: const Text('إعادة المحاولة')),
+          ],
+        )),
+      );
+    }
     final qr = _otpauth;
     return Scaffold(
       appBar: AppBar(title: const Text('التأكيد بخطوتين')),
@@ -3670,15 +2860,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
               child: Container(
                 color: Colors.white,
                 padding: const EdgeInsets.all(12),
-                child: Image.network(
-                  'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${Uri.encodeComponent(qr)}',
-                  width: 220,
-                  height: 220,
-                  errorBuilder: (_, __, ___) => SelectableText(
-                    _secret?.secretKey ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
+                child: PrivateTotpQr(data: qr),
               ),
             ),
             const SizedBox(height: 8),
@@ -3718,27 +2900,13 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
               child: const Text('تأكيد التفعيل'),
             ),
           ],
-          if (_backupShownOnce != null) ...[
-            const SizedBox(height: 18),
-            const Text(
-              'احفظ هذه الرموز في مكان آمن. تظهر مرة واحدة.',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            for (final c in _backupShownOnce!)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: SelectableText(
-                  c,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ),
-          ],
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Text('احفظ مفتاح استعادة لاستخدامه إذا فقدت تطبيق المصادقة. الرموز المعروضة في النسخ القديمة لا تعمل للاستعادة.'),
+          ),
           if (_on) ...[
+            OutlinedButton.icon(onPressed: _busy ? null : _generateRecoveryKey,
+              icon: const Icon(Icons.key_outlined), label: const Text('إنشاء مفتاح استعادة')),
             const SizedBox(height: 18),
             OutlinedButton(
               onPressed: _busy ? null : _disable,
@@ -3776,7 +2944,7 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
 
   Future<void> _submit() async {
     final code = _code.text.trim();
-    if (code.length < 6) return;
+    if (_busy || !RegExp(r'^[0-9]{6}$').hasMatch(code)) return;
 
     MultiFactorInfo? hint;
     for (final h in widget.resolver.hints) {
@@ -3785,9 +2953,10 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
         break;
       }
     }
-    hint ??=
-    widget.resolver.hints.isNotEmpty ? widget.resolver.hints.first : null;
-    if (hint == null) return;
+    if (hint == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('طريقة التحقق المطلوبة غير مدعومة في هذه الشاشة.')));
+      return;
+    }
 
     setState(() => _busy = true);
     try {
@@ -3848,6 +3017,10 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
               ),
               child: const Text('تأكيد'),
             ),
+            TextButton(onPressed: _busy ? null : () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
+              child: const Text('فقدت تطبيق المصادقة؟')),
+
           ],
         ),
       ),
@@ -3855,51 +3028,58 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
   }
 }
 
-Future<bool> _secReauthWithPassword(BuildContext context) async {
+Future<bool> _secReauthWithPassword(BuildContext context, {String? password}) async {
   final user = FirebaseAuth.instance.currentUser;
-  final email = user?.email;
-  if (user == null || email == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('أعد تسجيل الدخول ثم حاول')),
-    );
-    return false;
-  }
-  final c = TextEditingController();
-  final password = await showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('أكّد هويتك'),
-      content: TextField(
-        controller: c,
-        obscureText: true,
-        decoration: const InputDecoration(labelText: 'كلمة المرور'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('إلغاء'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: kSecurityAccent),
-          onPressed: () => Navigator.pop(ctx, c.text),
-          child: const Text('متابعة'),
-        ),
-      ],
-    ),
-  );
-  c.dispose();
-  if (password == null || password.isEmpty) return false;
+  if (user == null) return false;
+  final uid = user.uid;
   try {
-    await user.reauthenticateWithCredential(
-      EmailAuthProvider.credential(email: email, password: password),
-    );
-    return true;
-  } on FirebaseAuthException catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_secAuthError(e))),
+    if (_hasPasswordProvider(user)) {
+      if (password == null) {
+        final controller = TextEditingController();
+        password = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+          title: const Text('أكّد هويتك'),
+          content: TextField(controller: controller, obscureText: true,
+            decoration: const InputDecoration(labelText: 'كلمة المرور الحالية')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('متابعة')),
+          ],
+        ));
+        controller.dispose();
+      }
+      if (password == null || password.isEmpty) return false;
+      await user.reauthenticateWithCredential(EmailAuthProvider.credential(email: user.email!, password: password));
+    } else if (user.providerData.any((p) => p.providerId == 'google.com')) {
+      if (kIsWeb) {
+        await user.reauthenticateWithPopup(GoogleAuthProvider());
+      } else {
+        final account = await AuthSessionService.googleSignIn.signIn();
+        if (account == null) return false;
+        final tokens = await account.authentication;
+        await user.reauthenticateWithCredential(GoogleAuthProvider.credential(
+          idToken: tokens.idToken, accessToken: tokens.accessToken,
+        ));
+      }
+    } else {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('طريقة الدخول هذه تحتاج إعادة تحقق غير متاحة بعد.')),
       );
+      return false;
     }
+    return FirebaseAuth.instance.currentUser?.uid == uid;
+  } on FirebaseAuthMultiFactorException catch (error) {
+    if (!context.mounted) return false;
+    final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => MfaSignInPage(resolver: error.resolver),
+    ));
+    return ok == true && FirebaseAuth.instance.currentUser?.uid == uid;
+  } on FirebaseAuthException catch (error) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_secAuthError(error))));
+    return false;
+  } catch (_) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تعذر تأكيد هويتك. حاول مجددًا.')),
+    );
     return false;
   }
 }
@@ -4242,8 +3422,9 @@ class FrozenAccountScreen extends StatelessWidget {
 }
 
 class LoginAlertWatcher extends StatefulWidget {
-  const LoginAlertWatcher({super.key, required this.child});
+  const LoginAlertWatcher({super.key, required this.child, required this.navigatorKey});
   final Widget child;
+  final GlobalKey<NavigatorState> navigatorKey;
 
   @override
   State<LoginAlertWatcher> createState() => _LoginAlertWatcherState();
@@ -4272,7 +3453,6 @@ class _LoginAlertWatcherState extends State<LoginAlertWatcher> {
     await _userSub?.cancel();
     _userSub = null;
     if (user == null) return;
-    await ensureSecuritySession();
     _userSub = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
@@ -4291,11 +3471,16 @@ class _LoginAlertWatcherState extends State<LoginAlertWatcher> {
     if (sessionId.isEmpty) return;
 
     final prefs = await SharedPreferences.getInstance();
-    final mine = prefs.getString(_sessionPrefKey);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final mine = await SessionService.instance.getCurrentSessionId(uid);
     if (sessionId == mine) return;
 
     final at = alert['at'];
     final atMs = at is Timestamp ? at.millisecondsSinceEpoch : 0;
+    final navigator = widget.navigatorKey.currentState;
+    final overlay = navigator?.overlay;
+    if (navigator == null || overlay == null) return;
     final seenKey = '${sessionId}_$atMs';
     if (prefs.getString(_seenKey) == seenKey) return;
 
@@ -4313,7 +3498,7 @@ class _LoginAlertWatcherState extends State<LoginAlertWatcher> {
     final device = (alert['deviceName'] ?? 'جهاز غير معروف').toString();
     final platform = (alert['platform'] ?? '').toString();
     await showDialog<void>(
-      context: context,
+      context: overlay.context,
       builder: (ctx) => AlertDialog(
         title: const Text('دخول جديد على حسابك'),
         content: Text(
@@ -4336,7 +3521,7 @@ class _LoginAlertWatcherState extends State<LoginAlertWatcher> {
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.of(context).push(
+              navigator.push(
                 MaterialPageRoute(
                   builder: (_) => const _CompromisedAccountPage(),
                 ),

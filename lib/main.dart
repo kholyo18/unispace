@@ -1,3 +1,7 @@
+import 'ui/settings/public_profile_service.dart';
+import 'ui/settings/profile_privacy.dart';
+import 'ui/auth/account_recovery_screen.dart';
+import 'ui/auth/auth_security_check.dart';
 // ============================================================================
 // UniSpace — main.dart (UPDATED: BottomBar + Notes + Campus Community + Table)
 // PART 1/3
@@ -2728,8 +2732,8 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
       ],
       supportedLocales: S.delegate.supportedLocales,
       builder: (context, child) {
-        return SecurityLockGate(
-            child: LoginAlertWatcher(
+        return LoginAlertWatcher(
+          navigatorKey: unispaceNavigatorKey,
           child: ValueListenableBuilder<SettingsData>(
             valueListenable: AppSettings.instance.notifier,
             builder: (context, settings, _) {
@@ -2741,7 +2745,6 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
               );
             },
           ),
-        )
         );
       },
       home: const AuthGate(),
@@ -2959,25 +2962,6 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   User? _lastAuthUser;
   bool _blockingSignOut = false;
-  bool? _twoFactorRequired;
-  String? _twoFactorUid;
-
-  void _ensureTwoFactorCheck(User user) {
-    if (_twoFactorUid == user.uid && _twoFactorRequired != null) return;
-    if (_twoFactorUid == user.uid && _twoFactorRequired == null) return;
-    _twoFactorUid = user.uid;
-    _twoFactorRequired = null;
-    _isTwoFactorRequired(user).timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => false,
-    ).then((value) {
-      if (!mounted) return;
-      setState(() => _twoFactorRequired = value);
-    }).catchError((_) {
-      if (!mounted) return;
-      setState(() => _twoFactorRequired = false);
-    });
-  }
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _userDocStream;
   String? _userDocStreamUid;
 
@@ -2993,24 +2977,13 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<bool> _isTwoFactorRequired(User user) async {
-    final prefs = await SharedPreferences.getInstance();
-    final sid = prefs.getString('security_session_id');
-    if (sid != null && sid.isNotEmpty) {
-      try {
-        final session = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('sessions')
-            .doc(sid)
-            .get();
-        if (session.data()?['trusted'] == true) return false;
-      } catch (_) {}
-    }
-
     final profile =
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).get(const GetOptions(source: Source.server));
     final enabled = profile.data()?['twoFactorEnabled'] as bool? ?? false;
     if (!enabled) return false;
+    final token = await user.getIdTokenResult();
+    final firebase = token.claims?['firebase'];
+    if (firebase is Map && firebase['sign_in_second_factor'] == 'totp') return false;
     return !(await TwoFactorService.instance.isCurrentSessionVerified(user));
   }
 
@@ -3035,19 +3008,12 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Widget _routeAuthenticated(User user, bool isPasswordUser) {
-    if (!isPasswordUser) {
-      return const HomeShell();
-    }
-    _ensureTwoFactorCheck(user);
-    if (_twoFactorRequired == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_twoFactorRequired == true) {
-      return TwoFactorOtpScreen(email: user.email ?? '');
-    }
-    return const HomeShell();
+    return AuthSecurityCheck(
+      key: ValueKey('security-check:${user.uid}:${TwoFactorService.instance.authRefresh.value}'),
+      check: () => _isTwoFactorRequired(user),
+      challengeBuilder: (_) => TwoFactorOtpScreen(email: user.email ?? ''),
+      child: const HomeShell(),
+    );
   }
 
   @override
@@ -3083,8 +3049,6 @@ class _AuthGateState extends State<AuthGate> {
             if (!snap.hasData) {
               _userDocStream = null;
               _userDocStreamUid = null;
-              _twoFactorRequired = null;
-              _twoFactorUid = null;
               return const SignInScreen();
             }
 
@@ -3424,9 +3388,17 @@ class _SignInScreenState extends State<SignInScreen> {
       if (kDebugMode) {
         debugPrint('[Auth] google login credential ready (idToken=${googleAuth.idToken != null})');
       }
-      final authResult =
-      await FirebaseAuth.instance.signInWithCredential(credential);
-      final user = authResult.user;
+      User? user;
+      try {
+        user = (await FirebaseAuth.instance.signInWithCredential(credential)).user;
+      } on FirebaseAuthMultiFactorException catch (e) {
+        if (!mounted) return;
+        final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(
+          builder: (_) => MfaSignInPage(resolver: e.resolver),
+        ));
+        if (ok != true) return;
+        user = FirebaseAuth.instance.currentUser;
+      }
       if (kDebugMode) {
         debugPrint('[Auth] google login FirebaseAuth.currentUser=${FirebaseAuth.instance.currentUser?.uid ?? 'null'}');
       }
@@ -3705,6 +3677,11 @@ class _SignInScreenState extends State<SignInScreen> {
                                     style: TextStyle(color: AppTeal.main),
                                   ),
                                 ),
+                              ),
+                              TextButton(
+                                onPressed: busy ? null : () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
+                                child: const Text('فقدت تطبيق المصادقة؟'),
                               ),
                               const SizedBox(height: 6),
                               SizedBox(
@@ -6781,8 +6758,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
           .doc(user.uid)
           .get();
       final priv = userDoc.data()?['privacy'];
+      authorPrivate = ProfilePrivacy.fromDocument(userDoc.data()).isPrivate;
       if (priv is Map) {
-        authorPrivate = priv['privateAccount'] == true;
+        authorPrivate = ProfilePrivacy.fromDocument(userDoc.data()).isPrivate;
         authorAppearInSearch = priv['appearInSearch'] != false;
         authorHideLikeCounts = priv['hideLikeCounts'] == true;
       }
@@ -41201,7 +41179,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   bool _loadingComments = true;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _postsStream;
   final ScrollController _scrollController = ScrollController();
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _presenceSub;
+  StreamSubscription<Map<String, dynamic>>? _presenceSub;
   Set<String> _hiddenPostIds = {};
 
   bool _isOnline = false;
@@ -41209,6 +41187,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   bool _showOnlineStatus = true;
   bool _showLastSeen = true;
   bool _loadingProfile = true;
+  bool _profileFailed = false;
+  bool _serverCanViewContent = false;
   String _displayName = '';
   String _username = '';
   String? _photoUrl;
@@ -41263,7 +41243,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         .orderBy('createdAt', descending: true)
         .snapshots();
     _tabController = TabController(length: 3, vsync: this);
-    _loadUserComments();
     _scrollController.addListener(_onScroll);
     _loadProfile();
     _listenPresence();
@@ -41307,17 +41286,43 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   void _listenPresence() {
-    _presenceSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.userId)
-        .snapshots()
-        .listen((doc) {
-      if (!mounted || !doc.exists) return;
-      final data = doc.data() ?? {};
+    _presenceSub?.cancel();
+    final Stream<Map<String, dynamic>> stream = _isSelf
+        ? FirebaseFirestore.instance.collection('users').doc(widget.userId).snapshots()
+            .map((doc) => doc.data() ?? <String, dynamic>{})
+        : PublicProfileService.watch(widget.userId);
+    _presenceSub = stream.listen((data) {
+      if (!mounted) return;
       final priv = data['privacy'];
       final pmap = priv is Map ? Map<String, dynamic>.from(priv) : null;
       final ts = data['lastSeenAt'];
       setState(() {
+        _serverCanViewContent = data['canViewContent'] == true;
+        if (!_isSelf) {
+          _mood = (data['mood'] ?? '').toString();
+          _followersVisibility = (pmap?['followersVisibility'] ?? 'none').toString();
+          _followingVisibility = (pmap?['followingVisibility'] ?? 'none').toString();
+          _followersCount = (data['followersCount'] as num?)?.toInt() ?? 0;
+          _followingCount = (data['followingCount'] as num?)?.toInt() ?? 0;
+          _showAcademicInfo = pmap?['showAcademicInfo'] == true;
+          _showSocialLinks = pmap?['showSocialLinks'] == true;
+          _uni = (data['university'] ?? '').toString();
+          _fac = (data['faculty'] ?? '').toString();
+          _major = (data['major'] ?? '').toString();
+          _studyLevel = (data['studyLevel'] ?? '').toString();
+          _github = (data['github'] ?? '').toString();
+          _linkedin = (data['linkedin'] ?? '').toString();
+          _portfolio = (data['portfolio'] ?? '').toString();
+          _otherInfo = (data['otherInfo'] ?? '').toString();
+          _work = (data['work'] ?? '').toString();
+          _residence = (data['residence'] ?? '').toString();
+          _coverUrl = data['coverImageUrl']?.toString();
+          if (!_serverCanViewContent) _userComments = [];
+        }
+        final privacy = ProfilePrivacy.fromDocument(data);
+        _targetIsPrivate = privacy.isPrivate;
+        _showEmailOnProfile = privacy.showEmail;
+        _email = privacy.showEmail || _isSelf ? (data['email'] ?? '').toString().trim() : '';
         _isOnline = data['isOnline'] == true;
         if (ts is Timestamp) _lastSeenAt = ts.toDate();
         if (!_isSelf) {
@@ -41326,6 +41331,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         _showOnlineStatus = pmap?['showOnline'] != false;
         _showLastSeen = pmap?['showLastSeen'] == true;
       });
+    }, onError: (Object error) {
+      if (!mounted) return;
+      setState(() { _profileFailed = true; _serverCanViewContent = false; _email = ''; });
     });
   }
 
@@ -41595,13 +41603,17 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _loadProfile() async {
-    setState(() => _loadingProfile = true);
+    setState(() { _loadingProfile = true; _profileFailed = false; });
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.userId)
-          .get();
-      final data = doc.data() ?? <String, dynamic>{};
+      final Map<String, dynamic> data;
+      if (_isSelf) {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(widget.userId)
+            .get(const GetOptions(source: Source.server));
+        if (!doc.exists) throw StateError('Profile unavailable');
+        data = doc.data()!;
+      } else {
+        data = await PublicProfileService.load(widget.userId);
+      }
       final fn = (data['firstName'] ?? '').toString().trim();
       final ln = (data['lastName'] ?? '').toString().trim();
       final fromNames = [fn, ln].where((e) => e.isNotEmpty).join(' ');
@@ -41610,7 +41622,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       final uname = (data['username'] ?? '').toString().trim();
       final priv = data['privacy'];
       final pmap = priv is Map ? Map<String, dynamic>.from(priv) : null;
-      _targetIsPrivate = pmap?['privateAccount'] == true;
+      _targetIsPrivate = ProfilePrivacy.fromDocument(data).isPrivate;
       _showAcademicInfo = pmap?['showAcademicInfo'] != false;
       _showSocialLinks = pmap?['showSocialLinks'] != false;
       _followersVisibility =
@@ -41632,8 +41644,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
       if (!mounted) return;
       setState(() {
-        _targetIsPrivate = (data['privacy'] is Map) &&
-            (data['privacy'] as Map)['privateAccount'] == true;
+        _serverCanViewContent = data['canViewContent'] == true;
+        _targetIsPrivate = ProfilePrivacy.fromDocument(data).isPrivate;
         _displayName = fromNames.isNotEmpty
             ? fromNames
             : (display.isNotEmpty
@@ -41659,13 +41671,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         _work = (data['work'] ?? '').toString().trim();
         _residence = (data['residence'] ?? '').toString().trim();
         _followersCount =
-            (data['followersCount'] as num?)?.toInt() ?? _followersCount;
+            (data['followersCount'] as num?)?.toInt() ?? 0;
         _followingCount =
-            (data['followingCount'] as num?)?.toInt() ?? _followingCount;
+            (data['followingCount'] as num?)?.toInt() ?? 0;
         _loadingProfile = false;
         _email = (data['email'] ?? '').toString().trim();
-        _showEmailOnProfile = pmap?['showEmailOnProfile'] == true;
+        _showEmailOnProfile = ProfilePrivacy.fromDocument(data).showEmail;
       });
+      if (_canSeePrivateContent) unawaited(_loadUserComments());
       if (_photoUrl != null && _photoUrl!.isNotEmpty) {
         AuthorProfiles.put(widget.userId, _photoUrl);
       }
@@ -41674,12 +41687,17 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       if (!mounted) return;
       setState(() {
         _loadingProfile = false;
+        _profileFailed = true;
+        _targetIsPrivate = true;
+        _showEmailOnProfile = false;
+        _email = '';
         if (_displayName.isEmpty) _displayName = 'طالب UniSpace';
       });
     }
   }
 
   Future<void> _loadCounts() async {
+    if (!_isSelf) return;
     try {
       final userRef =
       FirebaseFirestore.instance.collection('users').doc(widget.userId);
@@ -41703,7 +41721,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   bool get _canSeePrivateContent =>
-      _isSelf || !_targetIsPrivate || _isFollowing;
+      _isSelf || _serverCanViewContent;
 
   Future<void> _checkFollowing() async {
     final me = FirebaseAuth.instance.currentUser?.uid;
@@ -41775,6 +41793,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         );
       }
       await _checkFollowing();
+      await _loadProfile();
       await _loadCounts();
     } catch (e) {
       debugPrint('toggle follow failed: $e');
@@ -41884,7 +41903,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              LiveAuthorPhoto(
+              PublicProfilePhoto(
                 userId: widget.userId,
                 fallbackUrl: _photoUrl,
                 size: 72,
@@ -41944,7 +41963,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       _appBarOpacity,
     )!;
 
-    if (_checkingAccess || (!_isSelf && !_blockStateReady)) {
+    if (_loadingProfile || _checkingAccess || (!_isSelf && !_blockStateReady)) {
       return Scaffold(
         backgroundColor: t.pageBg,
         appBar: AppBar(
@@ -41965,6 +41984,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       );
     }
 
+    if (_profileFailed) {
+      return Scaffold(appBar: AppBar(title: const Text('الملف الشخصي')),
+        body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('تعذر التحقق من خصوصية الملف. حاول مجددًا.'),
+          TextButton(onPressed: () { _loadProfile(); _listenPresence(); }, child: const Text('إعادة المحاولة')),
+        ])));
+    }
     if (!_isSelf && _theyBlockMe) {
       return _blockedProfileScaffold(
         t: t,
@@ -42014,13 +42040,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       body: Stack(
         children: [
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _postsStream,
+            stream: _canSeePrivateContent ? _postsStream : null,
             builder: (context, snap) {
               final t = _ProfileTheme.of(context);
               final waiting = snap.connectionState == ConnectionState.waiting &&
                   !snap.hasData;
 
-              final all = (snap.data?.docs ?? [])
+              final all = (_canSeePrivateContent ? (snap.data?.docs ?? []) : <QueryDocumentSnapshot<Map<String, dynamic>>>[])
                   .where((d) => !isCommunityPostRemoved(d.data()))
                   .map((d) => _Post.fromFirestore(d))
                   .where((p) {
@@ -42241,7 +42267,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     border: Border.all(color: t.pageBg, width: 4),
                   ),
                   child: ClipOval(
-                    child: LiveAuthorPhoto(
+                    child: PublicProfilePhoto(
                       userId: widget.userId,
                       fallbackUrl: _photoUrl,
                       size: _avatarSize - 8,
@@ -42274,11 +42300,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             );
                             return;
                           }
-                          final peer = await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(widget.userId)
-                              .get();
-                          if (isUserDocUnavailable(peer.data())) {
+                          final peer = await PublicProfileService.load(widget.userId);
+                          if (isUserDocUnavailable(peer)) {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -44530,12 +44553,12 @@ Future<bool> isUserPrivate(String userId) async {
         .collection('users')
         .doc(userId)
         .get();
-    final raw = doc.data()?['privacy'];
-    if (raw is Map) return raw['privateAccount'] == true;
+    if (!doc.exists) return true;
+    return ProfilePrivacy.fromDocument(doc.data()).isPrivate;
   } catch (e) {
     debugPrint('isUserPrivate failed: $e');
   }
-  return false;
+  return true;
 }
 
 Future<Set<String>> loadFollowingIds() async {

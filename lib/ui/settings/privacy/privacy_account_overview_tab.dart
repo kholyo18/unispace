@@ -1,3 +1,4 @@
+import '../profile_privacy.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -192,20 +193,27 @@ class PrivacySettingsRepository {
     try {
       final snap = await ref.get();
       final raw = snap.data()?['privacy'];
-      return PrivacySettings.fromMap(
-        raw is Map ? Map<String, dynamic>.from(raw) : null,
-      );
+      final privacy = ProfilePrivacy.fromDocument(snap.data());
+      return PrivacySettings.fromMap(raw is Map ? Map<String, dynamic>.from(raw) : null)
+          .copyWith(privateAccount: privacy.isPrivate, showEmailOnProfile: privacy.showEmail);
     } catch (e) {
       debugPrint('privacy load failed: $e');
       return const PrivacySettings();
     }
   }
 
-  Future<void> save(PrivacySettings settings) async {
+  Future<void> save(PrivacySettings settings, {required PrivacySettings previous}) async {
     final ref = _userRef();
     if (ref == null) throw StateError('not signed in');
     await ref.set({
-      'privacy': settings.toMap(),
+      'privacy': {
+        for (final entry in settings.toMap().entries)
+          if (entry.value != previous.toMap()[entry.key]) entry.key: entry.value,
+      },
+      if (settings.privateAccount != previous.privateAccount)
+        'profileVisibility': settings.privateAccount ? 'private' : 'public',
+      if (settings.showEmailOnProfile != previous.showEmailOnProfile)
+        'showEmailInProfile': settings.showEmailOnProfile,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -248,18 +256,20 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     });
   }
 
-  Future<void> _apply(PrivacySettings next) async {
+  Future<bool> _apply(PrivacySettings next) async {
     final prev = _settings;
     setState(() => _settings = next);
     try {
-      await _repo.save(next);
+      await _repo.save(next, previous: prev);
+      return true;
     } catch (e) {
       debugPrint('privacy save failed: $e');
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _settings = prev);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تعذر حفظ الإعداد')),
       );
+      return false;
     }
   }
 
@@ -430,7 +440,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                   );
                   if (ok != true) return;
                 }
-                await _apply(_settings.copyWith(privateAccount: v));
+                if (!await _apply(_settings.copyWith(privateAccount: v))) return;
                 final uid = FirebaseAuth.instance.currentUser?.uid;
                 if (uid != null) {
                   await syncAuthorPrivateOnPosts(uid: uid, isPrivate: v);

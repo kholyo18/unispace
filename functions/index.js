@@ -63,3 +63,35 @@ exports.pushOnNotification = onDocumentCreated(
     await Promise.all(stale.map((ref) => ref.delete()));
   }
 );
+// Keep session security in the configured CommonJS entry point.
+const { onCall } = require('firebase-functions/v2/https');
+const { getAuth } = require('firebase-admin/auth');
+const { FieldValue } = require('firebase-admin/firestore');
+const { createRevokeAllSessionsHandler } = require('./security/revoke-all-sessions');
+
+exports.revokeAllUserSessions = onCall(
+  { region: 'europe-west1' },
+  createRevokeAllSessionsHandler({ auth: getAuth(), db: getFirestore(), FieldValue }),
+);
+
+const { defineString } = require('firebase-functions/params');
+const { HttpsError } = require('firebase-functions/v2/https');
+const { createRecoveryHandlers, createFirstFactorVerifier } = require('./security/mfa-recovery');
+const recoveryApiKey = defineString('RECOVERY_AUTH_API_KEY', { default: '' });
+const recoveryHandlers = createRecoveryHandlers({
+  auth: getAuth(), db: getFirestore(), FieldValue,
+  verifyFirstFactor: createFirstFactorVerifier({ apiKey: () => recoveryApiKey.value() }),
+});
+// A missing configuration must not issue unusable recovery keys.
+exports.generateTotpRecoveryKey = onCall({ region: 'europe-west1', timeoutSeconds: 60 }, request => {
+  if (!recoveryApiKey.value()) throw new HttpsError('unavailable', 'Recovery is not configured.');
+  return recoveryHandlers.generate(request);
+});
+exports.recoverTotpAccount = onCall({ region: 'europe-west1', timeoutSeconds: 60 }, request => {
+  if (!recoveryApiKey.value()) throw new HttpsError('unavailable', 'Recovery is not configured.');
+  return recoveryHandlers.recover(request);
+});
+
+const { createPublicProfileHandler } = require('./security/public-profile');
+exports.readPublicProfile = onCall({ region: 'europe-west1' },
+  createPublicProfileHandler({ auth: getAuth(), db: getFirestore() }));

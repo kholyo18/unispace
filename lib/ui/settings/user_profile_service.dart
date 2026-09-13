@@ -1,3 +1,5 @@
+import 'profile_privacy.dart';
+import 'profile_settings_patch.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -26,7 +28,7 @@ class UserProfileData {
 
   factory UserProfileData.initial() => const UserProfileData(
         profileVisibility: ProfileVisibility.public,
-        showEmailInProfile: true,
+        showEmailInProfile: false,
         twoFactorEnabled: false,
         college: '',
         major: '',
@@ -53,13 +55,13 @@ class UserProfileData {
 
   static UserProfileData fromFirestore(Map<String, dynamic>? data) {
     if (data == null) return UserProfileData.initial();
-    final profileVisibilityRaw = data['profileVisibility'] as String?;
+    final privacy = ProfilePrivacy.fromDocument(data);
     final academic = data['academic'] as Map<String, dynamic>?;
     return UserProfileData(
-      profileVisibility: profileVisibilityRaw == 'private'
+      profileVisibility: privacy.isPrivate
           ? ProfileVisibility.private
           : ProfileVisibility.public,
-      showEmailInProfile: data['showEmailInProfile'] as bool? ?? true,
+      showEmailInProfile: privacy.showEmail,
       twoFactorEnabled: data['twoFactorEnabled'] as bool? ?? false,
       college: academic?['college'] as String? ?? '',
       major: academic?['major'] as String? ?? '',
@@ -134,20 +136,15 @@ class UserProfileService {
     bool? twoFactorEnabled,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    final next = notifier.value.copyWith(
-      profileVisibility: profileVisibility,
-      showEmailInProfile: showEmailInProfile,
-      twoFactorEnabled: twoFactorEnabled,
-    );
-    notifier.value = next;
-    if (user == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .set(
-          next.toFirestore(),
-          SetOptions(merge: true),
-        );
+    if (user == null) throw StateError('Sign in before changing profile settings.');
+    final patch = profileSettingsPatch(profileVisibility: profileVisibility,
+      showEmailInProfile: showEmailInProfile, twoFactorEnabled: twoFactorEnabled);
+    if (patch.isEmpty) return;
+    await FirebaseFirestore.instance.collection('users').doc(user.uid)
+        .set(patch, SetOptions(merge: true));
+    if (FirebaseAuth.instance.currentUser?.uid != user.uid) return;
+    notifier.value = notifier.value.copyWith(profileVisibility: profileVisibility,
+      showEmailInProfile: showEmailInProfile, twoFactorEnabled: twoFactorEnabled);
   }
 
   Future<void> updateAcademic({
