@@ -1,0 +1,13 @@
+# Push device-session binding
+
+Local implementation; automated tests/build/device validation deferred by user request. No deployment.
+
+syncPushDevice requires the current sessionId in addition to token/platform/preferences. Its transaction reads users/{uid}/sessions/{sessionId}, requires the matching ID, explicit isRevoked:false and a creation timestamp, and stores the session ID and creation timestamp in pushTokenOwners. Token records also retain sessionId for inspection. A removed/revoked/malformed session cannot newly register a token. The callable never creates or revives a session. Detachment deliberately still works without an active session.
+
+Before each FCM batch, delivery reads each referenced session once and requires it to exist, remain unrevoked and have the same creation timestamp. This prevents reuse of an old binding after session-document recreation. Global auth cutoff and token owner checks remain. lastSeenAt is not used as an expiry: an idle/background device remains eligible until explicitly revoked. Revocation during the final FCM send can still race delivery; queued messages are not retractable.
+
+The client reads the current local session ID and does not invent one for push. SessionService emits a revision after successful initialization so push sync retries after an initial auth/token callback ran too early. The service does not await session initialization from push cleanup, avoiding a logout/initialization deadlock. Account and request-generation checks guard asynchronous responses.
+
+Legacy token bindings lacking sessionId keep prior behavior until the client synchronizes; no full migration is claimed. The session ID is client-selected from the signed-in user's records, not a cryptographic binding between Firebase credentials and device hardware. A malicious authenticated client may choose another valid own session under current policies; deeper session issuance/attestation requires a separate change. Existing local session rules permit owner creation and must be reviewed as part of final security policy.
+
+Final cases: registered active device; revoke this session while offline/background; revoke other session leaves this device eligible; all-session global cutoff; deleted/recreated session; malformed or foreign session ID; token refresh; first-login initialization race; session rotation; startup before auth; normal idle delivery; logout while initialization fails; legacy migration; build, existing suites, emulator and device push checks. Deploy schema-compatible callable/push handler together with client rollout; old clients need a compatibility plan because sync now requires sessionId.

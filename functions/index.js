@@ -7,61 +7,10 @@ const { getMessaging } = require("firebase-admin/messaging");
 setGlobalOptions({ region: "europe-west1" });
 initializeApp();
 
+const { createPushNotificationHandler } = require('./security/push-notification');
 exports.pushOnNotification = onDocumentCreated(
   "users/{userId}/notifications/{notifId}",
-  async (event) => {
-    const data = event.data?.data();
-    if (!data) return;
-
-    const userId = event.params.userId;
-    const notifId = event.params.notifId;
-
-    const tokensSnap = await getFirestore()
-      .collection("users")
-      .doc(userId)
-      .collection("fcm_tokens")
-      .get();
-
-    const tokens = tokensSnap.docs
-      .map((d) => d.data().token)
-      .filter((t) => typeof t === "string" && t.length > 0);
-
-    if (tokens.length === 0) return;
-
-    const title = data.actorName || "UniSpace";
-    const body = data.message || "لديك إشعار جديد";
-
-    const res = await getMessaging().sendEachForMulticast({
-      tokens,
-      notification: { title, body },
-      data: {
-        type: String(data.type || ""),
-        actorId: String(data.actorId || ""),
-        actorName: String(data.actorName || ""),
-        message: String(body),
-        postId: String(data.postId || ""),
-        commentId: String(data.commentId || ""),
-        notificationId: String(notifId),
-      },
-      android: {
-        priority: "high",
-        notification: { channelId: "unispace_notifications" },
-      },
-    });
-
-    const stale = [];
-    res.responses.forEach((r, i) => {
-      if (
-        !r.success &&
-        r.error &&
-        (r.error.code === "messaging/registration-token-not-registered" ||
-          r.error.code === "messaging/invalid-registration-token")
-      ) {
-        stale.push(tokensSnap.docs[i].ref);
-      }
-    });
-    await Promise.all(stale.map((ref) => ref.delete()));
-  }
+  event => createPushNotificationHandler({db:getFirestore(),auth:getAuth(),messaging:getMessaging()})(event),
 );
 // Keep session security in the configured CommonJS entry point.
 const { onCall } = require('firebase-functions/v2/https');
@@ -95,3 +44,76 @@ exports.recoverTotpAccount = onCall({ region: 'europe-west1', timeoutSeconds: 60
 const { createPublicProfileHandler } = require('./security/public-profile');
 exports.readPublicProfile = onCall({ region: 'europe-west1' },
   createPublicProfileHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createFollowHandler } = require('./security/follow-relationships');
+exports.manageFollow = onCall({ region: 'europe-west1' },
+  createFollowHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createSearchPeopleHandler } = require('./security/search-people');
+exports.searchPeople = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+  createSearchPeopleHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createFollowListHandler } = require('./security/follow-lists');
+exports.readFollowList = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+  createFollowListHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createContentSearchPageHandler } = require('./security/content-search-page');
+exports.readContentSearchPage = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }));
+
+exports.readContentFeedPage = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }, false, true));
+
+exports.readOwnReactionPosts = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }, false, 'reactions'));
+
+exports.readProfileComments = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }, false, 'comments'));
+
+exports.readProfilePosts = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }, false, 'profile'));
+
+exports.readAuthorizedPost = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }, true));
+
+const { createPostVoteHandler } = require('./security/post-votes');
+exports.setPostVote = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createPostVoteHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createCommentMutationHandler } = require('./security/comment-mutations');
+exports.mutateComment = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createCommentMutationHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createCommentHandler } = require('./security/create-comment');
+const { getStorage } = require('firebase-admin/storage');
+const { Timestamp } = require('firebase-admin/firestore');
+const commentMediaBucket = defineString('COMMENT_MEDIA_BUCKET', { default: 'fachub-c631c.firebasestorage.app' });
+exports.createComment = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createCommentHandler({ auth: getAuth(), db: getFirestore(), FieldValue, Timestamp,
+    bucket: () => getStorage().bucket(commentMediaBucket.value()) }));
+
+const { createDeletePostHandler } = require('./security/delete-post');
+exports.deleteOwnPost = onCall({ region: 'europe-west1' },
+  createDeletePostHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createEditPostHandler } = require('./security/edit-post');
+exports.editOwnPost = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createEditPostHandler({ auth: getAuth(), db: getFirestore(), FieldValue,
+    bucket: () => getStorage().bucket(commentMediaBucket.value()) }));
+
+const { createPostHandler } = require('./security/create-post');
+const postCreationDependencies = { auth: getAuth(), db: getFirestore(), FieldValue,
+  bucket: () => getStorage().bucket(commentMediaBucket.value()) };
+exports.reserveOwnPost = onCall({ region: 'europe-west1' }, createPostHandler(postCreationDependencies));
+exports.publishOwnPost = onCall({ region: 'europe-west1', timeoutSeconds: 120 }, createPostHandler(postCreationDependencies, true));
+
+const { createRepostHandler } = require('./security/repost');
+exports.publishRepost = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createRepostHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createSyncPushDeviceHandler } = require('./security/push-preferences');
+exports.syncPushDevice = onCall({region:'europe-west1'},
+  createSyncPushDeviceHandler({auth:getAuth(),db:getFirestore(),FieldValue}));
+
+exports.detachPushDevice = onCall({region:'europe-west1'},
+  createSyncPushDeviceHandler({auth:getAuth(),db:getFirestore(),FieldValue},true));

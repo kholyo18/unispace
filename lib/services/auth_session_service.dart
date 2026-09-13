@@ -1,3 +1,4 @@
+import '../ui/settings/push_preferences_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -15,7 +16,13 @@ class AuthSessionService {
       await beforeSignOut();
     }
 
-    await FirebaseAuth.instance.signOut();
+    await PushPreferencesService.instance.prepareSignOut();
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {
+      PushPreferencesService.instance.cancelSignOut();
+      rethrow;
+    }
 
     try {
       await googleSignIn.signOut();

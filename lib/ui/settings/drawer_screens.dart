@@ -1,3 +1,4 @@
+import 'push_preferences_service.dart';
 import '../auth/account_recovery_screen.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'private_totp_qr.dart';
@@ -52,7 +53,19 @@ class NotificationsSettingsScreen extends StatelessWidget {
                 S.of(context).notificationsSettingsDescription,
                 style: theme.textTheme.bodyMedium,
               ),
-              // TODO: Hook these preferences to FCM or a backend notification hub.
+              ValueListenableBuilder<String>(
+                valueListenable: PushPreferencesService.instance.status,
+                builder: (context, status, _) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('إشعارات هذا الجهاز'),
+                  subtitle: Text(status),
+                  trailing: IconButton(
+                    tooltip: 'إعادة المزامنة',
+                    icon: const Icon(Icons.sync),
+                    onPressed: () => PushPreferencesService.instance.sync(),
+                  ),
+                ),
+              ),
               const SizedBox(height: 16),
               SwitchListTile.adaptive(
                 value: settings.notificationsEnabled,

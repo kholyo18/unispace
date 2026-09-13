@@ -1,0 +1,13 @@
+# Owner content editing
+
+Local implementation. Automated and device testing deferred at the user's request.
+
+editOwnPost accepts exactly postId and content. Content has exactly title, body, tags, imageUrls, videoUrls, polls and pollSlides. Bounded schema validation rejects extra fields, oversized payloads, invalid slide references and malformed poll configuration. The server verifies the bearer token (including revocation), UID, auth_time and absence of a tenant; its transaction checks the cutoff, owner, deletion receipt and account availability. Only the content fields, computed search keywords and edit timestamps are updated. Ownership, votes, comments, moderation, status and original repost reference remain untouched. Editing removed content does not restore visibility or clear moderation.
+
+The existing post-card editor calls this endpoint and waits for a matching success response before updating its local model. It stops if the account changes. Existing normal posts, quote commentary, images, videos, polls, slides and tags retain their payload shape. Quote snapshots are no longer re-sent during editing. Poll media names now contain a unique per-edit ID to avoid overwriting currently referenced files before an edit succeeds.
+
+New media URLs must point to existing token-bearing objects in this post's images/videos prefix in the configured COMMENT_MEDIA_BUCKET (currently reused by both comment and post-edit handlers). Existing referenced URLs are retained for compatibility. Metadata lookup is outside the Firestore transaction; this does not prove immutable media, uploader ownership, MIME safety or malware scanning. Storage rules and object lifecycle remain a separate requirement. Removed/uncommitted uploads are not cleaned up here.
+
+Concurrent content edits remain last-writer-wins, as before; concurrent comments/votes are preserved through field-level updates. Poll response migration/versioning remains unchanged and needs a separate design if already answered questions are edited. This endpoint is not a complete publishing migration: creation, repost publication, moderation writes and Firestore/Storage policy are still outstanding. Do not deploy partial root rules. Deploy the callable before a client that invokes it.
+
+Pending final checks: owner/non-owner; revoked/disabled/frozen/deleted account; deletion race/receipt; extra authorId/comments/votes/repostOf fields; malformed/oversized polls; media outside the post prefix or wrong bucket/token; existing media retention; all supported poll types and date/time fields; concurrent votes/comments; repost commentary edit; account switch; upload/callable failures; search keywords; build, existing suites and device regression.

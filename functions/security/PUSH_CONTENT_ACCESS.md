@@ -1,0 +1,13 @@
+# Content authorization before push
+
+Local implementation. Automated/build/device checks deferred at user request; no deployment or real push sent.
+
+Before each non-empty FCM batch, content-linked notifications now pass a recipient-scoped internal authorization check. Known content types (new_post, like, like_comment, comment, reply, repost) require a valid postId; comment/reply/like_comment require a valid commentId. Other types carrying a postId also undergo the check. Unrelated notifications without a content reference retain their existing path. No recipient ID token is fabricated and the check does not consume callable search quotas.
+
+The read-only Firestore transaction rechecks the recipient, actor and source authors' profile availability, both block directions, private-post access via authoritative followers, post removal/moderation/automatic-hide rules (shared removed helper), and original repost chains up to eight nodes. Referenced comments and nested/legacy flat ancestors must exist, remain visible to moderation and have available/unblocked authors (maximum path depth 30). Comment authors' private profile status does not hide a comment on an accessible post, consistent with the content reader. Firebase Auth missing/disabled checks are included, with transient errors propagating instead of granting access.
+
+Content push bodies are generic for known types and unknown content-linked types, so stored notification snippets do not resend a previous comment/post text after editing. Notification documents/history remain unchanged. Existing opening authorization still applies. This checks access, not whether an old like/repost event remains active; event-state reconciliation is separate.
+
+Limitations: Firestore validation and FCM dispatch cannot be atomic, Auth reads are outside Firestore consistency and cached within one check, messages already delivered cannot be withdrawn, and other in-app/history/raw readers or old messages can still contain snapshots. Content-linked malformed legacy notifications are now suppressed rather than delivered. Token/session checks occur immediately before this content check and can also race the send. Existing preferences, 500-token batching, legacy session migration and retry limitations remain.
+
+Final cases: post removed/uploading/failed or auto-hidden; public to private; accepted follower removed; either block direction; frozen/disabled source/recipient; edited/deleted/hidden comment or ancestor; nested/flat replies; repost chain missing/cyclic/too deep; malformed references; generic payload contains no original text; unaffected follow notification; normal allowed push; metadata failures deny sending; build, prior suites and device regression.

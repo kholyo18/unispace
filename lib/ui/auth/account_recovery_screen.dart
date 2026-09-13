@@ -76,7 +76,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
         data['password'] = _password.text;
       }
       // Recovery invalidates existing sessions; do not attach an old Auth token on retries.
-      await FirebaseAuth.instance.signOut();
+      await AuthSessionService.signOutFully();
       final response = await FirebaseFunctions.instanceFor(
               region: 'europe-west1')
           .httpsCallable('recoverTotpAccount',

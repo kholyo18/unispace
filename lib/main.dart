@@ -1,3 +1,5 @@
+import 'ui/settings/push_preferences_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'ui/settings/public_profile_service.dart';
 import 'ui/settings/profile_privacy.dart';
 import 'ui/auth/account_recovery_screen.dart';
@@ -2834,21 +2836,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   Future<void> _openPostById(String postId) async {
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where(FieldPath.documentId, isEqualTo: postId)
-          .limit(1)
-          .get();
-
-      if (query.docs.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('المنشور غير موجود')),
-        );
-        return;
-      }
-
-      final post = _Post.fromFirestore(query.docs.first);
+      final data = await _readAuthorizedPostData(postId);
+      final post = _Post.fromData(postId, data);
       if (!mounted) return;
 
       // انتقل لتبويب المجتمع ثم افتح المنشور
@@ -4444,49 +4433,81 @@ class UnispaceScreen extends StatelessWidget {
 // ============================================================================
 //                         Community-Screen
 // ============================================================================
-class _CommunityHeader extends StatelessWidget {
-  const _CommunityHeader();
+Future<Set<String>> _loadNotificationBlockedIds(String? uid) async {
+  if (uid == null) return <String>{};
+  final snapshots = await Future.wait([
+    for (final name in ['blocked_accounts', 'blocked_users', 'blocked_by'])
+      FirebaseFirestore.instance.collection('users').doc(uid).collection(name).get(),
+  ]);
+  if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('Account changed');
+  return {for (final snapshot in snapshots) for (final doc in snapshot.docs) doc.id};
+}
 
+class _CommunityHeader extends StatefulWidget {
+  const _CommunityHeader();
+  @override
+  State<_CommunityHeader> createState() => _CommunityHeaderState();
+}
+class _CommunityHeaderState extends State<_CommunityHeader> {
+  String? _uid;
+  StreamSubscription<User?>? _auth;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _stream;
+  late Future<Set<String>> _blocked;
+  void _load() {
+    _stream = _uid == null ? null : FirebaseFirestore.instance.collection('users').doc(_uid)
+        .collection('notifications').orderBy('createdAt', descending: true).limit(30).snapshots();
+    _blocked = _loadNotificationBlockedIds(_uid);
+    unawaited(_blocked.then<void>((_) {}, onError: (Object error, StackTrace stack) {}));
+  }
+  void _refresh() { if (mounted) setState(_load); }
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _load();
+    blockedListRevision.addListener(_refresh);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || user?.uid == _uid) return;
+      _uid = user?.uid;
+      _refresh();
+    });
+  }
+  @override
+  void dispose() {
+    _auth?.cancel();
+    blockedListRevision.removeListener(_refresh);
+    super.dispose();
+  }
+  Widget _retry() => TextButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh),
+    label: const Text('تعذر تحميل الإشعارات — إعادة المحاولة'));
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _uid;
     if (uid == null) return const SizedBox.shrink();
-
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('notifications')
-          .orderBy('createdAt', descending: true)
-          .limit(30)
-          .snapshots(),
+      key: ValueKey(uid), stream: _stream,
       builder: (context, snap) {
-        if (snap.hasError) {
-          debugPrint('notif stream error: ${snap.error}');
-          return const SizedBox.shrink();
-        }
-        return FutureBuilder<Set<String>>(
-          future: loadBlockedUserIds(),
-          builder: (context, blockedSnap) {
-            final blocked = blockedSnap.data ?? {};
-            final items = (snap.data?.docs ?? [])
-                .map(_notificationFromDoc)
-                .where((n) => n.actorId == null || !blocked.contains(n.actorId))
-                .toList();
-            return NotificationsShowcase(
-              notifications: items,
-              onDismiss: (id) => _dismissNotification(uid, id),
-              onDismissAll: () =>
-                  _dismissAllNotifications(uid, items.map((e) => e.id)),
-            );
-          },
-        );
+        if (snap.hasError) return _retry();
+        if (snap.connectionState == ConnectionState.waiting || !snap.hasData) return const LinearProgressIndicator();
+        return FutureBuilder<Set<String>>(future: _blocked, builder: (context, blockedSnap) {
+          if (blockedSnap.hasError) return _retry();
+          if (blockedSnap.connectionState != ConnectionState.done || !blockedSnap.hasData) return const LinearProgressIndicator();
+          final blocked = blockedSnap.data!;
+          final items = snap.data!.docs.map(_notificationFromDoc)
+              .where((n) => n.actorId == null || !blocked.contains(n.actorId)).toList();
+          return NotificationsShowcase(notifications: items,
+            onDismiss: (id) {
+              if (FirebaseAuth.instance.currentUser?.uid == uid) _dismissNotification(uid,id);
+            },
+            onDismissAll: () {
+              if (FirebaseAuth.instance.currentUser?.uid == uid) _dismissAllNotifications(uid,items.map((n) => n.id));
+            },
+          );
+        });
       },
     );
   }
 }
-
-
 
 class NotificationItem {
   const NotificationItem({
@@ -4520,6 +4541,20 @@ class NotificationItem {
   final String? commentId;
   final bool read;
   final String? chatId;
+
+  String get displayMessage {
+    switch (type) {
+      case 'new_post': return 'نشر منشوراً جديداً';
+      case 'comment': return 'علّق على منشورك';
+      case 'reply': return 'رد على تعليقك';
+      case 'repost': return 'أعاد نشر محتوى';
+      case 'like': return count > 1 ? 'وآخرون أعجبوا بمنشورك' : 'أعجب بمنشورك';
+      case 'like_comment': return count > 1 ? 'وآخرون أعجبوا بتعليقك' : 'أعجب بتعليقك';
+      default:
+        return (postId?.trim().isNotEmpty ?? false)
+            ? 'لديك تحديث على محتوى تتابعه' : message;
+    }
+  }
 }
 
 String _notifDayLabel(DateTime? dt) {
@@ -4532,6 +4567,131 @@ String _notifDayLabel(DateTime? dt) {
   if (diff == 1) return 'أمس';
   if (diff < 7) return 'هذا الأسبوع';
   return 'سابقاً';
+}
+
+class _NotificationActorEntry extends ValueNotifier<Map<String, dynamic>?> {
+  _NotificationActorEntry(this.userId) : super(null);
+  final String userId;
+  int users = 0;
+  int _generation = 0;
+  bool _loading = false;
+  Timer? timer;
+
+  Future<void> reload({bool invalidate = false}) async {
+    if (users == 0 || (_loading && !invalidate)) return;
+    final generation = ++_generation;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    _loading = true;
+    value = null;
+    try {
+      if (uid == null || userId.isEmpty) return;
+      final profile = await PublicProfileService.load(userId);
+      if (users > 0 && generation == _generation && FirebaseAuth.instance.currentUser?.uid == uid) {
+        value = profile;
+      }
+    } catch (_) { /* Failed authorization keeps every subscriber neutral. */ }
+    finally { if (generation == _generation) _loading = false; }
+  }
+
+  void close() {
+    users = 0;
+    ++_generation;
+    timer?.cancel();
+    dispose();
+  }
+}
+
+class _NotificationActorPool {
+  static final _entries = <String, _NotificationActorEntry>{};
+  static StreamSubscription<User?>? _auth;
+  static String? _uid;
+
+  static void _invalidate() {
+    for (final entry in _entries.values.toList()) {
+      unawaited(entry.reload(invalidate: true));
+    }
+  }
+
+  static _NotificationActorEntry acquire(String id) {
+    if (_entries.isEmpty) {
+      _uid = FirebaseAuth.instance.currentUser?.uid;
+      blockedListRevision.addListener(_invalidate);
+      _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+        if (user?.uid != _uid) { _uid = user?.uid; _invalidate(); }
+      });
+    }
+    final entry = _entries.putIfAbsent(id, () => _NotificationActorEntry(id));
+    entry.users++;
+    if (entry.users == 1) {
+      unawaited(entry.reload());
+      entry.timer = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(entry.reload()));
+    }
+    return entry;
+  }
+
+  static void release(_NotificationActorEntry entry) {
+    if (--entry.users > 0) return;
+    _entries.remove(entry.userId);
+    entry.close();
+    if (_entries.isEmpty) {
+      blockedListRevision.removeListener(_invalidate);
+      _auth?.cancel();
+      _auth = null;
+      _uid = null;
+    }
+  }
+}
+
+class _NotificationActor extends StatefulWidget {
+  const _NotificationActor({required this.userId, this.size, this.style,
+    this.maxLines = 1, this.overflow = TextOverflow.ellipsis});
+  final String? userId;
+  final double? size;
+  final TextStyle? style;
+  final int maxLines;
+  final TextOverflow overflow;
+  @override
+  State<_NotificationActor> createState() => _NotificationActorState();
+}
+
+class _NotificationActorState extends State<_NotificationActor> {
+  late _NotificationActorEntry _entry;
+  void _changed() { if (mounted) setState(() {}); }
+  void _attach() {
+    _entry = _NotificationActorPool.acquire(widget.userId?.trim() ?? '');
+    _entry.addListener(_changed);
+  }
+  void _detach() {
+    _entry.removeListener(_changed);
+    _NotificationActorPool.release(_entry);
+  }
+  @override
+  void initState() { super.initState(); _attach(); }
+  @override
+  void didUpdateWidget(covariant _NotificationActor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId) { _detach(); _attach(); }
+  }
+  @override
+  void dispose() { _detach(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final p = _entry.value;
+    if (widget.size != null) {
+      final size = widget.size!;
+      return PublicProfilePhoto(userId: widget.userId ?? '',
+        fallbackUrl: p?['profileImageUrl']?.toString(), size: size,
+        radius: size / 2, iconSize: size / 2);
+    }
+    String name = 'مستخدم';
+    if (p != null) {
+      final full = [p['firstName'],p['lastName']].whereType<String>()
+          .map((s) => s.trim()).where((s) => s.isNotEmpty).join(' ');
+      final display = (p['displayName'] ?? p['username'] ?? '').toString().trim();
+      name = full.isNotEmpty ? full : (display.isNotEmpty ? display : name);
+    }
+    return Text(name, style: widget.style, maxLines: widget.maxLines, overflow: widget.overflow);
+  }
 }
 
 class _StackedNotifAvatars extends StatelessWidget {
@@ -4576,13 +4736,7 @@ class _StackedNotifAvatars extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: t.pageBg, width: 2),
                 ),
-                child: LiveAuthorPhoto(
-                  userId: ids[i],
-                  fallbackUrl: i == 0 ? item.actorPhotoUrl : null,
-                  size: size - 4,
-                  radius: (size - 4) / 2,
-                  iconSize: size * 0.4,
-                ),
+                child: _NotificationActor(userId: ids[i], size: size - 4),
               ),
             ),
           Positioned(
@@ -4633,17 +4787,14 @@ class _SocialNotificationTile extends StatelessWidget {
                 child: Text.rich(
                   TextSpan(
                     children: [
-                      TextSpan(
-                        text: item.sender,
-                        style: TextStyle(
-                          color: t.textPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14.5,
-                          height: 1.35,
-                        ),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.middle,
+                        child: _NotificationActor(userId: item.actorId,
+                          style: TextStyle(color: t.textPrimary, fontWeight: FontWeight.w800,
+                            fontSize: 14.5, height: 1.35)),
                       ),
                       TextSpan(
-                        text: ' ${item.message}',
+                        text: ' ${item.displayMessage}',
                         style: TextStyle(
                           color: t.textPrimary,
                           fontWeight: FontWeight.w500,
@@ -4791,186 +4942,6 @@ String composeLikeNotificationMessage({
       : 'و${count - 1} آخرين أعجبوا بمنشورك';
 }
 
-Future<void> retractAggregatedLikeFromMe({
-  required String toUid,
-  required String postId,
-  String? commentId,
-}) async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null || toUid.isEmpty || toUid == me) return;
-  if (postId.trim().isEmpty) return;
-
-  final isComment = commentId != null && commentId.trim().isNotEmpty;
-  final cid = commentId?.trim() ?? '';
-  final docId = isComment ? 'like_c_$cid' : 'like_post_${postId.trim()}';
-  final ref = FirebaseFirestore.instance
-      .collection('users')
-      .doc(toUid)
-      .collection('notifications')
-      .doc(docId);
-
-  try {
-    await FirebaseFirestore.instance.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) return;
-      final data = snap.data() ?? {};
-      final ids = <String>[];
-      final rawIds = data['actorIds'];
-      if (rawIds is List) {
-        for (final e in rawIds) {
-          final id = e.toString();
-          if (id.isNotEmpty && !ids.contains(id)) ids.add(id);
-        }
-      } else {
-        final one = data['actorId']?.toString();
-        if (one != null && one.isNotEmpty) ids.add(one);
-      }
-      if (!ids.contains(me)) return;
-
-      ids.remove(me);
-      if (ids.isEmpty) {
-        tx.delete(ref);
-        return;
-      }
-
-      final names = <String, String>{};
-      final rawNames = data['actorNames'];
-      if (rawNames is Map) {
-        rawNames.forEach((k, v) => names[k.toString()] = v.toString());
-      }
-      names.remove(me);
-
-      final leadId = ids.first;
-      tx.update(ref, {
-        'actorId': leadId,
-        'actorName': names[leadId] ?? (data['actorName'] ?? 'طالب'),
-        'actorPhotoUrl': leadId == data['actorId']
-            ? data['actorPhotoUrl']
-            : null,
-        'actorIds': ids,
-        'actorNames': names,
-        'count': ids.length,
-        'message': composeLikeNotificationMessage(
-          isComment: isComment,
-          ids: ids,
-          names: names,
-        ),
-      });
-    });
-  } catch (e) {
-    debugPrint('retract like notif failed: $e');
-  }
-}
-
-Future<void> pushAggregatedLikeFromMe({
-  required String toUid,
-  required String postId,
-  String? commentId,
-}) async {
-  final me = FirebaseAuth.instance.currentUser;
-  if (me == null || toUid.isEmpty || toUid == me.uid) return;
-  if (postId.trim().isEmpty) return;
-
-  try {
-    if (await isAccountBlocked(toUid)) return;
-    if (await isBlockedByAccount(toUid)) return;
-  } catch (_) {}
-
-  var name = (me.displayName ?? '').trim();
-  String? photo = me.photoURL;
-  try {
-    final d = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(me.uid)
-        .get();
-    final fn = (d.data()?['firstName'] ?? '').toString().trim();
-    final ln = (d.data()?['lastName'] ?? '').toString().trim();
-    final fromNames = [fn, ln].where((e) => e.isNotEmpty).join(' ');
-    if (fromNames.isNotEmpty) name = fromNames;
-    final p = d.data()?['profileImageUrl']?.toString();
-    if (p != null && p.isNotEmpty) photo = p;
-  } catch (_) {}
-  if (name.isEmpty) name = 'طالب UniSpace';
-
-  final isComment = commentId != null && commentId.trim().isNotEmpty;
-  final cid = commentId?.trim() ?? '';
-  final docId = isComment ? 'like_c_$cid' : 'like_post_${postId.trim()}';
-  final type = isComment ? 'like_comment' : 'like';
-  final ref = FirebaseFirestore.instance
-      .collection('users')
-      .doc(toUid)
-      .collection('notifications')
-      .doc(docId);
-
-  try {
-    await FirebaseFirestore.instance.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      final ids = <String>[];
-      final names = <String, String>{};
-
-      if (snap.exists) {
-        final data = snap.data() ?? {};
-        final rawIds = data['actorIds'];
-        if (rawIds is List) {
-          for (final e in rawIds) {
-            final id = e.toString();
-            if (id.isNotEmpty && !ids.contains(id)) ids.add(id);
-          }
-        }
-        final rawNames = data['actorNames'];
-        if (rawNames is Map) {
-          rawNames.forEach((k, v) {
-            names[k.toString()] = v.toString();
-          });
-        }
-      }
-
-      ids.remove(me.uid);
-      ids.insert(0, me.uid);
-      names[me.uid] = name;
-      while (ids.length > 30) {
-        names.remove(ids.removeLast());
-      }
-
-      final count = ids.length;
-      late final String message;
-      if (count <= 1) {
-        message = isComment ? 'أعجب بتعليقك' : 'أعجب بمنشورك';
-      } else if (count == 2) {
-        final other = (names[ids[1]] ?? '').trim();
-        if (other.isNotEmpty) {
-          message = isComment
-              ? 'و$other أعجبا بتعليقك'
-              : 'و$other أعجبا بمنشورك';
-        } else {
-          message = isComment ? 'وآخر أعجبا بتعليقك' : 'وآخر أعجبا بمنشورك';
-        }
-      } else {
-        message = isComment
-            ? 'و${count - 1} آخرين أعجبوا بتعليقك'
-            : 'و${count - 1} آخرين أعجبوا بمنشورك';
-      }
-
-      tx.set(ref, {
-        'type': type,
-        'actorId': me.uid,
-        'actorName': name,
-        'actorPhotoUrl': photo,
-        'actorIds': ids,
-        'actorNames': names,
-        'count': count,
-        'message': message,
-        'postId': postId.trim(),
-        if (isComment) 'commentId': cid,
-        'read': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    });
-  } catch (e) {
-    debugPrint('agg like notif failed: $e');
-  }
-}
-
 Future<void> pushNotificationFromMe({
   required String toUid,
   required String type,
@@ -5003,33 +4974,6 @@ Future<void> pushNotificationFromMe({
     docId: docId,
   );
 }
-Future<void> notifyFollowersOfNewPost({required String postId, required String title,}) async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null) return;
-
-  final snap = await FirebaseFirestore.instance
-      .collection('users')
-      .doc(me)
-      .collection('followers')
-      .limit(40)
-      .get();
-
-  final t = title.trim();
-  final msg = t.isEmpty ? 'نشر منشوراً جديداً' : 'نشر: $t';
-  final short = msg.length > 70 ? '${msg.substring(0, 70)}…' : msg;
-
-  for (final d in snap.docs) {
-    final toUid = (d.data()['uid'] ?? d.id).toString();
-    unawaited(pushNotificationFromMe(
-      toUid: toUid,
-      type: 'new_post',
-      message: short,
-      postId: postId,
-      docId: 'post_$postId',
-    ));
-  }
-}
-
 Future<void> _markNotificationRead(String uid, String id) async {
   try {
     await FirebaseFirestore.instance
@@ -5064,14 +5008,14 @@ Future<void> _dismissAllNotifications(String uid, Iterable<String> ids) async {
   await batch.commit();
 }
 
-Future<void> _markAllNotificationsRead(String uid) async {
+Future<void> _markAllNotificationsRead(String uid, {int limit = 80}) async {
   try {
     final snap = await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('notifications')
         .orderBy('createdAt', descending: true)
-        .limit(80)
+        .limit(limit.clamp(80, 400).toInt())
         .get();
     final unread = snap.docs.where((d) => d.data()['read'] != true);
     if (unread.isEmpty) return;
@@ -5110,7 +5054,8 @@ IconData _notificationIcon(String type) {
 
 Future<void> _openNotification(BuildContext context, NotificationItem n,) async {
   final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid != null) unawaited(_markNotificationRead(uid, n.id));
+  if (uid == null) return;
+  unawaited(_markNotificationRead(uid, n.id));
   final actorId = (n.actorId ?? '').trim();
   final type = n.type;
 
@@ -5126,8 +5071,8 @@ Future<void> _openNotification(BuildContext context, NotificationItem n,) async 
       MaterialPageRoute(
         builder: (_) => UserProfileScreen(
           userId: actorId,
-          initialName: n.sender,
-          initialPhotoUrl: n.actorPhotoUrl,
+          initialName: null,
+          initialPhotoUrl: null,
         ),
       ),
     );
@@ -5136,20 +5081,36 @@ Future<void> _openNotification(BuildContext context, NotificationItem n,) async 
 
   final postId = n.postId?.trim() ?? '';
   if (postId.isNotEmpty) {
-    final doc = await FirebaseFirestore.instance
-        .collection('community_posts')
-        .doc(postId)
-        .get();
-    if (!doc.exists || !context.mounted) return;
-    final post = _Post.fromFirestore(doc);
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CommentsScreen(
-          post: post,
-          initialCommentId: n.commentId,
-        ),
-      ),
-    );
+    try {
+      final data = await _readAuthorizedPostData(postId);
+      if (!context.mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
+      final commentId = n.commentId?.trim() ?? '';
+      bool containsComment(dynamic raw, int depth) {
+        if (raw is! List || depth > 30) return false;
+        for (final row in raw) {
+          if (row is! Map) continue;
+          if (row['id'] == commentId || containsComment(row['replies'], depth + 1)) return true;
+        }
+        return false;
+      }
+      if (commentId.isNotEmpty && !containsComment(data['comments'], 0)) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('هذا التعليق غير متاح حاليًا')),
+        );
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CommentsScreen(
+          post: _Post.fromData(postId, data),
+          initialCommentId: commentId.isEmpty ? null : commentId,
+        )),
+      );
+    } catch (_) {
+      if (!context.mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تعذر فتح المحتوى. قد يكون غير متاح أو تعذر الاتصال.')),
+      );
+    }
     return;
   }
 
@@ -5158,8 +5119,8 @@ Future<void> _openNotification(BuildContext context, NotificationItem n,) async 
       MaterialPageRoute(
         builder: (_) => UserProfileScreen(
           userId: actorId,
-          initialName: n.sender,
-          initialPhotoUrl: n.actorPhotoUrl,
+          initialName: null,
+          initialPhotoUrl: null,
         ),
       ),
     );
@@ -5434,8 +5395,8 @@ class _ActiveCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        item.sender,
+                      child: _NotificationActor(
+                        userId: item.actorId,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
@@ -5456,7 +5417,7 @@ class _ActiveCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  item.message,
+                  item.displayMessage,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -5499,16 +5460,7 @@ class _NotificationAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if ((item.actorId ?? '').isNotEmpty) {
-      return LiveAuthorPhoto(
-        userId: item.actorId!,
-        fallbackUrl: item.actorPhotoUrl,
-        size: radius * 2,
-        radius: radius,
-        iconSize: radius,
-      );
-    }
-    return _Avatar(name: item.sender, radius: radius);
+    return _NotificationActor(userId: item.actorId, size: radius * 2);
   }
 }
 
@@ -5571,6 +5523,47 @@ class _NotificationsOverlay extends StatefulWidget {
 class _NotificationsOverlayState extends State<_NotificationsOverlay> {
   late List<NotificationItem> _items = List.of(widget.initial);
   final _panelKey = GlobalKey();
+  late final String? _ownerUid;
+  StreamSubscription<User?>? _auth;
+  bool _checkingBlocks = true;
+  bool _blockError = false;
+  int _generation = 0;
+  final Set<String> _dismissed = {};
+  @override
+  void initState() {
+    super.initState();
+    _ownerUid = FirebaseAuth.instance.currentUser?.uid;
+    blockedListRevision.addListener(_checkBlocks);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user?.uid != _ownerUid) _checkBlocks();
+    });
+    _checkBlocks();
+  }
+  Future<void> _checkBlocks() async {
+    final generation = ++_generation;
+    if (!mounted) return;
+    setState(() { _checkingBlocks = true; _blockError = false; });
+    try {
+      if (_ownerUid == null || FirebaseAuth.instance.currentUser?.uid != _ownerUid) throw StateError('Account changed');
+      final blocked = await _loadNotificationBlockedIds(_ownerUid);
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _items = widget.initial.where((n) => !_dismissed.contains(n.id) &&
+            (n.actorId == null || !blocked.contains(n.actorId))).toList();
+        _checkingBlocks = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      setState(() { _items = []; _checkingBlocks = false; _blockError = true; });
+    }
+  }
+  @override
+  void dispose() {
+    ++_generation;
+    _auth?.cancel();
+    blockedListRevision.removeListener(_checkBlocks);
+    super.dispose();
+  }
 
   void _expandToScreen() {
     final box = _panelKey.currentContext?.findRenderObject() as RenderBox?;
@@ -5587,19 +5580,24 @@ class _NotificationsOverlayState extends State<_NotificationsOverlay> {
     );
   }
   void _dismiss(String id) {
+    if (_checkingBlocks || _blockError || FirebaseAuth.instance.currentUser?.uid != _ownerUid) return;
+    _dismissed.add(id);
     widget.onDismiss(id);
     setState(() => _items.removeWhere((n) => n.id == id));
     if (_items.isEmpty) Navigator.of(context).pop();
   }
 
   void _dismissAll() {
-    widget.onDismissAll();
+    if (_checkingBlocks || _blockError || FirebaseAuth.instance.currentUser?.uid != _ownerUid) return;
+    for (final item in _items) { widget.onDismiss(item.id); }
     Navigator.of(context).pop();
   }
 
   Future<void> _openItem(NotificationItem n) async {
-    Navigator.of(context).pop();
-    await _openNotification(context, n);
+    if (_checkingBlocks || _blockError || FirebaseAuth.instance.currentUser?.uid != _ownerUid) return;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    navigator.pop();
+    await _openNotification(navigator.context, n);
   }
 
   @override
@@ -5642,7 +5640,7 @@ class _NotificationsOverlayState extends State<_NotificationsOverlay> {
                           ),
                         ),
                         const Spacer(),
-                        if (_items.isNotEmpty)
+                        if (_items.isNotEmpty && !_checkingBlocks && !_blockError)
                           TextButton(
                             onPressed: _dismissAll,
                             child: const Text('مسح الكل'),
@@ -5660,7 +5658,14 @@ class _NotificationsOverlayState extends State<_NotificationsOverlay> {
                     const Divider(height: 1),
                     const SizedBox(height: 8),
                     Flexible(
-                      child: _items.isEmpty
+                      child: _checkingBlocks
+                          ? const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
+                          : _blockError
+                          ? TextButton(onPressed: _checkBlocks,
+                              child: Text(FirebaseAuth.instance.currentUser?.uid == _ownerUid
+                                  ? 'تعذر التحقق من الإشعارات. إعادة المحاولة'
+                                  : 'تغيّر الحساب. أغلق هذه النافذة وافتح الإشعارات مجددًا'))
+                          : _items.isEmpty
                           ? Padding(
                         padding: const EdgeInsets.symmetric(vertical: 32),
                         child: Text(
@@ -5794,8 +5799,8 @@ class _OverlayTile extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            item.sender,
+                          child: _NotificationActor(
+                        userId: item.actorId,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
@@ -5827,7 +5832,7 @@ class _OverlayTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      item.message,
+                      item.displayMessage,
                       style: TextStyle(
                         fontSize: 12,
                         color: scheme.onSurfaceVariant,
@@ -5899,11 +5904,59 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   _NotifFilter _filter = _NotifFilter.all;
+  int _limit = 80;
+  String? _uid;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _notifications;
+  late Future<Set<String>> _blocked;
+  StreamSubscription<User?>? _auth;
+
+  Future<Set<String>> _loadBlocked() => _loadNotificationBlockedIds(_uid);
+  Future<Set<String>> _startBlockedLoad() {
+    final future = _loadBlocked();
+    // Observe early errors while the notification stream is still loading;
+    // FutureBuilder still receives the original failed future and shows retry.
+    unawaited(future.then<void>((_) {}, onError: (Object error, StackTrace stack) {}));
+    return future;
+  }
+
+  void _subscribe() {
+    _notifications = _uid == null ? null : FirebaseFirestore.instance
+        .collection('users').doc(_uid).collection('notifications')
+        .orderBy('createdAt', descending: true).limit(_limit).snapshots();
+  }
+  void _refresh() {
+    if (!mounted) return;
+    setState(() { _blocked = _startBlockedLoad(); _subscribe(); });
+  }
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _blocked = _startBlockedLoad();
+    _subscribe();
+    blockedListRevision.addListener(_refresh);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || user?.uid == _uid) return;
+      _uid = user?.uid;
+      _limit = 80;
+      _refresh();
+    });
+  }
+  @override
+  void dispose() {
+    blockedListRevision.removeListener(_refresh);
+    _auth?.cancel();
+    super.dispose();
+  }
+  Widget _loadError() => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+    const Text('تعذر تحميل الإشعارات بأمان'),
+    TextButton(onPressed: _refresh, child: const Text('إعادة المحاولة')),
+  ]));
 
   @override
   Widget build(BuildContext context) {
     final t = _ProfileTheme.of(context);
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _uid;
 
     return Scaffold(
       backgroundColor: t.pageBg,
@@ -5913,11 +5966,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(onPressed: _refresh, tooltip: 'تحديث', icon: const Icon(Icons.refresh)),
           if (uid != null)
             TextButton(
-              onPressed: () => _markAllNotificationsRead(uid),
+              onPressed: () => _markAllNotificationsRead(uid, limit: _limit),
               child: Text(
-                'قراءة الكل',
+                'قراءة أحدث $_limit',
                 style: TextStyle(color: AppTeal.main, fontWeight: FontWeight.w800),
               ),
             ),
@@ -5938,26 +5992,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(uid)
-                  .collection('notifications')
-                  .orderBy('createdAt', descending: true)
-                  .limit(80)
-                  .snapshots(),
+              key: ValueKey(uid),
+              stream: _notifications,
               builder: (context, snap) {
                 if (snap.hasError) {
-                  return Center(
-                    child: Text('تعذر تحميل الإشعارات', style: TextStyle(color: t.textFaint)),
-                  );
+                  return _loadError();
                 }
-                if (!snap.hasData) {
+                if (snap.connectionState == ConnectionState.waiting || !snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 return FutureBuilder<Set<String>>(
-                  future: loadBlockedUserIds(),
+                  future: _blocked,
                   builder: (context, blockedSnap) {
-                    final blocked = blockedSnap.data ?? {};
+                    if (blockedSnap.hasError) return _loadError();
+                    if (blockedSnap.connectionState != ConnectionState.done || !blockedSnap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final blocked = blockedSnap.data!;
                     var items = snap.data!.docs
                         .map(_notificationFromDoc)
                         .where((n) => n.actorId == null || !blocked.contains(n.actorId))
@@ -5975,20 +6026,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       }
                     }).toList();
 
+                    Widget withControls(Widget child) => Column(children: [
+                      Expanded(child: child),
+                      if (snap.data!.docs.length >= _limit)
+                        SafeArea(top: false, child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: _limit < 400
+                              ? TextButton(onPressed: () => setState(() {
+                                  _limit += 80;
+                                  _subscribe();
+                                }), child: const Text('تحميل إشعارات أقدم'))
+                              : const Text('تعرض هذه الصفحة أحدث 400 إشعار'),
+                        )),
+                    ]);
+
                     if (items.isEmpty) {
-                      return Center(
+                      return withControls(Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.notifications_none_rounded, size: 48, color: t.textFaint),
                             const SizedBox(height: 10),
                             Text(
-                              _filter == _NotifFilter.all ? 'لا توجد إشعارات' : 'لا توجد إشعارات في هذا التصنيف',
+                              _filter == _NotifFilter.all ? 'لا توجد إشعارات في القائمة المحمّلة' : 'لا توجد إشعارات محمّلة في هذا التصنيف',
                               style: TextStyle(color: t.textPrimary, fontWeight: FontWeight.w800),
                             ),
                           ],
                         ),
-                      );
+                      ));
                     }
 
                     // ===== تجميع زمني: اليوم / أمس / هذا الأسبوع / سابقًا =====
@@ -6005,7 +6070,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       grouped[label]!.add(n);
                     }
 
-                    return ListView.builder(
+                    return withControls(ListView.builder(
                       padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
                       itemCount: order.fold<int>(0, (sum, k) => sum + 1 + grouped[k]!.length),
                       itemBuilder: (context, index) {
@@ -6037,7 +6102,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         }
                         return const SizedBox.shrink();
                       },
-                    );
+                    ));
                   },
                 );
               },
@@ -6186,15 +6251,15 @@ class _NotificationTile extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                n.sender,
+                              _NotificationActor(
+                        userId: n.actorId,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(color: t.textPrimary, fontWeight: FontWeight.w800, fontSize: 14),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                n.message,
+                                n.displayMessage,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(color: t.textMuted, fontSize: 13, height: 1.3),
@@ -6318,21 +6383,31 @@ class CommunityScreen extends StatefulWidget {
   State<CommunityScreen> createState() => _CommunityScreenState();
 }
 
-class _CommunityScreenState extends State<CommunityScreen> {
+class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingObserver {
   bool _publishing = false;
+  Timer? _feedAccessTimer;
+  int _feedGeneration = 0;
+  int _blockRequest = 0;
+  bool _refreshingFeed = false;
+  String? _feedUid;
+  StreamSubscription<User?>? _feedAuthSub;
+
+  bool _isCurrentFeed(int generation, String? uid) =>
+      mounted && generation == _feedGeneration &&
+      uid == FirebaseAuth.instance.currentUser?.uid;
+
 
   final _scrollController = ScrollController();
   final List<_Post> _posts = [];
-  DocumentSnapshot<Map<String, dynamic>>? _lastDoc;
+  Map<String, dynamic>? _lastDoc;
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _initialLoading = true;
   String? _error;
-  static const int _pageSize = 25;
   Set<String> _blockedIds = {};
   String? _pinPostId;
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _newPostsSub;
+  Timer? _newPostsSub;
   final GlobalKey _searchButtonKey = GlobalKey();
   CollectionReference<Map<String, dynamic>> get _postsRef =>
       FirebaseFirestore.instance.collection('community_posts');
@@ -6364,13 +6439,79 @@ class _CommunityScreenState extends State<CommunityScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startFeedAccessTimer();
+    _feedUid = FirebaseAuth.instance.currentUser?.uid;
     _loadInitial();
+    _feedAuthSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || user?.uid == _feedUid) return;
+      _feedUid = user?.uid;
+      _posts.clear();
+      _blockedIds = {};
+      _pinPostId = null;
+      _loadInitial();
+    });
     _scrollController.addListener(_onScroll);
     hiddenListRevision.addListener(_onHiddenListChanged);
     moderationRevision.addListener(_onHiddenListChanged);
     blockedListRevision.addListener(_onBlockedListChanged);
     authorProfileRevision.addListener(_onAuthorProfileChanged);
   }
+  void _startFeedAccessTimer() {
+    _feedAccessTimer?.cancel();
+    _feedAccessTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent == true &&
+          TickerMode.of(context)) {
+        _recheckFeedAccess();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startFeedAccessTimer();
+      _recheckFeedAccess();
+    } else {
+      _feedAccessTimer?.cancel();
+    }
+  }
+
+  Future<void> _recheckFeedAccess() async {
+    if (!mounted || _refreshingFeed || _initialLoading) return;
+    if (_error != null) {
+      await _loadInitial();
+      return;
+    }
+    if (_posts.isEmpty) return;
+    final generation = ++_feedGeneration;
+    final me = FirebaseAuth.instance.currentUser?.uid;
+    final existing = List<_Post>.from(_posts);
+    _newPostsSub?.cancel();
+    setState(() {
+      _refreshingFeed = true;
+      _loadingMore = false;
+    });
+    try {
+      final allowed = await _filterFeedPosts(existing, generation, me);
+      if (!_isCurrentFeed(generation, me)) return;
+      final allowedIds = allowed.map((p) => p.id).toSet();
+      setState(() {
+        // Only remove: do not restore posts hidden/deleted while awaiting checks.
+        _posts.removeWhere((p) => !allowedIds.contains(p.id));
+        _refreshingFeed = false;
+      });
+      _listenForNewPosts(generation, me);
+    } catch (_) {
+      if (!_isCurrentFeed(generation, me)) return;
+      setState(() {
+        _posts.clear();
+        _refreshingFeed = false;
+        _error = 'تعذر التحقق من صلاحية عرض المنشورات';
+      });
+    }
+  }
+
   void _onAuthorProfileChanged() {
     if (mounted) _loadInitial();
   }
@@ -6383,6 +6524,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _feedAccessTimer?.cancel();
+    _feedGeneration++;
+    _feedAuthSub?.cancel();
     authorProfileRevision.removeListener(_onAuthorProfileChanged);
     blockedListRevision.removeListener(_onBlockedListChanged);
     hiddenListRevision.removeListener(_onHiddenListChanged);
@@ -6393,68 +6538,69 @@ class _CommunityScreenState extends State<CommunityScreen> {
     super.dispose();
   }
 
-  Query<Map<String, dynamic>> get _baseQuery => _postsRef
-      .orderBy('createdAt', descending: true);
+  Future<Map<String, dynamic>> _readFeedPage(Map<String, dynamic>? cursor) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('readContentFeedPage', options: HttpsCallableOptions(
+          timeout: const Duration(seconds: 120),
+        )).call<Map<String, dynamic>>({'cursor': cursor});
+    final page = response.data;
+    if (uid != FirebaseAuth.instance.currentUser?.uid || page['posts'] is! List ||
+        page['exhausted'] is! bool ||
+        (page['cursor'] != null && page['cursor'] is! Map) ||
+        (page['exhausted'] == false && page['cursor'] == null)) {
+      throw StateError('تعذر تأكيد صفحة الخلاصة');
+    }
+    return page;
+  }
+
+  List<_Post> _feedPagePosts(Map<String, dynamic> page) =>
+      (page['posts'] as List).map((row) {
+        if (row is! Map || row['id'] is! String || row['data'] is! Map) {
+          throw StateError('بيانات منشور غير صالحة');
+        }
+        return _Post.fromData(row['id'] as String,
+            Map<String, dynamic>.from(row['data'] as Map));
+      }).toList();
 
   Future<void> _loadInitial({bool showFullLoader = true}) async {
+    if (!mounted) return;
+    final generation = ++_feedGeneration;
+    final me = FirebaseAuth.instance.currentUser?.uid;
+    _newPostsSub?.cancel();
     setState(() {
+      _refreshingFeed = true;
+      _loadingMore = false;
+      _lastDoc = null;
+      _blockedIds = {};
       if (showFullLoader || _posts.isEmpty) _initialLoading = true;
       _error = null;
     });
 
     try {
-      final snap = await _baseQuery.limit(_pageSize).get();
-      final hidden = await loadHiddenPostIds();
-      final blocked = await loadBlockedUserIds();
-      final followingIds = await loadFollowingIds();
-      final me = FirebaseAuth.instance.currentUser?.uid;
-      _blockedIds = blocked;
-
-
-
-        final raw = _docsToPosts(snap.docs);
-        final unavailable = await loadUnavailableUserIds([
-          ...raw.map((p) => p.authorId ?? ''),
-          ...raw.map((p) => (p.repostOf?['authorId'] ?? '').toString()),
-        ]);
-
-        final list = raw.where((p) {
-          final id = p.id?.trim();
-          if (id == null || id.isEmpty) return false;
-          if (hidden.contains(id)) return false;
-          if (isBlockedPost(p, blocked)) return false;
-          if (unavailable.contains((p.authorId ?? '').trim())) return false;
-          if (p.isRepost &&
-              unavailable.contains(
-                (p.repostOf?['authorId'] ?? '').toString().trim(),
-              )) {
-            return false;
-          }
-          if (p.authorPrivate) {
-            final a = (p.authorId ?? '').trim();
-            if (a.isNotEmpty && a != me && !followingIds.contains(a)) {
-              return false;
-            }
-          }
-          return true;
-        }).toList();
-
+      final page = await _readFeedPage(null);
+      final list = await _filterFeedPosts(_feedPagePosts(page), generation, me);
+      if (!_isCurrentFeed(generation, me)) return;
       final ordered = _ordered(list);
 
       setState(() {
+        _refreshingFeed = false;
         _posts
           ..clear()
           ..addAll(ordered);
-        _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
-        _hasMore = snap.docs.length >= _pageSize;
+        _lastDoc = page['cursor'] == null ? null : Map<String, dynamic>.from(page['cursor'] as Map);
+        _hasMore = page['exhausted'] == false;
         _initialLoading = false;
       });
       _newPostsSub?.cancel();
-      _listenForNewPosts();
+      _listenForNewPosts(generation, me);
       _precacheImages(ordered);
       _prefetchFirstVideos(ordered);
     } catch (e) {
+      if (!_isCurrentFeed(generation, me)) return;
       setState(() {
+        _refreshingFeed = false;
+        _posts.clear();
         _error = e.toString();
         _initialLoading = false;
       });
@@ -6467,45 +6613,32 @@ class _CommunityScreenState extends State<CommunityScreen> {
     return List<_Post>.from(_posts);
   }
   Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore || _lastDoc == null) return;
+    if (!mounted || _refreshingFeed || _initialLoading || _error != null || _loadingMore || !_hasMore || _lastDoc == null) return;
 
+    final generation = _feedGeneration;
+    final me = FirebaseAuth.instance.currentUser?.uid;
+    final cursor = _lastDoc!;
     setState(() => _loadingMore = true);
 
     try {
-      final followingIds = await loadFollowingIds();
-      final me = FirebaseAuth.instance.currentUser?.uid;
-      final snap = await _baseQuery
-          .startAfterDocument(_lastDoc!)
-          .limit(_pageSize)
-          .get();
+      final page = await _readFeedPage(cursor);
 
-      final hidden = await loadHiddenPostIds();
-      final list = _docsToPosts(snap.docs).where((p) {
-        final id = p.id?.trim();
-        if (id == null || id.isEmpty) return false;
-        if (hidden.contains(id)) return false;
-        if (isBlockedPost(p, _blockedIds)) return false;
-        if (p.authorPrivate) {
-          final a = (p.authorId ?? '').trim();
-          if (a.isNotEmpty && a != me && !followingIds.contains(a)) {
-            return false;
-          }
-        }
-        return true;
-      }).toList();
-
-      final extra = List<_Post>.from(list)..shuffle();
+      final list = await _filterFeedPosts(_feedPagePosts(page), generation, me);
+      if (!_isCurrentFeed(generation, me)) return;
+      final existingIds = _posts.map((p) => p.id).toSet();
+      final extra = list.where((p) => !existingIds.contains(p.id)).toList()..shuffle();
 
       setState(() {
         _posts.addAll(extra);
-        _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
-        _hasMore = snap.docs.length >= _pageSize;
+        _lastDoc = page['cursor'] == null ? null : Map<String, dynamic>.from(page['cursor'] as Map);
+        _hasMore = page['exhausted'] == false;
         _loadingMore = false;
       });
 
       _precacheImages(list);
       _prefetchFirstVideos(list);
     } catch (e) {
+      if (!_isCurrentFeed(generation, me)) return;
       setState(() => _loadingMore = false);
       debugPrint('loadMore failed: $e');
     }
@@ -6538,6 +6671,53 @@ class _CommunityScreenState extends State<CommunityScreen> {
     }
   }
 
+  // Recheck current server-side audience decisions for every loaded batch.
+  Future<List<_Post>> _filterFeedPosts(
+    List<_Post> raw, int generation, String? me,
+  ) async {
+    if (!_isCurrentFeed(generation, me)) return [];
+    final hidden = await loadHiddenPostIds();
+    final blocked = await loadBlockedUserIds();
+    if (!_isCurrentFeed(generation, me)) return [];
+    final candidates = raw.where((p) {
+      final id = p.id?.trim();
+      return id != null && id.isNotEmpty && !hidden.contains(id) &&
+          !isBlockedPost(p, blocked) && !isBlockedPost(p, _blockedIds);
+    }).toList();
+    final authors = <String>{
+      ...candidates.map((p) => (p.authorId ?? '').trim()),
+      ...candidates.where((p) => p.isRepost).map(
+        (p) => (p.repostOf?['authorId'] ?? '').toString().trim(),
+      ),
+    }..remove('');
+    final ids = authors.toList();
+    final allowed = <String>{};
+    // No persistent permission cache; cap concurrent callable requests.
+    for (var i = 0; i < ids.length; i += 5) {
+      if (!_isCurrentFeed(generation, me)) return [];
+      final end = i + 5 < ids.length ? i + 5 : ids.length;
+      await Future.wait(ids.sublist(i, end).map((author) async {
+        try {
+          final profile = await PublicProfileService.load(author);
+          if (profile['canViewContent'] == true) allowed.add(author);
+        } on FirebaseFunctionsException catch (error) {
+          // Unavailable/blocked accounts are omitted; transport and session
+          // errors must reach the loader instead of looking like an empty feed.
+          if (error.code != 'not-found') rethrow;
+        }
+      }));
+    }
+    if (!_isCurrentFeed(generation, me)) return [];
+    return candidates.where((p) {
+      if (isBlockedPost(p, _blockedIds)) return false;
+      if (!allowed.contains((p.authorId ?? '').trim())) return false;
+      if (p.isRepost && !allowed.contains(
+        (p.repostOf?['authorId'] ?? '').toString().trim(),
+      )) return false;
+      return true;
+    }).toList();
+  }
+
   List<_Post> _ordered(List<_Post> input) {
     _Post? pinned;
     final rest = <_Post>[];
@@ -6554,24 +6734,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
       ...rest,
     ];
   }
-  List<_Post> _docsToPosts(
-      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-      ) {
-    final out = <_Post>[];
-    for (final doc in docs) {
-      final data = doc.data();
-      final status = data['status']?.toString().trim().toLowerCase();
-      if (status == 'uploading') continue;
-      if (isCommunityPostRemoved(data)) continue;
-      try {
-        out.add(_Post.fromFirestore(doc));
-      } catch (e, st) {
-        debugPrintStack(stackTrace: st);
-      }
-    }
-    return out;
-  }
-
   void _precacheImages(List<_Post> posts) {
     for (final post in posts) {
       for (final url in post.imagePaths) {
@@ -6594,22 +6756,38 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
 
   /// منشورات جديدة تُضاف في الأعلى بدون إعادة تحميل الكل
-  void _listenForNewPosts() {
-    _newPostsSub = _baseQuery.limit(5).snapshots().listen((snap) async {
-      if (!mounted || snap.docs.isEmpty) return;
-      final hidden = await loadHiddenPostIds();
-      if (!mounted) return;
-      final newestRaw = _docsToPosts(snap.docs);
-      final unavailable = await loadUnavailableUserIds(
-        newestRaw.map((p) => p.authorId ?? ''),
-      );
-      final newest = newestRaw
-          .where((p) => !isBlockedPost(p, _blockedIds))
-          .where((p) => !unavailable.contains((p.authorId ?? '').trim()))
-          .where((p) {
-        final id = p.id?.trim();
-        return id != null && id.isNotEmpty && !hidden.contains(id);
-      }).toList();
+  void _listenForNewPosts(int generation, String? me) {
+    _newPostsSub?.cancel();
+    var loading = false;
+    _newPostsSub = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (loading || !_isCurrentFeed(generation, me) || _refreshingFeed ||
+          WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+          ModalRoute.of(context)?.isCurrent != true || !TickerMode.of(context)) return;
+      loading = true;
+      try {
+        final page = await _readFeedPage(null);
+        if (!_isCurrentFeed(generation, me)) return;
+        await _applyNewPosts(_feedPagePosts(page), generation, me);
+      } catch (_) {
+        if (!_isCurrentFeed(generation, me)) return;
+        _feedGeneration++;
+        _newPostsSub?.cancel();
+        setState(() {
+          _posts.clear();
+          _loadingMore = false;
+          _error = 'تعذر تحديث المنشورات بأمان';
+        });
+      } finally {
+        loading = false;
+      }
+    });
+  }
+
+  Future<void> _applyNewPosts(
+    List<_Post> posts, int generation, String? me,
+  ) async {
+      final newest = await _filterFeedPosts(posts, generation, me);
+      if (!_isCurrentFeed(generation, me)) return;
       if (newest.isEmpty) return;
 
       final toAdd = <_Post>[];
@@ -6620,7 +6798,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
       }
       if (toAdd.isEmpty) return;
 
-      final me = FirebaseAuth.instance.currentUser?.uid;
       setState(() {
         for (final p in toAdd) {
           if (p.authorId == me || p.id == _pinPostId) {
@@ -6634,7 +6811,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
         }
       });
       _precacheImages(toAdd);
-    });
   }
 
 
@@ -6671,28 +6847,6 @@ class _CommunityScreenState extends State<CommunityScreen> {
         const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
       );
       return;
-    }
-
-// NEW: نجيبو رابط صورة الحساب من وثيقة المستخدم (نفس اللي كتحفظ
-// فيها _uploadProfileAsset فصفحة البروفايل)
-    String? authorPhotoUrl;
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final saved = userDoc.data()?['profileImageUrl']?.toString().trim();
-      if (saved != null && saved.isNotEmpty) {
-        authorPhotoUrl = saved;
-      }
-    } catch (e) {
-      debugPrint('Fetch author photo failed: $e');
-    }
-
-// إن لم توجد صورة مرفوعة → صورة حساب Google / المزود
-    authorPhotoUrl ??= user.photoURL?.trim();
-    if (authorPhotoUrl != null && authorPhotoUrl.isEmpty) {
-      authorPhotoUrl = null;
     }
 
     String title = '';
@@ -6749,60 +6903,20 @@ class _CommunityScreenState extends State<CommunityScreen> {
       );
       return;
     }
-    var authorPrivate = false;
-    var authorAppearInSearch = true;
-    var authorHideLikeCounts = false;
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final priv = userDoc.data()?['privacy'];
-      authorPrivate = ProfilePrivacy.fromDocument(userDoc.data()).isPrivate;
-      if (priv is Map) {
-        authorPrivate = ProfilePrivacy.fromDocument(userDoc.data()).isPrivate;
-        authorAppearInSearch = priv['appearInSearch'] != false;
-        authorHideLikeCounts = priv['hideLikeCounts'] == true;
-      }
-    } catch (_) {}
-
     setState(() => _publishing = true);
     DocumentReference<Map<String, dynamic>>? postRef;
+    var publicationConfirmed = false;
+    final functions = FirebaseFunctions.instanceFor(region: 'europe-west1');
 
     try {
       postRef = _postsRef.doc();
 
-      await postRef.set({
-        'authorId': user.uid,
-        'authorName': (user.displayName ?? '').trim().isNotEmpty
-            ? user.displayName!.trim()
-            : 'طالب UniSpace',
-        'title': title,
-        'authorPhotoUrl': authorPhotoUrl,
-
-        'body': body,
-        'status': 'uploading',
-        'createdAt': FieldValue.serverTimestamp(),
-        'imageUrls': <String>[],
-        'videoUrls': <String>[],
-        'pollSlides': <Map<String, dynamic>>[],
-        'polls': pollDataList.map(_pollToMap).toList(),
-        'tags': postTags,
-        'votes': 0,
-        'upvotedBy': <String>[],
-        'downvotedBy': <String>[],
-        'commentsCount': 0,
-        'version': 1,
-        'authorPrivate': authorPrivate,
-        'authorAppearInSearch': authorAppearInSearch,
-        'authorHideLikeCounts': authorHideLikeCounts,
-        'searchKeywords': buildSearchKeywords(
-          title: title,
-          body: body,
-          tags: postTags,
-          author: user.displayName,
-        ),
-      });
+      final reservation = await functions.httpsCallable('reserveOwnPost')
+          .call<Map<String, dynamic>>({'postId': postRef.id});
+      if (FirebaseAuth.instance.currentUser?.uid != user.uid ||
+          reservation.data['postId'] != postRef.id || reservation.data['reserved'] != true) {
+        throw StateError('تعذر تأكيد بدء النشر');
+      }
 
       // ===== 1) رفع وسائط خارج البول =====
       final imageUrls = <String>[];
@@ -6868,38 +6982,27 @@ class _CommunityScreenState extends State<CommunityScreen> {
           }
         }
       }
-      try {
-        final encoded = pollDataList.map(_pollToMap).toList();
-        debugPrint('POLLS JSON OK: $encoded');
-      } catch (e, st) {
-        debugPrint('POLL MAP ERROR: $e');
-        debugPrintStack(stackTrace: st);
-        rethrow;
+      if (FirebaseAuth.instance.currentUser?.uid != user.uid) {
+        throw StateError('تغير الحساب أثناء النشر');
       }
-
-      await postRef.update({
-        'imageUrls': imageUrls,
-        'videoUrls': videoUrls,
-        'pollSlides': resolvedSlides,
-        'polls': pollDataList.map(_pollToMap).toList(),
-        'tags': postTags,
-        'status': 'published',
-        'updatedAt': FieldValue.serverTimestamp(),
-        'authorPrivate': authorPrivate,
-        'authorAppearInSearch': authorAppearInSearch,
-        'authorHideLikeCounts': authorHideLikeCounts,
-        'searchKeywords': buildSearchKeywords(
-          title: title,
-          body: body,
-          tags: postTags,
-          author: user.displayName,
-        ),
+      final publication = await functions.httpsCallable('publishOwnPost')
+          .call<Map<String, dynamic>>({
+        'postId': postRef.id,
+        'content': {
+          'title': title,
+          'body': body,
+          'imageUrls': imageUrls,
+          'videoUrls': videoUrls,
+          'pollSlides': resolvedSlides,
+          'polls': pollDataList.map(_pollToMap).toList(),
+          'tags': postTags,
+        },
       });
-
-      unawaited(notifyFollowersOfNewPost(
-        postId: postRef.id,
-        title: title,
-      ));
+      if (FirebaseAuth.instance.currentUser?.uid != user.uid ||
+          publication.data['postId'] != postRef.id || publication.data['published'] != true) {
+        throw StateError('تعذر تأكيد نشر المنشور');
+      }
+      publicationConfirmed = true;
 
       _pinPostId = postRef.id;
       await _loadInitial(showFullLoader: false);
@@ -6911,18 +7014,11 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
     } catch (e, stack) {
       debugPrintStack(stackTrace: stack);
-      if (postRef != null) {
-        try {
-          await postRef.update({
-            'status': 'failed',
-            'error': e.toString(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        } catch (_) {}
-      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر نشر المنشور: $e')),
+          SnackBar(content: Text(publicationConfirmed
+              ? 'تم نشر المنشور، لكن تعذر تحديث القائمة. حدّث الصفحة.'
+              : 'تعذر تأكيد النشر. حدّث الصفحة قبل إعادة المحاولة.')),
         );
       }
     } finally {
@@ -6931,27 +7027,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   Future<void> _deletePost(_Post post) async {
-    final postId = post.id;
-    if (postId == null || postId.isEmpty) return;
-
-    try {
-      await _postsRef.doc(postId).delete();
-      try {
-        await FirebaseStorage.instance.ref('community_posts/$postId').delete();
-      } catch (_) {}
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حذف المنشور')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر حذف المنشور')),
-        );
-      }
-    }
+    final id = post.id;
+    if (id == null || id.isEmpty) throw StateError('تعذر تحديد المنشور');
+    await _deleteOwnPost(id);
   }
 
   List<_Post> _visiblePosts(QuerySnapshot<Map<String, dynamic>> snapshot) {
@@ -7143,10 +7221,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            'تعذر تحميل المنشورات.\n\n$_error',
-            textAlign: TextAlign.center,
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('تعذر تحميل المنشورات بأمان', textAlign: TextAlign.center),
+            TextButton(onPressed: () => _loadInitial(), child: const Text('إعادة المحاولة')),
+          ]),
         ),
       );
     }
@@ -7169,7 +7247,13 @@ class _CommunityScreenState extends State<CommunityScreen> {
             hasScrollBody: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 152),
-              child: _CommunityEmptyState(onCreatePost: _newPost),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                _CommunityEmptyState(onCreatePost: _newPost),
+                if (_hasMore) TextButton(
+                  onPressed: _loadingMore ? null : _loadMore,
+                  child: Text(_loadingMore ? 'جارٍ التحميل...' : 'عرض منشورات أقدم'),
+                ),
+              ]),
             ),
           ),
         ],
@@ -7227,11 +7311,22 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     child: _PostCard(
                       post: post,
                       onChanged: () async {
-                        _blockedIds = await loadBlockedUserIds();
-                        if (!mounted) return;
-                        setState(() {
-                          _posts.removeWhere((p) => isBlockedPost(p, _blockedIds));
-                        });
+                        final generation = _feedGeneration;
+                        final me = FirebaseAuth.instance.currentUser?.uid;
+                        final request = ++_blockRequest;
+                        try {
+                          final blocked = await loadBlockedUserIds();
+                          if (!_isCurrentFeed(generation, me) || request != _blockRequest) return;
+                          setState(() {
+                            _blockedIds = blocked;
+                            _posts.removeWhere((p) => isBlockedPost(p, blocked));
+                          });
+                        } catch (_) {
+                          if (!_isCurrentFeed(generation, me) || request != _blockRequest) return;
+                          _feedGeneration++;
+                          _newPostsSub?.cancel();
+                          setState(() { _posts.clear(); _error = 'تعذر التحقق من قائمة الحظر'; });
+                        }
                       },
                       onDelete: () async {
                         await _deletePost(post);
@@ -7459,193 +7554,48 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
     return false;
   }
 
-  Future<void> _likePost() async {
+  bool _voteBusy = false;
+  Future<void> _likePost() => _setPostVote(widget.post.upvoted ? 0 : 1);
+  Future<void> _dislikePost() => _setPostVote(widget.post.downvoted ? 0 : -1);
+
+  Future<void> _setPostVote(int vote) async {
     final post = widget.post;
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || post.id == null || post.id!.isEmpty) return;
-
-    final ref =
-    FirebaseFirestore.instance.collection('community_posts').doc(post.id);
-
-    final prevLiked = _isLiked;
-    final prevDisliked = _isDisliked;
-    final prevScore = _score;
-
-    // تحديث فوري حتى يظهر الزر يعمل حتى لو الشبكة بطيئة
+    if (_voteBusy || uid == null || post.id == null || post.id!.isEmpty) return;
+    final previousVote = (post.upvoted ? 1 : 0) - (post.downvoted ? 1 : 0);
+    final previousScore = post.votes;
     setState(() {
-      if (_isLiked) {
-        _isLiked = false;
-        _score -= 1;
-      } else {
-        if (_isDisliked) {
-          _isDisliked = false;
-          _score += 1;
-        }
-        _isLiked = true;
-        _score += 1;
-      }
-      post.upvoted = _isLiked;
-      post.downvoted = _isDisliked;
-      post.votes = _score;
+      _voteBusy = true;
+      post.votes = previousScore - previousVote + vote;
+      post.upvoted = vote == 1; post.downvoted = vote == -1;
+      _score = post.votes; _isLiked = post.upvoted; _isDisliked = post.downvoted;
     });
-    HapticFeedback.lightImpact();
-
     try {
-      final newVotes =
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snap = await tx.get(ref);
-        if (!snap.exists) throw Exception('Post does not exist');
-
-        final data = snap.data() ?? <String, dynamic>{};
-        final upvotedBy = List<String>.from(_stringList(data['upvotedBy']));
-        final downvotedBy = List<String>.from(_stringList(data['downvotedBy']));
-        int votes = (data['votes'] as num?)?.toInt() ?? 0;
-
-        final wasLiked = upvotedBy.contains(uid);
-        final wasDisliked = downvotedBy.contains(uid);
-
-        if (wasLiked) {
-          upvotedBy.remove(uid);
-          votes -= 1;
-        } else {
-          if (wasDisliked) {
-            downvotedBy.remove(uid);
-            votes += 1;
-          }
-          upvotedBy.add(uid);
-          votes += 1;
-        }
-
-        tx.update(ref, {
-          'upvotedBy': upvotedBy,
-          'downvotedBy': downvotedBy,
-          'votes': votes,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return votes;
-      });
-
-      if (!mounted) return;
-      setState(() {
-        _score = newVotes;
-        post.votes = newVotes;
-        post.upvoted = _isLiked;
-        post.downvoted = _isDisliked;
-      });
-
-      final owner = post.authorId ?? '';
-      final pid = post.id ?? '';
-      if (_isLiked && !prevLiked) {
-        unawaited(pushAggregatedLikeFromMe(toUid: owner, postId: pid));
-      } else if (!_isLiked && prevLiked) {
-        unawaited(retractAggregatedLikeFromMe(toUid: owner, postId: pid));
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('setPostVote', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+          .call<Map<String, dynamic>>({'postId': post.id, 'vote': vote});
+      final data = response.data;
+      if (data['votes'] is! num || data['vote'] != vote || data['previousVote'] is! num || data['ownerId'] is! String) {
+        throw const FormatException('Invalid vote response');
       }
-    } catch (e, stack) {
-      debugPrint('Like failed: $e');
-      debugPrintStack(stackTrace: stack);
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
+      setState(() {
+        post.votes = (data['votes'] as num).toInt();
+        post.upvoted = vote == 1; post.downvoted = vote == -1;
+        _score = post.votes; _isLiked = post.upvoted; _isDisliked = post.downvoted;
+      });
+      HapticFeedback.lightImpact();
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _isLiked = prevLiked;
-        _isDisliked = prevDisliked;
-        _score = prevScore;
-        post.upvoted = prevLiked;
-        post.downvoted = prevDisliked;
-        post.votes = prevScore;
+        post.votes = previousScore;
+        post.upvoted = previousVote == 1; post.downvoted = previousVote == -1;
+        _score = post.votes; _isLiked = post.upvoted; _isDisliked = post.downvoted;
       });
-    }
-  }
-
-  Future<void> _dislikePost() async {
-    final post = widget.post;
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || post.id == null || post.id!.isEmpty) return;
-
-    final ref =
-    FirebaseFirestore.instance.collection('community_posts').doc(post.id);
-
-    final prevLiked = _isLiked;
-    final prevDisliked = _isDisliked;
-    final prevScore = _score;
-
-    setState(() {
-      if (_isDisliked) {
-        _isDisliked = false;
-        _score += 1;
-      } else {
-        if (_isLiked) {
-          _isLiked = false;
-          _score -= 1;
-        }
-        _isDisliked = true;
-        _score -= 1;
-      }
-      post.upvoted = _isLiked;
-      post.downvoted = _isDisliked;
-      post.votes = _score;
-    });
-    HapticFeedback.mediumImpact();
-
-    try {
-      final newVotes =
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snap = await tx.get(ref);
-        if (!snap.exists) throw Exception('Post does not exist');
-
-        final data = snap.data() ?? <String, dynamic>{};
-        final upvotedBy = List<String>.from(_stringList(data['upvotedBy']));
-        final downvotedBy = List<String>.from(_stringList(data['downvotedBy']));
-        int votes = (data['votes'] as num?)?.toInt() ?? 0;
-
-        final wasLiked = upvotedBy.contains(uid);
-        final wasDisliked = downvotedBy.contains(uid);
-
-        if (wasDisliked) {
-          downvotedBy.remove(uid);
-          votes += 1;
-        } else {
-          if (wasLiked) {
-            upvotedBy.remove(uid);
-            votes -= 1;
-          }
-          downvotedBy.add(uid);
-          votes -= 1;
-        }
-
-        tx.update(ref, {
-          'upvotedBy': upvotedBy,
-          'downvotedBy': downvotedBy,
-          'votes': votes,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return votes;
-      });
-
-      if (!mounted) return;
-      setState(() {
-        _score = newVotes;
-        post.votes = newVotes;
-        post.upvoted = _isLiked;
-        post.downvoted = _isDisliked;
-      });
-
-      if (prevLiked && !_isLiked) {
-        unawaited(retractAggregatedLikeFromMe(
-          toUid: post.authorId ?? '',
-          postId: post.id ?? '',
-        ));
-      }
-    } catch (e, stack) {
-      debugPrint('Dislike failed: $e');
-      debugPrintStack(stackTrace: stack);
-      if (!mounted) return;
-      setState(() {
-        _isLiked = prevLiked;
-        _isDisliked = prevDisliked;
-        _score = prevScore;
-        post.upvoted = prevLiked;
-        post.downvoted = prevDisliked;
-        post.votes = prevScore;
-      });
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('تعذر تحديث التصويت. حاول مرة أخرى.')));
+    } finally {
+      if (mounted) setState(() => _voteBusy = false);
     }
   }
 
@@ -7657,13 +7607,7 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
     if (!mounted) return;
 
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .doc(widget.post.id)
-          .get();
-
-      if (!snap.exists) return;
-      final data = snap.data()!;
+      final data = await _readAuthorizedPostData(widget.post.id);
       final uid = FirebaseAuth.instance.currentUser?.uid;
 
       final votes = (data['votes'] as num?)?.toInt() ?? widget.post.votes;
@@ -8480,6 +8424,8 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
   bool _isAiMode = false;
   bool _isLoading = false;
   String? _error;
+  String? _peopleNotice;
+  int _searchGeneration = 0;
 
   List<_Post> _results = [];
   String? _aiAnswer;
@@ -8543,97 +8489,16 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
     }
   }
 
-  // ===== FIX #1: بحث حسابات حقيقي يتصفح كل المستخدمين على دفعات =====
-  // بدل جلب 80 مستخدمًا عشوائيًا وحيدًا؛ نفس نمط تصفح المنشورات
-  // بالضبط (صفحات متتالية حتى نجد عددًا كافيًا أو ينفد المستخدمون)
-  Future<List<_SearchPerson>> _searchPeople({
-    required String lowerQ,
-    required bool looksEmail,
-    required String rawQuery,
-    required Set<String> blocked,
-    required String? me,
-  }) async {
-    final people = <_SearchPerson>[];
-    DocumentSnapshot<Map<String, dynamic>>? last;
-
-    for (var page = 0; page < 8 && people.length < 8; page++) {
-      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-          .collection('users')
-          .orderBy(FieldPath.documentId)
-          .limit(120);
-      if (last != null) q = q.startAfterDocument(last);
-
-      final snap = await q.get();
-      if (snap.docs.isEmpty) break;
-
-      for (final doc in snap.docs) {
-        if (doc.id == me) continue;
-        if (blocked.contains(doc.id)) continue;
-
-        final data = doc.data();
-        final priv = data['privacy'];
-        final privacy = priv is Map ? Map<String, dynamic>.from(priv) : null;
-        if (privacy?['appearInSearch'] == false) continue;
-        if (blocked.contains(doc.id)) continue;
-        if (isUserDocUnavailable(data)) continue;
-        AuthorProfiles.ensure(doc.id);
-        final live = AuthorProfiles.nameOf(doc.id)?.trim() ?? '';
-        final fn = (data['firstName'] ?? '').toString().trim();
-        final ln = (data['lastName'] ?? '').toString().trim();
-        final display = (data['displayName'] ??
-            data['userName'] ??
-            data['name'] ??
-            '')
-            .toString()
-            .trim();
-        final composed = [fn, ln].where((e) => e.isNotEmpty).join(' ');
-        final uname = (data['username'] ?? data['userName'] ?? '')
-            .toString()
-            .trim();
-        final shown = composed.isNotEmpty
-            ? composed
-            : (live.isNotEmpty
-            ? live
-            : (display.isNotEmpty
-            ? display
-            : (uname.isNotEmpty ? uname : '')));
-        if (shown.isEmpty) continue;
-
-        final email = (data['email'] ?? '').toString().toLowerCase();
-        final phone = (data['phone'] ?? '').toString();
-        final tokens = _queryTokens(rawQuery);
-        final nameHit = tokens.isNotEmpty
-            ? _allTokensIn('$shown $live $uname $fn $ln $display', tokens)
-            : _searchNorm('$shown $uname').contains(_searchNorm(rawQuery));
-        final emailHit = looksEmail &&
-            privacy?['findByEmail'] == true &&
-            email.contains(lowerQ);
-        final phoneHit = privacy?['findByPhone'] == true &&
-            phone.isNotEmpty &&
-            phone.contains(rawQuery);
-        if (!nameHit && !emailHit && !phoneHit) continue;
-
-        people.add(_SearchPerson(
-          id: doc.id,
-          name: shown,
-          username: uname.isEmpty ? null : uname,
-          photoUrl: data['profileImageUrl']?.toString(),
-        ));
-        if (people.length >= 8) break;
-      }
-      last = snap.docs.last;
-      if (snap.docs.length < 120) break;
-    }
-    return people;
-  }
-
   Future<void> _performSearch() async {
     final q = _controller.text.trim();
     if (q.isEmpty) return;
+    final generation = ++_searchGeneration;
+    final searchUserId = FirebaseAuth.instance.currentUser?.uid;
 
     setState(() {
       _isLoading = true;
       _error = null;
+      _peopleNotice = null;
       _aiAnswer = null;
       _results = [];
       _people = [];
@@ -8655,41 +8520,34 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
     try {
       final blocked = await loadBlockedUserIds();
       final hidden = await loadHiddenPostIds();
-      final followingIds = await loadFollowingIds();
-      final me = FirebaseAuth.instance.currentUser?.uid;
-      final lowerQ = q.toLowerCase();
       final tokens = _queryTokens(q);
-      final looksEmail = q.contains('@');
-
-      // ===== FIX #1 مطبَّق هنا: بحث حسابات شامل بدل دفعة عشوائية =====
       var people = <_SearchPerson>[];
+      String? peopleNotice;
       try {
-        people = await _searchPeople(
-          lowerQ: lowerQ,
-          looksEmail: looksEmail,
-          rawQuery: q,
-          blocked: blocked,
-          me: me,
-        );
-      } catch (e) {
-        debugPrint('people search failed: $e');
+        final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+            .httpsCallable('searchPeople').call<Map<String, dynamic>>({'query': q});
+        final rows = response.data['people'];
+        if (rows is! List) throw const FormatException('Invalid search response');
+        people = rows.map((row) {
+          if (row is! Map || row['id'] is! String || row['name'] is! String) {
+            throw const FormatException('Invalid search person');
+          }
+          return _SearchPerson(id: row['id'] as String, name: row['name'] as String,
+              username: row['username'] as String?, photoUrl: row['photoUrl'] as String?);
+        }).toList();
+        if (response.data['truncated'] == true) {
+          peopleNotice = 'نتائج الحسابات محدودة حاليًا؛ قد لا تشمل كل الحسابات المطابقة.';
+        }
+      } on FirebaseFunctionsException catch (e) {
+        peopleNotice = e.code == 'resource-exhausted'
+            ? 'بحثت مرات كثيرة. انتظر دقيقة ثم أعد البحث عن الحسابات.'
+            : 'تعذر البحث عن الحسابات. حاول مرة أخرى.';
+      } catch (_) {
+        peopleNotice = 'تعذر البحث عن الحسابات. حاول مرة أخرى.';
       }
 
-
       bool accept(_Post post) {
-        if (hidden.contains(post.id)) return false;
-        if (isBlockedPost(post, blocked)) return false;
-        if (post.authorPrivate) {
-          final a = (post.authorId ?? '').trim();
-          if (a.isNotEmpty && a != me && !followingIds.contains(a)) {
-            return false;
-          }
-        }
         if (tokens.isEmpty) return false;
-
-        final live = AuthorProfiles.nameOf(post.authorId) ?? post.author;
-        final authorHit = post.authorAppearInSearch && _allTokensIn('$live ${post.author}', tokens);
-
         final r = post.repostOf;
         final repostHit = r != null &&
             _allTokensIn(
@@ -8704,13 +8562,14 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
 
       }
 
-      void walkComments(_Post post, List<_Comment> list, List<_CommentSearchHit> out) {
+      Future<void> walkComments(_Post post, List<_Comment> list, List<_CommentSearchHit> out) async {
         for (final c in list) {
+          if (generation != _searchGeneration || !mounted) return;
           if (blocked.contains(c.authorId ?? '')) continue;
           if (_allTokensIn(c.text, tokens)) {
             out.add(_CommentSearchHit(post: post, comment: c));
           }
-          if (c.replies.isNotEmpty) walkComments(post, c.replies, out);
+          if (c.replies.isNotEmpty) await walkComments(post, c.replies, out);
         }
       }
 
@@ -8719,67 +8578,40 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
       final commentHits = <_CommentSearchHit>[];
 
 
-      void addDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-        if (seen.contains(doc.id)) return;
-        final status = doc.data()['status']?.toString().toLowerCase();
-        if (status == 'uploading' || status == 'failed') return;
-        if (isCommunityPostRemoved(doc.data())) return;
-        try {
-          final post = _Post.fromFirestore(doc);
-          if (!hidden.contains(post.id) && !isBlockedPost(post, blocked)) {
-            walkComments(post, post.comments, commentHits);
-          }
-          if (!accept(post)) return;
-          seen.add(doc.id);
-          filtered.add(post);
-        } catch (_) {}
+      Future<void> addResult(Map<String, dynamic> row) async {
+        final id = row['id'];
+        final raw = row['data'];
+        if (id is! String || raw is! Map) throw const FormatException('Invalid content result');
+        if (seen.contains(id) || generation != _searchGeneration || !mounted) return;
+        seen.add(id);
+        if (hidden.contains(id)) return;
+        final post = _Post.fromData(id, Map<String, dynamic>.from(raw));
+        if (isBlockedPost(post, blocked)) return;
+        await walkComments(post, post.comments, commentHits);
+        if (accept(post)) filtered.add(post);
       }
 
-      // ===== FIX #3 مطبَّق: indexToken الآن متوافق فعليًا مع الفهرس =====
       final indexToken = tokens.isNotEmpty ? tokens.first : null;
-      if (indexToken != null && indexToken.isNotEmpty) {
-        try {
-          final indexed = await FirebaseFirestore.instance
-              .collection('community_posts')
-              .where('searchKeywords', arrayContains: indexToken)
-              .limit(60)
-              .get();
-          for (final doc in indexed.docs) {
-            addDoc(doc);
-          }
-        } catch (e) {
-          debugPrint('keyword search failed: $e');
+      Future<bool> loadPage(int page) async {
+        if (!mounted || generation != _searchGeneration) return true;
+        final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+            .httpsCallable('readContentSearchPage', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+            .call<Map<String, dynamic>>({'page': page, 'token': indexToken});
+        final rows = response.data['posts'];
+        if (rows is! List || response.data['exhausted'] is! bool) {
+          throw const FormatException('Invalid content page');
         }
+        for (final row in rows) {
+          await addResult(Map<String, dynamic>.from(row as Map));
+        }
+        return response.data['exhausted'] == true;
       }
-
+      if (indexToken != null) await loadPage(0);
       if (filtered.length < 8 || commentHits.length < 8) {
-        QueryDocumentSnapshot<Map<String, dynamic>>? last;
-        for (var page = 0; page < 5; page++) {
-          Query<Map<String, dynamic>> pq = FirebaseFirestore.instance
-              .collection('community_posts')
-              .orderBy('createdAt', descending: true)
-              .limit(80);
-          if (last != null) pq = pq.startAfterDocument(last);
-          final snap = await pq.get();
-          if (snap.docs.isEmpty) break;
-          for (final doc in snap.docs) {
-            addDoc(doc);
-          }
-          last = snap.docs.last;
-          if (snap.docs.length < 80) break;
+        for (var page = 1; page <= 5; page++) {
+          if (await loadPage(page)) break;
         }
-
       }
-      final unavailableAuthors = await loadUnavailableUserIds([
-        ...filtered.map((p) => p.authorId ?? ''),
-        ...commentHits.map((h) => h.comment.authorId ?? ''),
-      ]);
-      filtered.removeWhere(
-            (p) => unavailableAuthors.contains((p.authorId ?? '').trim()),
-      );
-      commentHits.removeWhere(
-            (h) => unavailableAuthors.contains((h.comment.authorId ?? '').trim()),
-      );
       commentHits.sort((a, b) => b.comment.createdAt.compareTo(a.comment.createdAt));
       filtered.sort((a, b) {
         int score(_Post p) {
@@ -8800,7 +8632,8 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
       });
       final limitedCommentHits = commentHits.take(20).toList();
 
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration ||
+          FirebaseAuth.instance.currentUser?.uid != searchUserId) return;
 
       if (_isAiMode) {
         final buf = StringBuffer();
@@ -8818,6 +8651,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
         }
         setState(() {
           _people = people;
+          _peopleNotice = peopleNotice;
           _results = filtered;
           _commentHits = limitedCommentHits;
           _aiAnswer = buf.toString().trim();
@@ -8826,13 +8660,15 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
       } else {
         setState(() {
           _people = people;
+          _peopleNotice = peopleNotice;
           _results = filtered;
           _commentHits = limitedCommentHits;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration ||
+          FirebaseAuth.instance.currentUser?.uid != searchUserId) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -8841,7 +8677,10 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
   }
 
   void _clearSearch() {
+    ++_searchGeneration;
     _controller.clear();
+    _isLoading = false;
+    _peopleNotice = null;
     setState(() {
       _results = [];
       _people = [];
@@ -9044,7 +8883,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
             children: [
               Icon(Icons.search_off_rounded, size: 42, color: theme.hintColor.withValues(alpha: 0.5)),
               const SizedBox(height: 14),
-              Text('لا توجد نتائج لـ "$_lastQuery"', style: theme.textTheme.titleSmall),
+              Text(_peopleNotice ?? 'لا توجد نتائج لـ "$_lastQuery"', style: theme.textTheme.titleSmall),
             ],
           ),
         );
@@ -9054,6 +8893,8 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
       return Column(
         key: const ValueKey('results'),
         children: [
+          if (_peopleNotice != null)
+            Padding(padding: const EdgeInsets.all(12), child: Text(_peopleNotice!, textAlign: TextAlign.center)),
           _ResultTabsBar(
             tab: _tab,
             onChanged: (v) => setState(() => _tab = v),
@@ -9075,7 +8916,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
                     ),
                   ..._people.map((p) => ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    leading: LiveAuthorPhoto(userId: p.id, fallbackUrl: p.photoUrl, size: 44, radius: 22, iconSize: 22),
+                    leading: PublicProfilePhoto(userId: p.id, fallbackUrl: p.photoUrl, size: 44, radius: 22, iconSize: 22),
                     title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w800)),
                     subtitle: (p.username == null || p.username!.isEmpty) ? null : Text('@${p.username}'),
                     onTap: () {
@@ -9674,7 +9515,10 @@ class _Post {
   }) : comments = comments ?? [];
 
   factory _Post.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? <String, dynamic>{};
+    return _Post.fromData(doc.id, doc.data() ?? <String, dynamic>{});
+  }
+
+  factory _Post.fromData(String id, Map<String, dynamic> data) {
     final rawSlides = data['pollSlides'];
     final pollSlides = rawSlides is List
         ? rawSlides
@@ -9691,7 +9535,7 @@ class _Post {
     );
 
     debugPrint(
-      'POST ${doc.id} MEDIA => '
+      'POST ${id} MEDIA => '
           'images=${imageUrls.length}, '
           'videos=${videoUrls.length}',
     );
@@ -9779,7 +9623,7 @@ class _Post {
         ? Map<String, dynamic>.from(repostRaw)
         : null;
     return _Post(
-      id: doc.id,
+      id: id,
       authorPrivate: data['authorPrivate'] == true,
       author:
       (data['authorName'] ??
@@ -10003,15 +9847,8 @@ class _PostCardState extends State<_PostCard> {
       if (id == null || id.isEmpty) return current;
 
       try {
-        final query = await FirebaseFirestore.instance
-            .collection('community_posts')
-            .where(FieldPath.documentId, isEqualTo: id)
-            .limit(1)
-            .get();
-
-        if (query.docs.isEmpty) return current;
-
-        final found = _Post.fromFirestore(query.docs.first);
+        final data = await _readAuthorizedPostData(id);
+        final found = _Post.fromData(id, data);
         if (!found.isRepost) return found;
 
         current = found;
@@ -10305,40 +10142,42 @@ class _PostCardState extends State<_PostCard> {
       ),
     );
   }
+  bool _openingOriginal = false;
+
   Future<void> _openOriginalPost() async {
+    if (_openingOriginal) return;
     final id = widget.post.repostOf?['postId']?.toString().trim();
     if (id == null || id.isEmpty) return;
-
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final blockRevision = blockedListRevision.value;
+    bool stillCurrent() => mounted &&
+        FirebaseAuth.instance.currentUser?.uid == uid &&
+        blockedListRevision.value == blockRevision &&
+        widget.post.repostOf?['postId']?.toString().trim() == id;
     final nav = Navigator.of(context, rootNavigator: true);
-
+    _openingOriginal = true;
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where(FieldPath.documentId, isEqualTo: id)
-          .limit(1)
-          .get();
-
-      if (!mounted) return;
-
-      if (query.docs.isEmpty) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('المنشور الأصلي غير موجود')),
-        );
-        return;
-      }
-
-      final original = _Post.fromFirestore(query.docs.first);
-
+      final data = await _readAuthorizedPostData(id);
+      if (!stillCurrent()) return;
+      final original = _Post.fromData(id, data);
       await nav.push(
-        MaterialPageRoute(
-          builder: (_) => CommentsScreen(post: original),
-        ),
+        MaterialPageRoute(builder: (_) => CommentsScreen(post: original)),
       );
-
-      // بعد الرجوع فقط — وليس قبل الفتح
-      if (mounted) widget.onChanged();
-    } catch (e) {
-      debugPrint('Open original post failed: $e');
+      if (stillCurrent()) widget.onChanged();
+    } on FirebaseFunctionsException catch (error) {
+      if (!stillCurrent()) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(error.code == 'not-found'
+            ? 'المنشور الأصلي لم يعد متاحاً'
+            : 'تعذر فتح المنشور الأصلي، حاول مجدداً'),
+      ));
+    } catch (_) {
+      if (!stillCurrent()) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تعذر فتح المنشور الأصلي، حاول مجدداً')),
+      );
+    } finally {
+      _openingOriginal = false;
     }
   }
   @override
@@ -10874,142 +10713,48 @@ class _PostCardState extends State<_PostCard> {
     return cleaned.replaceFirst(RegExp(r'^u/'), '');
   }
 
-  Future<void> _likePost() async {
+  bool _voteBusy = false;
+  Future<void> _likePost() => _setPostVote(widget.post.upvoted ? 0 : 1);
+  Future<void> _dislikePost() => _setPostVote(widget.post.downvoted ? 0 : -1);
+
+  Future<void> _setPostVote(int vote) async {
     final post = widget.post;
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (_voteBusy || uid == null || post.id == null || post.id!.isEmpty) return;
+    final previousVote = (post.upvoted ? 1 : 0) - (post.downvoted ? 1 : 0);
+    final previousScore = post.votes;
+    setState(() {
+      _voteBusy = true;
+      post.votes = previousScore - previousVote + vote;
+      post.upvoted = vote == 1; post.downvoted = vote == -1;
 
-    if (uid == null || post.id == null || post.id!.isEmpty) return;
-
-    final ref =
-    FirebaseFirestore.instance.collection('community_posts').doc(post.id);
-
+    });
     try {
-      final newVotes = await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snap = await tx.get(ref);
-        if (!snap.exists) throw Exception('Post does not exist');
-
-        final data = snap.data() ?? <String, dynamic>{};
-        final upvotedBy = _stringList(data['upvotedBy']);
-        final downvotedBy = _stringList(data['downvotedBy']);
-        int votes = (data['votes'] as num?)?.toInt() ?? 0;
-
-        final wasLiked = upvotedBy.contains(uid);
-        final wasDisliked = downvotedBy.contains(uid);
-
-        if (wasLiked) {
-          // liked → neutral
-          upvotedBy.remove(uid);
-          votes -= 1;
-        } else {
-          // neutral / disliked → liked
-          if (wasDisliked) {
-            downvotedBy.remove(uid);
-            votes += 1;
-          }
-          upvotedBy.add(uid);
-          votes += 1;
-        }
-
-        tx.update(ref, {
-          'upvotedBy': upvotedBy,
-          'downvotedBy': downvotedBy,
-          'votes': votes,
-        });
-        return votes;
-      });
-
-      if (!mounted) return;
-      final likedNow = !post.upvoted;
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('setPostVote', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+          .call<Map<String, dynamic>>({'postId': post.id, 'vote': vote});
+      final data = response.data;
+      if (data['votes'] is! num || data['vote'] != vote || data['previousVote'] is! num || data['ownerId'] is! String) {
+        throw const FormatException('Invalid vote response');
+      }
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
       setState(() {
-        if (post.upvoted) {
-          post.upvoted = false;
-        } else {
-          if (post.downvoted) post.downvoted = false;
-          post.upvoted = true;
-        }
-        post.votes = newVotes;
-      });
+        post.votes = (data['votes'] as num).toInt();
+        post.upvoted = vote == 1; post.downvoted = vote == -1;
 
+      });
       HapticFeedback.lightImpact();
-      final owner = post.authorId ?? '';
-      final pid = post.id ?? '';
-      if (likedNow) {
-        unawaited(pushAggregatedLikeFromMe(toUid: owner, postId: pid));
-      } else {
-        unawaited(retractAggregatedLikeFromMe(toUid: owner, postId: pid));
-      }
-    } catch (e, stack) {
-      debugPrint('Like failed: $e');
-      debugPrintStack(stackTrace: stack);
-    }
-  }
-
-  Future<void> _dislikePost() async {
-    final post = widget.post;
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    final wasLiked = post.upvoted;
-
-    if (uid == null || post.id == null || post.id!.isEmpty) return;
-
-    final ref =
-    FirebaseFirestore.instance.collection('community_posts').doc(post.id);
-
-    try {
-      final newVotes = await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snap = await tx.get(ref);
-        if (!snap.exists) throw Exception('Post does not exist');
-
-        final data = snap.data() ?? <String, dynamic>{};
-        final upvotedBy = _stringList(data['upvotedBy']);
-        final downvotedBy = _stringList(data['downvotedBy']);
-        int votes = (data['votes'] as num?)?.toInt() ?? 0;
-
-        final wasLiked = upvotedBy.contains(uid);
-        final wasDisliked = downvotedBy.contains(uid);
-
-        if (wasDisliked) {
-          // disliked → neutral
-          downvotedBy.remove(uid);
-          votes += 1;
-        } else {
-          // neutral / liked → disliked
-          if (wasLiked) {
-            upvotedBy.remove(uid);
-            votes -= 1;
-          }
-          downvotedBy.add(uid);
-          votes -= 1;
-        }
-
-        tx.update(ref, {
-          'upvotedBy': upvotedBy,
-          'downvotedBy': downvotedBy,
-          'votes': votes,
-        });
-        return votes;
-      });
-
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        if (post.downvoted) {
-          post.downvoted = false;
-        } else {
-          if (post.upvoted) post.upvoted = false;
-          post.downvoted = true;
-        }
-        post.votes = newVotes;
-      });
+        post.votes = previousScore;
+        post.upvoted = previousVote == 1; post.downvoted = previousVote == -1;
 
-      HapticFeedback.mediumImpact();
-      if (wasLiked) {
-        unawaited(retractAggregatedLikeFromMe(
-          toUid: post.authorId ?? '',
-          postId: post.id ?? '',
-        ));
-      }
-    } catch (e, stack) {
-      debugPrint('Dislike failed: $e');
-      debugPrintStack(stackTrace: stack);
+      });
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('تعذر تحديث التصويت. حاول مرة أخرى.')));
+    } finally {
+      if (mounted) setState(() => _voteBusy = false);
     }
   }
 
@@ -11457,85 +11202,9 @@ class _PostCardState extends State<_PostCard> {
     if (!mounted) return;
     if (draft == null) return;
 
-    String? authorPhotoUrl;
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      authorPhotoUrl = userDoc.data()?['profileImageUrl']?.toString();
-    } catch (_) {}
-
-    if (!mounted) return;
-
-    final authorName = (user.displayName ?? '').trim().isNotEmpty
-        ? user.displayName!.trim()
-        : 'طالب UniSpace';
-
-    String? firstImage;
-    for (final path in original.imagePaths) {
-      final u = path.trim();
-      if (u.startsWith('http://') || u.startsWith('https://')) {
-        firstImage = u;
-        break;
-      }
-    }
-
-    final bodyPreview = original.body.trim();
-    final shortBody = bodyPreview.length > 180
-        ? '${bodyPreview.substring(0, 180)}…'
-        : bodyPreview;
-
-    try {
-      await FirebaseFirestore.instance.collection('community_posts').add({
-        'authorId': user.uid,
-        'authorName': authorName,
-        'authorPhotoUrl': authorPhotoUrl,
-        'title': draft.title,
-        'body': draft.body,
-        'searchKeywords': buildSearchKeywords(
-          title: draft.title,
-          body: draft.body,
-          author: authorName,
-        ),
-        'status': 'published',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'isRepost': true,
-        'repostOf': {
-          'postId': originalId,
-          'authorId': original.authorId,
-          'authorName': _authorLabel(original.author),
-          'authorPhotoUrl': original.authorPhotoUrl,
-          'title': original.title.trim(),
-          'body': shortBody,
-          'imageUrl': firstImage,
-          'imageUrls': original.imagePaths,
-          'videoUrls': original.videoPaths,
-          'polls': original.pollDataList.map(_pollToMap).toList(),
-          'pollSlides': original.pollSlides,
-        },
-        'imageUrls': <String>[],
-        'videoUrls': <String>[],
-        'pollSlides': <Map<String, dynamic>>[],
-        'polls': <Map<String, dynamic>>[],
-        'tags': <String>[],
-        'votes': 0,
-        'upvotedBy': <String>[],
-        'downvotedBy': <String>[],
-        'commentsCount': 0,
-        'version': 1,
-      });
-
-      final ownerId = original.authorId?.trim();
-      if (ownerId != null && ownerId.isNotEmpty) {
-        unawaited(pushNotificationFromMe(
-          toUid: ownerId,
-          type: 'repost',
-          message: 'أعاد نشر منشورك',
-          postId: originalId,
-        ));
-      }
+      await _publishAuthorizedRepost(expectedUid: user.uid,
+        sourcePostId: originalId, draft: draft);
 
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -11551,121 +11220,13 @@ class _PostCardState extends State<_PostCard> {
     }
   }
 
-  Future<void> _publishCommunityRepost({
-    required _Post original,
-    required _RepostDraft draft,
-    _Comment? comment,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final originalId = original.id?.trim();
-    if (originalId == null || originalId.isEmpty) return;
-
-    String? authorPhotoUrl;
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      authorPhotoUrl = userDoc.data()?['profileImageUrl']?.toString();
-    } catch (_) {}
-
-    final authorName = (user.displayName ?? '').trim().isNotEmpty
-        ? user.displayName!.trim()
-        : 'طالب UniSpace';
-
-    String? firstImage;
-    for (final path in original.imagePaths) {
-      final u = path.trim();
-      if (u.startsWith('http://') || u.startsWith('https://')) {
-        firstImage = u;
-        break;
-      }
-    }
-
-    final sourceText = comment?.text.trim() ?? original.body.trim();
-    final shortBody = sourceText.length > 180
-        ? '${sourceText.substring(0, 180)}…'
-        : sourceText;
-
-    String authorLabel(String author) {
-      final cleaned = author.trim();
-      if (cleaned.isEmpty || cleaned == 'current_user') return 'طالب UniSpace';
-      return cleaned.replaceFirst(RegExp(r'^u/'), '');
-    }
-
-    await FirebaseFirestore.instance.collection('community_posts').add({
-      'authorId': user.uid,
-      'authorName': authorName,
-      'authorPhotoUrl': authorPhotoUrl,
-      'title': draft.title,
-      'body': draft.body,
-      'searchKeywords': buildSearchKeywords(
-        title: draft.title,
-        body: draft.body,
-        author: authorName,
-      ),
-      'status': 'published',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'isRepost': true,
-      'repostOf': {
-        'postId': originalId,
-        'authorId': original.authorId,
-        'authorName': authorLabel(original.author),
-        'authorPhotoUrl': original.authorPhotoUrl,
-        'title': original.title.trim(),
-        'body': shortBody,
-        'imageUrl': firstImage,
-        'imageUrls': original.imagePaths,
-        'videoUrls': original.videoPaths,
-        'polls': original.pollDataList.map(_pollToMap).toList(),
-        'pollSlides': original.pollSlides,
-        if (comment != null) ...{
-          'kind': 'comment',
-          'commentId': comment.id,
-          'commentAuthor': comment.author,
-          'commentAuthorId': comment.authorId,
-          'commentAuthorPhotoUrl': comment.authorPhotoUrl,
-          'commentText': comment.text,
-          'commentMediaUrl': comment.mediaUrl,
-          'commentMediaType': comment.mediaType,
-        },
-      },
-      'imageUrls': <String>[],
-      'videoUrls': <String>[],
-      'pollSlides': <Map<String, dynamic>>[],
-      'polls': <Map<String, dynamic>>[],
-      'tags': <String>[],
-      'votes': 0,
-      'upvotedBy': <String>[],
-      'downvotedBy': <String>[],
-      'commentsCount': 0,
-      'version': 1,
-    });
-    if (comment != null) {
-      final cid = comment.authorId?.trim();
-      if (cid != null && cid.isNotEmpty) {
-        unawaited(pushNotificationFromMe(
-          toUid: cid,
-          type: 'repost',
-          message: 'أعاد نشر تعليقك',
-          postId: originalId,
-          commentId: comment.id,
-        ));
-      }
-    } else {
-      final ownerId = original.authorId?.trim();
-      if (ownerId != null && ownerId.isNotEmpty) {
-        unawaited(pushNotificationFromMe(
-          toUid: ownerId,
-          type: 'repost',
-          message: 'أعاد نشر منشورك',
-          postId: originalId,
-        ));
-      }
-    }
+  Future<void> _publishCommunityRepost({required _Post original,
+    required _RepostDraft draft, _Comment? comment}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final id = original.id;
+    if (uid == null || id == null || id.isEmpty) throw StateError('تعذر تحديد مصدر إعادة النشر');
+    await _publishAuthorizedRepost(expectedUid: uid, sourcePostId: id,
+      draft: draft, commentId: comment?.id);
   }
 
   Future<_RepostDraft?> _askRepostDraft([
@@ -11829,6 +11390,8 @@ class _PostCardState extends State<_PostCard> {
     if (!_isOwner) return;
     if (widget.post.id == null || widget.post.id!.isEmpty) return;
 
+    final editingUid = FirebaseAuth.instance.currentUser?.uid;
+    if (editingUid == null) return;
     final nav = Navigator.of(context, rootNavigator: true);
     final post = widget.post;
 
@@ -11840,6 +11403,8 @@ class _PostCardState extends State<_PostCard> {
 
 
     if (!mounted || result == null || result.isEmpty) return;
+    if (FirebaseAuth.instance.currentUser?.uid != editingUid) return;
+    final editUploadId = FirebaseFirestore.instance.collection('community_posts').doc().id;
 
     String title = '';
     String body = '';
@@ -11934,7 +11499,7 @@ class _PostCardState extends State<_PostCard> {
             resolvedSlides.add({'type': 'image', 'url': existing});
           } else if (s['imageBytes'] is Uint8List) {
             final ref = FirebaseStorage.instance.ref(
-              'community_posts/$postId/images/poll_edit_${pollImg++}.jpg',
+              'community_posts/$postId/images/poll_edit_${editUploadId}_${pollImg++}.jpg',
             );
             await ref.putData(
               s['imageBytes'] as Uint8List,
@@ -11952,7 +11517,7 @@ class _PostCardState extends State<_PostCard> {
               final file = File(path);
               if (await file.exists()) {
                 final ref = FirebaseStorage.instance.ref(
-                  'community_posts/$postId/videos/poll_edit_${pollVid++}.mp4',
+                  'community_posts/$postId/videos/poll_edit_${editUploadId}_${pollVid++}.mp4',
                 );
                 await ref.putFile(file, SettableMetadata(contentType: 'video/mp4'));
                 resolvedSlides.add({'type': 'video', 'url': await ref.getDownloadURL()});
@@ -11962,25 +11527,26 @@ class _PostCardState extends State<_PostCard> {
         }
       }
 
-      await FirebaseFirestore.instance
-          .collection('community_posts')
-          .doc(postId)
-          .update({
-        'title': title,
-        'body': body,
-        'tags': postTags,
-        'imageUrls': imageUrls,
-        'videoUrls': videoUrls,
-        'polls': pollDataList.map(_pollToMap).toList(),
-        'pollSlides': resolvedSlides,
-        'isEdited': true,
-        'editedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        if (widget.post.isRepost && widget.post.repostOf != null) ...{
-          'isRepost': true,
-          'repostOf': widget.post.repostOf,
+      if (FirebaseAuth.instance.currentUser?.uid != editingUid) {
+        throw StateError('تغير الحساب أثناء التعديل');
+      }
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('editOwnPost').call<Map<String, dynamic>>({
+        'postId': postId,
+        'content': {
+          'title': title,
+          'body': body,
+          'tags': postTags,
+          'imageUrls': imageUrls,
+          'videoUrls': videoUrls,
+          'polls': pollDataList.map(_pollToMap).toList(),
+          'pollSlides': resolvedSlides,
         },
       });
+      if (FirebaseAuth.instance.currentUser?.uid != editingUid ||
+          response.data['postId'] != postId || response.data['edited'] != true) {
+        throw StateError('تعذر تأكيد تعديل المنشور');
+      }
 
       if (!mounted) return;
 
@@ -13053,6 +12619,11 @@ class _RepostEmbedCard extends StatefulWidget {
 class _RepostEmbedCardState extends State<_RepostEmbedCard> {
   _Post? _post;
   bool _loading = true;
+  String? _loadError;
+  Map<String, dynamic> _authorizedQuote = {};
+  int _loadGeneration = 0;
+  StreamSubscription<User?>? _authSubscription;
+  String? _uid;
 
   bool get _isCommentRepost {
     final kind = widget.data['kind']?.toString();
@@ -13063,7 +12634,29 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
   @override
   void initState() {
     super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
     _load();
+    blockedListRevision.addListener(_invalidate);
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (_uid != user?.uid) { _uid = user?.uid; _invalidate(); }
+    });
+  }
+
+  void _invalidate() { _load(); }
+
+  @override
+  void didUpdateWidget(covariant _RepostEmbedCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data['postId'] != widget.data['postId'] ||
+        oldWidget.data['commentId'] != widget.data['commentId'] ||
+        oldWidget.data['kind'] != widget.data['kind']) _load();
+  }
+
+  @override
+  void dispose() {
+    blockedListRevision.removeListener(_invalidate);
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   String? _http(String? s) {
@@ -13073,124 +12666,58 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
   }
 
   Future<void> _openTarget() async {
-    if (_isCommentRepost) {
-      await _openRepostedComment();
-      return;
-    }
-    final id = (_post?.id ?? widget.data['postId']?.toString() ?? '').trim();
-    if (id.isEmpty) return;
-    try {
-      final query = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where(FieldPath.documentId, isEqualTo: id)
-          .limit(1)
-          .get();
-      if (!mounted) return;
-      if (query.docs.isEmpty) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('المنشور الأصلي غير موجود')),
-        );
-        return;
-      }
-      final post = _Post.fromFirestore(query.docs.first);
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => CommentsScreen(post: post)),
-      );
-      widget.onChanged?.call();
-    } catch (e) {
-      debugPrint('open quoted post failed: $e');
-    }
+    // Recheck on tap, since privacy or deletion may have changed after rendering.
+    if (!await _load() || !mounted) return;
+    final post = _post;
+    if (post == null) return;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommentsScreen(
+      post: post, initialCommentId: _isCommentRepost ? widget.data['commentId']?.toString() : null,
+    )));
+    if (!mounted) return;
+    widget.onChanged?.call();
+    await _load();
   }
 
-  Future<void> _openRepostedComment() async {
-    final postId = widget.data['postId']?.toString().trim() ?? '';
-    final commentId = widget.data['commentId']?.toString().trim() ?? '';
-    if (postId.isEmpty) return;
-    try {
-      final query = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where(FieldPath.documentId, isEqualTo: postId)
-          .limit(1)
-          .get();
-      if (!mounted) return;
-      if (query.docs.isEmpty) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('التعليق الأصلي غير موجود')),
-        );
-        return;
-      }
-      final post = _Post.fromFirestore(query.docs.first);
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CommentsScreen(
-            post: post,
-            initialCommentId: commentId.isEmpty ? null : commentId,
-          ),
-        ),
-      );
-      widget.onChanged?.call();
-    } catch (e) {
-      debugPrint('open reposted comment failed: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('تعذر فتح التعليق')),
-      );
-    }
-  }
-
-  Future<void> _load() async {
+  Future<bool> _load() async {
+    if (!mounted) return false;
+    final generation = ++_loadGeneration;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     final id = widget.data['postId']?.toString().trim();
-    if (_isCommentRepost) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      return;
-    }
-    if (id == null || id.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _post = _fromSnapshot(widget.data);
-        _loading = false;
-      });
-      return;
-    }
+    final commentId = widget.data['commentId']?.toString().trim();
+    final commentQuote = _isCommentRepost;
+    setState(() { _loading = true; _post = null; _authorizedQuote = {}; _loadError = null; });
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where(FieldPath.documentId, isEqualTo: id)
-          .limit(1)
-          .get();
-      if (!mounted) return;
-      setState(() {
-        _post = query.docs.isEmpty
-            ? _fromSnapshot(widget.data)
-            : _Post.fromFirestore(query.docs.first);
-        _loading = false;
-      });
-    } catch (e) {
-      debugPrint('Load original post failed: $e');
-      if (!mounted) return;
-      setState(() {
-        _post = _fromSnapshot(widget.data);
-        _loading = false;
-      });
+      final data = await _readAuthorizedPostData(id);
+      final post = _Post.fromData(id!, data);
+      Map<String, dynamic> quote = {};
+      if (commentQuote) {
+        Map<String, dynamic>? find(dynamic rows, [int depth = 0]) {
+          if (rows is! List || depth > 30) return null;
+          for (final row in rows) {
+            if (row is! Map) continue;
+            if (row['id'] == commentId) return Map<String, dynamic>.from(row);
+            final hit = find(row['replies'], depth + 1);
+            if (hit != null) return hit;
+          }
+          return null;
+        }
+        if (commentId == null || commentId.isEmpty) throw StateError('Missing comment');
+        final raw = find(data['comments']);
+        if (raw == null) throw StateError('Comment unavailable');
+        final comment = _commentFromMap(raw);
+        quote = {'commentAuthor': comment.author, 'commentAuthorId': comment.authorId,
+          'commentAuthorPhotoUrl': comment.authorPhotoUrl, 'commentText': comment.text,
+          'commentMediaUrl': comment.mediaUrl, 'commentMediaType': comment.mediaType, 'title': post.title};
+      }
+      if (!mounted || generation != _loadGeneration || FirebaseAuth.instance.currentUser?.uid != uid) return false;
+      setState(() { _post = post; _authorizedQuote = quote; _loading = false; });
+      return true;
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return false;
+      setState(() { _loading = false; _post = null; _authorizedQuote = {};
+        _loadError = 'المحتوى الأصلي غير متاح حاليًا. قد يكون محذوفًا أو خاصًا.'; });
+      return false;
     }
-  }
-
-  _Post _fromSnapshot(Map<String, dynamic> data) {
-    final images = _stringList(data['imageUrls']);
-    final one = data['imageUrl']?.toString().trim() ?? '';
-    if (images.isEmpty && one.startsWith('http')) images.add(one);
-    return _Post(
-      id: data['postId']?.toString(),
-      author: (data['authorName'] ?? 'طالب UniSpace').toString(),
-      authorId: data['authorId']?.toString(),
-      authorPhotoUrl: data['authorPhotoUrl']?.toString(),
-      title: (data['title'] ?? '').toString(),
-      body: (data['body'] ?? '').toString(),
-      createdAt: DateTime.now(),
-      imagePaths: images,
-      videoPaths: _stringList(data['videoUrls']),
-    );
   }
 
   Widget _mediaHero({
@@ -13430,22 +12957,31 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
       );
     }
 
+    if (_loadError != null || _post == null) {
+      return Container(padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: border)),
+        child: Column(children: [
+          Text(_loadError ?? 'المحتوى الأصلي غير متاح', textAlign: TextAlign.center),
+          TextButton(onPressed: _invalidate, child: const Text('إعادة المحاولة')),
+        ]));
+    }
+
     if (_isCommentRepost) {
       final author =
-      (widget.data['commentAuthor'] ?? 'طالب UniSpace').toString();
-      final authorId = widget.data['commentAuthorId']?.toString();
-      final photo = widget.data['commentAuthorPhotoUrl']?.toString();
+      (_authorizedQuote['commentAuthor'] ?? 'طالب UniSpace').toString();
+      final authorId = _authorizedQuote['commentAuthorId']?.toString();
+      final photo = _authorizedQuote['commentAuthorPhotoUrl']?.toString();
       final text =
-      (widget.data['commentText'] ?? widget.data['body'] ?? '')
+      (_authorizedQuote['commentText'] ?? _authorizedQuote['body'] ?? '')
           .toString()
           .trim();
-      final mediaType = widget.data['commentMediaType']?.toString();
-      final mediaUrl = widget.data['commentMediaUrl']?.toString();
+      final mediaType = _authorizedQuote['commentMediaType']?.toString();
+      final mediaUrl = _authorizedQuote['commentMediaUrl']?.toString();
       final image = (mediaType == 'image' || mediaType == 'gif')
           ? _http(mediaUrl)
           : null;
       final hasVideo = mediaType == 'video';
-      final t = (widget.data['title'] ?? '').toString().trim();
+      final t = (_authorizedQuote['title'] ?? '').toString().trim();
       final footer = t.isEmpty ? 'تعليق أصلي' : 'تعليق على: $t';
 
       return _ogShell(
@@ -13541,8 +13077,8 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
                   children: [
                     Row(
                       children: [
-                        LiveAuthorPhoto(
-                          userId: authorId,
+                        PublicProfilePhoto(
+                          userId: authorId ?? '',
                           fallbackUrl: photo,
                           size: 24,
                           radius: 12,
@@ -13550,29 +13086,8 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: ValueListenableBuilder<int>(
-                            valueListenable: AuthorProfiles.revision,
-                            builder: (context, _, __) {
-                              if ((authorId ?? '').isNotEmpty) {
-                                AuthorProfiles.ensure(authorId!);
-                              }
-                              final live =
-                              AuthorProfiles.nameOf(authorId)?.trim();
-                              final name =
-                              (live != null && live.isNotEmpty)
-                                  ? live
-                                  : author;
-                              return Text(
-                                name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13,
-                                ),
-                              );
-                            },
-                          ),
+                          child: Text(author, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                         ),
                         if (time.isNotEmpty)
                           Text(
@@ -14330,7 +13845,13 @@ class SavedPostsScreen extends StatefulWidget {
 
 class _SavedPostsScreenState extends State<SavedPostsScreen> {
   static const int _pageSize = 20;
-  static const int _whereInLimit = 30;
+  static const int _whereInLimit = 5;
+  int _generation = 0;
+  String? _uid;
+  StreamSubscription<User?>? _authSub;
+  bool _current(int generation, String uid) => mounted &&
+      generation == _generation && FirebaseAuth.instance.currentUser?.uid == uid;
+  void _refreshAccess() { if (mounted) _load(); }
 
   final TextEditingController _searchController =
   TextEditingController();
@@ -14360,11 +13881,23 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
 
     _scrollController.addListener(_onScroll);
 
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user?.uid == _uid || !mounted) return;
+      _uid = user?.uid;
+      _load();
+    });
+    blockedListRevision.addListener(_refreshAccess);
+    authorProfileRevision.addListener(_refreshAccess);
     _load();
   }
 
   @override
   void dispose() {
+    _generation++;
+    _authSub?.cancel();
+    blockedListRevision.removeListener(_refreshAccess);
+    authorProfileRevision.removeListener(_refreshAccess);
     _searchController.dispose();
     _scrollController.dispose();
 
@@ -14461,7 +13994,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
   }
 
   Future<Map<String, _Post>> _fetchPostsByIds(
-      Iterable<String> ids,
+      Iterable<String> ids, int generation, String uid,
       ) async {
     final cleanIds = ids
         .map((id) => id.trim())
@@ -14482,21 +14015,15 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
 
       final chunk = cleanIds.sublist(i, end);
 
-      try {
-        final snapshot = await FirebaseFirestore.instance
-            .collection('community_posts')
-            .where(
-          FieldPath.documentId,
-          whereIn: chunk,
-        )
-            .get();
-
-        for (final document in snapshot.docs) {
-          result[document.id] = _Post.fromFirestore(document);
+      if (!_current(generation, uid)) return {};
+      await Future.wait(chunk.map((id) async {
+        try {
+          final data = await _readAuthorizedPostData(id);
+          if (_current(generation, uid)) result[id] = _Post.fromData(id, data);
+        } on FirebaseFunctionsException catch (error) {
+          if (error.code != 'not-found') rethrow;
         }
-      } catch (e) {
-        debugPrint('fetch posts batch failed: $e');
-      }
+      }));
     }
 
     return result;
@@ -14505,6 +14032,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
   Future<void> _loadPostsPage({
     required String uid,
     required bool reset,
+    required int generation,
   }) async {
     if (!reset && !_hasMorePosts) {
       return;
@@ -14517,6 +14045,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     );
 
     final savedSnapshot = await query.get();
+    if (!_current(generation, uid)) return;
 
     if (savedSnapshot.docs.isEmpty) {
       _hasMorePosts = false;
@@ -14543,9 +14072,10 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     }
 
     final posts = await _fetchPostsByIds(
-      validSavedDocs.map((document) => document.id),
+      validSavedDocs.map((document) => document.id), generation, uid,
     );
 
+    if (!_current(generation, uid)) return;
     for (final savedDocument in validSavedDocs) {
       final postId = savedDocument.id.trim();
       final post = posts[postId];
@@ -14567,6 +14097,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
   Future<void> _loadCommentsPage({
     required String uid,
     required bool reset,
+    required int generation,
   }) async {
     if (!reset && !_hasMoreComments) {
       return;
@@ -14579,6 +14110,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     );
 
     final commentsSnapshot = await query.get();
+    if (!_current(generation, uid)) return;
 
     if (commentsSnapshot.docs.isEmpty) {
       _hasMoreComments = false;
@@ -14639,9 +14171,10 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     }
 
     final posts = await _fetchPostsByIds(
-      validComments.map((entry) => entry.value.postId),
+      validComments.map((entry) => entry.value.postId), generation, uid,
     );
 
+    if (!_current(generation, uid)) return;
     for (final entry in validComments) {
       final savedDocument = entry.key;
       final savedComment = entry.value;
@@ -14649,42 +14182,23 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
       final postId = savedComment.postId.trim();
       final realPost = posts[postId];
 
-      _Post? post = realPost;
-
-      _Comment? foundComment;
-
-      if (realPost != null) {
-        foundComment = _findComment(
-          realPost.comments,
-          savedComment.commentId,
-        );
-      }
-
-      foundComment ??= _Comment(
-        id: savedComment.commentId,
-        author: savedComment.author,
-        authorId: savedComment.authorId,
-        authorPhotoUrl: savedComment.authorPhotoUrl,
-        text: savedComment.text,
-        createdAt: _savedAtOf(savedDocument.data()) ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-        mediaUrl: savedComment.mediaUrl,
-        mediaType: savedComment.mediaType,
-      );
-
-      post ??= _Post(
-        author: '',
-        title: savedComment.postTitle ?? 'منشور غير متاح',
-        body: '',
-        createdAt: _savedAtOf(savedDocument.data()) ??
-            DateTime.fromMillisecondsSinceEpoch(0),
+      if (realPost == null) continue;
+      final foundComment = _findComment(realPost.comments, savedComment.commentId);
+      if (foundComment == null) continue;
+      final post = realPost;
+      final currentComment = _SavedComment(
+        commentId: foundComment.id, postId: postId,
+        author: foundComment.author, authorId: foundComment.authorId,
+        authorPhotoUrl: foundComment.authorPhotoUrl, text: foundComment.text,
+        mediaUrl: foundComment.mediaUrl, mediaType: foundComment.mediaType,
+        postTitle: realPost.title,
       );
 
       _items.add(
         _SavedListItem(
           type: SavedItemType.comment,
           savedAt: _savedAtOf(savedDocument.data()),
-          savedComment: savedComment,
+          savedComment: currentComment,
           commentHit: _CommentSearchHit(
             post: post,
             comment: foundComment,
@@ -14695,6 +14209,8 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
+    final generation = ++_generation;
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
     if (uid == null) {
@@ -14729,16 +14245,17 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
         _loadPostsPage(
           uid: uid,
           reset: true,
+          generation: generation,
         ),
         _loadCommentsPage(
           uid: uid,
           reset: true,
+          generation: generation,
         ),
       ]);
 
+      if (!_current(generation, uid)) return;
       _sortItems();
-
-      if (!mounted) return;
 
       setState(() {
         _loading = false;
@@ -14746,17 +14263,18 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     } catch (e) {
       debugPrint('load saved items failed: $e');
 
-      if (!mounted) return;
+      if (!_current(generation, uid)) return;
 
       setState(() {
         _loading = false;
+        _items.clear();
         _error = 'تعذر تحميل المحفوظات';
       });
     }
   }
 
   Future<void> _loadMore() async {
-    if (_loading || _loadingMore) {
+    if (!mounted || _error != null || _loading || _loadingMore) {
       return;
     }
 
@@ -14766,6 +14284,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
       return;
     }
 
+    final generation = _generation;
     final loadPosts =
         _selectedTab == 0 || _selectedTab == 1;
 
@@ -14794,6 +14313,7 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
           _loadPostsPage(
             uid: uid,
             reset: false,
+            generation: generation,
           ),
         );
       }
@@ -14803,17 +14323,21 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
           _loadCommentsPage(
             uid: uid,
             reset: false,
+            generation: generation,
           ),
         );
       }
 
       await Future.wait(futures);
-
+      if (!_current(generation, uid)) return;
       _sortItems();
     } catch (e) {
       debugPrint('load more saved items failed: $e');
+      if (!_current(generation, uid)) return;
+      _items.clear();
+      _error = 'تعذر تحميل المحفوظات';
     } finally {
-      if (!mounted) return;
+      if (!_current(generation, uid)) return;
 
       setState(() {
         _loadingMore = false;
@@ -14892,19 +14416,16 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     }
 
     try {
-      final document = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .doc(postId)
-          .get();
-
-      if (!mounted) return;
-
-      if (!document.exists) {
-        _showMessage('المنشور الأصلي غير موجود');
+      final generation = _generation;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final data = await _readAuthorizedPostData(postId);
+      if (!_current(generation, uid)) return;
+      final post = _Post.fromData(postId, data);
+      if (_findComment(post.comments, savedComment.commentId) == null) {
+        _showMessage('التعليق لم يعد متاحاً');
         return;
       }
-
-      final post = _Post.fromFirestore(document);
 
       final changed = await Navigator.push<bool>(
         context,
@@ -15515,93 +15036,32 @@ class _SavedFilterChip extends StatelessWidget {
 
 final authorProfileRevision = ValueNotifier<int>(0);
 Future<List<_ProfileCommentHit>> loadCommentsByAuthor(String uid) async {
-  final hits = <_ProfileCommentHit>[];
-
-  try {
-    final idx = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('authored_comments')
-        .orderBy('createdAt', descending: true)
-        .limit(80)
-        .get();
-
-    if (idx.docs.isNotEmpty) {
-      final byPost = <String, List<String>>{};
-      for (final d in idx.docs) {
-        final postId = (d.data()['postId'] ?? '').toString();
-        final cid = (d.data()['commentId'] ?? d.id).toString();
-        if (postId.isEmpty || cid.isEmpty) continue;
-        byPost.putIfAbsent(postId, () => []).add(cid);
-      }
-
-      final ids = byPost.keys.toList();
-      final posts = <String, _Post>{};
-      for (var i = 0; i < ids.length; i += 10) {
-        final chunk = ids.sublist(i, i + 10 > ids.length ? ids.length : i + 10);
-        final snap = await FirebaseFirestore.instance
-            .collection('community_posts')
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get();
-        for (final doc in snap.docs) {
-          posts[doc.id] = _Post.fromFirestore(doc);
-        }
-      }
-
-      _Comment? find(_Comment c, String id) {
-        if (c.id == id) return c;
-        for (final r in c.replies) {
-          final f = find(r, id);
-          if (f != null) return f;
-        }
-        return null;
-      }
-
-      for (final d in idx.docs) {
-        final postId = (d.data()['postId'] ?? '').toString();
-        final cid = (d.data()['commentId'] ?? d.id).toString();
-        final post = posts[postId];
-        if (post == null) continue;
-        _Comment? found;
-        for (final c in post.comments) {
-          found = find(c, cid);
-          if (found != null) break;
-        }
-        if (found != null) hits.add(_ProfileCommentHit(post: post, comment: found));
-      }
-      return hits;
-    }
-  } catch (e) {
-    debugPrint('authored_comments index failed: $e');
+  final viewer = FirebaseAuth.instance.currentUser?.uid;
+  final blocks = blockedListRevision.value;
+  final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable('readProfileComments', options: HttpsCallableOptions(
+        timeout: const Duration(seconds: 120),
+      )).call<Map<String, dynamic>>({'userId': uid});
+  if (viewer != FirebaseAuth.instance.currentUser?.uid ||
+      blocks != blockedListRevision.value || response.data['posts'] is! List) {
+    throw StateError('تعذر تأكيد صلاحية عرض التعليقات');
   }
-
-  // احتياطي للمنشورات القديمة بلا فهرس
-  QueryDocumentSnapshot<Map<String, dynamic>>? last;
-  for (var page = 0; page < 8; page++) {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-        .collection('community_posts')
-        .orderBy('createdAt', descending: true)
-        .limit(80);
-    if (last != null) q = q.startAfterDocument(last);
-    final snap = await q.get();
-    if (snap.docs.isEmpty) break;
-
-    void walk(_Post post, List<_Comment> list) {
-      for (final c in list) {
-        if (c.authorId == uid) {
-          hits.add(_ProfileCommentHit(post: post, comment: c));
+  final hits = <_ProfileCommentHit>[];
+  for (final row in response.data['posts'] as List) {
+    if (row is! Map || row['id'] is! String || row['data'] is! Map || row['commentIds'] is! List) {
+      throw StateError('بيانات تعليقات غير صالحة');
+    }
+    final post = _Post.fromData(row['id'] as String, Map<String, dynamic>.from(row['data'] as Map));
+    final selected = Set<String>.from(row['commentIds'] as List);
+    void walk(List<_Comment> comments) {
+      for (final comment in comments) {
+        if (comment.authorId == uid && selected.remove(comment.id)) {
+          hits.add(_ProfileCommentHit(post: post, comment: comment));
         }
-        walk(post, c.replies);
+        walk(comment.replies);
       }
     }
-
-    for (final doc in snap.docs) {
-      final post = _Post.fromFirestore(doc);
-      walk(post, post.comments);
-    }
-    last = snap.docs.last;
-    if (snap.docs.length < 80) break;
-    if (hits.length >= 80) break;
+    walk(post.comments);
   }
   hits.sort((a, b) => b.comment.createdAt.compareTo(a.comment.createdAt));
   return hits;
@@ -15648,39 +15108,8 @@ Future<void> propagateAuthorToPosts({
 
 
 
-Future<Set<String>> loadBlockedUserIds() async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null) return {};
-  final ids = <String>{};
-
-  try {
-    final mine = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(me)
-        .collection('blocked_accounts')
-        .get();
-    for (final d in mine.docs) {
-      ids.add(d.id);
-    }
-  } catch (e) {
-    debugPrint('load blocked_accounts failed: $e');
-  }
-
-  try {
-    final theirs = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(me)
-        .collection('blocked_by')
-        .get();
-    for (final d in theirs.docs) {
-      ids.add(d.id);
-    }
-  } catch (e) {
-    debugPrint('load blocked_by failed: $e');
-  }
-
-  return ids;
-}
+Future<Set<String>> loadBlockedUserIds() =>
+    _loadNotificationBlockedIds(FirebaseAuth.instance.currentUser?.uid);
 
 bool isBlockedPost(_Post post, Set<String> blockedIds) {
   final author = (post.authorId ?? '').trim();
@@ -26618,87 +26047,32 @@ class _PostPagerPageState extends State<_PostPagerPage> {
 // ==================== تفاعلات موحّدة (لايك/ديسلايك) قابلة لإعادة الاستخدام ====================
 
 /// تُرجع عدد الأصوات النهائي بعد التحديث، أو null عند الفشل
+final Set<String> _sharedVotesInFlight = {};
 Future<int?> _applyVote(_Post post, {required bool like}) async {
   final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null || post.id == null || post.id!.isEmpty) return null;
-
-  final ref =
-  FirebaseFirestore.instance.collection('community_posts').doc(post.id);
-
+  final postId = post.id;
+  if (uid == null || postId == null || postId.isEmpty) return null;
+  final key = '$uid/$postId';
+  if (!_sharedVotesInFlight.add(key)) return null;
+  final vote = like ? (post.upvoted ? 0 : 1) : (post.downvoted ? 0 : -1);
   try {
-    final newVotes = await FirebaseFirestore.instance.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) throw Exception('Post does not exist');
-
-      final data = snap.data() ?? <String, dynamic>{};
-      final upvotedBy = _stringList(data['upvotedBy']);
-      final downvotedBy = _stringList(data['downvotedBy']);
-      int votes = (data['votes'] as num?)?.toInt() ?? 0;
-
-      final wasLiked = upvotedBy.contains(uid);
-      final wasDisliked = downvotedBy.contains(uid);
-
-      if (like) {
-        if (wasLiked) {
-          // إلغاء إعجاب
-          upvotedBy.remove(uid);
-          votes -= 1;
-        } else {
-          if (wasDisliked) {
-            downvotedBy.remove(uid);
-            votes += 1;
-          }
-          upvotedBy.add(uid);
-          votes += 1;
-        }
-      } else {
-        if (wasDisliked) {
-          // إلغاء عدم إعجاب
-          downvotedBy.remove(uid);
-          votes += 1;
-        } else {
-          if (wasLiked) {
-            upvotedBy.remove(uid);
-            votes -= 1;
-          }
-          downvotedBy.add(uid);
-          votes -= 1;
-        }
-      }
-
-      tx.update(ref, {
-        'upvotedBy': upvotedBy,
-        'downvotedBy': downvotedBy,
-        'votes': votes,
-      });
-
-      return votes;
-    });
-
-    // مزامنة محلية من نتيجة المعاملة (المصدر الصحيح)
-    if (like) {
-      if (post.upvoted) {
-        post.upvoted = false;
-      } else {
-        if (post.downvoted) post.downvoted = false;
-        post.upvoted = true;
-      }
-    } else {
-      if (post.downvoted) {
-        post.downvoted = false;
-      } else {
-        if (post.upvoted) post.upvoted = false;
-        post.downvoted = true;
-      }
+    final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('setPostVote', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+        .call<Map<String, dynamic>>({'postId': postId, 'vote': vote});
+    if (response.data['vote'] != vote || response.data['votes'] is! num) {
+      throw const FormatException('Invalid vote response');
     }
-    post.votes = newVotes;
-
+    if (FirebaseAuth.instance.currentUser?.uid != uid) return null;
+    post.votes = (response.data['votes'] as num).toInt();
+    post.upvoted = vote == 1;
+    post.downvoted = vote == -1;
     HapticFeedback.lightImpact();
-    return newVotes;
-  } catch (e, stack) {
+    return post.votes;
+  } catch (e) {
     debugPrint('Vote failed: $e');
-    debugPrintStack(stackTrace: stack);
     return null;
+  } finally {
+    _sharedVotesInFlight.remove(key);
   }
 }
 
@@ -32785,16 +32159,114 @@ class _Comment {
     return n;
   }
 }
-class CommentsScreen extends StatefulWidget {
-  final _Post post;
-  final String? initialCommentId;
-  const CommentsScreen({super.key,this.initialCommentId, required this.post});
-
-  @override
-  State<CommentsScreen> createState() => _CommentsScreenState();
+Future<void> _publishAuthorizedRepost({required String expectedUid,
+  required String sourcePostId, required _RepostDraft draft, String? commentId}) async {
+  if (FirebaseAuth.instance.currentUser?.uid != expectedUid) {
+    throw StateError('تغير الحساب أثناء إعادة النشر');
+  }
+  final id = FirebaseFirestore.instance.collection('community_posts').doc().id;
+  final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable('publishRepost', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+      .call<Map<String, dynamic>>({'postId': id, 'sourcePostId': sourcePostId,
+        'commentId': commentId, 'title': draft.title, 'body': draft.body});
+  if (FirebaseAuth.instance.currentUser?.uid != expectedUid ||
+      response.data['postId'] != id || response.data['published'] != true) {
+    throw StateError('تعذر تأكيد إعادة النشر');
+  }
 }
 
-class _CommentsScreenState extends State<CommentsScreen>
+Future<void> _deleteOwnPost(String postId) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable('deleteOwnPost').call<Map<String, dynamic>>({'postId': postId});
+  if (FirebaseAuth.instance.currentUser?.uid != uid || response.data['postId'] != postId || response.data['deleted'] != true) {
+    throw StateError('تعذر تأكيد حذف المنشور');
+  }
+}
+
+Future<Map<String, dynamic>> _readAuthorizedPostData(String? postId) async {
+  if (postId == null || postId.isEmpty) throw StateError('المنشور غير متاح');
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable('readAuthorizedPost', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+      .call<Map<String, dynamic>>({'postId': postId});
+  if (FirebaseAuth.instance.currentUser?.uid != uid || response.data['id'] != postId || response.data['data'] is! Map) {
+    throw StateError('تعذر تأكيد صلاحية عرض المنشور');
+  }
+  return Map<String, dynamic>.from(response.data['data'] as Map);
+}
+
+class CommentsScreen extends StatefulWidget {
+  const CommentsScreen({super.key, required this.post, this.initialCommentId});
+  final _Post post;
+  final String? initialCommentId;
+  @override
+  State<CommentsScreen> createState() => _CommentsAccessState();
+}
+
+class _CommentsAccessState extends State<CommentsScreen> {
+  late Future<_Post> _authorized;
+  StreamSubscription<User?>? _authSubscription;
+  String? _uid;
+  int _revision = 0;
+  Future<_Post> _load() async {
+    final id = widget.post.id;
+    final data = await _readAuthorizedPostData(id);
+    return _Post.fromData(id!, data);
+  }
+  void _reload() {
+    if (!mounted) return;
+    setState(() { _revision++; _authorized = _load(); });
+  }
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _authorized = _load();
+    blockedListRevision.addListener(_reload);
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user?.uid != _uid) { _uid = user?.uid; _reload(); }
+    });
+  }
+  @override
+  void didUpdateWidget(covariant CommentsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.id != widget.post.id) _reload();
+  }
+  @override
+  void dispose() {
+    blockedListRevision.removeListener(_reload);
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) => FutureBuilder<_Post>(
+    key: ValueKey(_revision), future: _authorized,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && !snapshot.hasError) {
+        return _CommentsContentScreen(post: snapshot.data!, initialCommentId: widget.initialCommentId);
+      }
+      return Scaffold(appBar: AppBar(title: const Text('التعليقات')),
+        body: Center(child: snapshot.connectionState != ConnectionState.done
+            ? const CircularProgressIndicator()
+            : Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text('تعذر عرض المنشور. قد يكون محذوفًا أو غير متاح لك.', textAlign: TextAlign.center),
+                TextButton(onPressed: _reload, child: const Text('إعادة المحاولة')),
+              ])));
+    },
+  );
+}
+
+class _CommentsContentScreen extends StatefulWidget {
+  final _Post post;
+  final String? initialCommentId;
+  const _CommentsContentScreen({super.key,this.initialCommentId, required this.post});
+
+  @override
+  State<_CommentsContentScreen> createState() => _CommentsScreenState();
+}
+
+class _CommentsScreenState extends State<_CommentsContentScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
@@ -32832,7 +32304,7 @@ class _CommentsScreenState extends State<CommentsScreen>
   Set<String> _blockedIds = {};
   Set<String> _hiddenCommentIds = {};
   Set<String> _savedCommentIds = {};
-  bool _canComment = true;
+  bool _canComment = false;
   _Comment? _editingComment;
   String? _selectingCommentId;
 
@@ -32860,21 +32332,7 @@ class _CommentsScreenState extends State<CommentsScreen>
       ids.addAll(snap.docs.map((d) => d.id));
     } catch (_) {}
 
-    final postId = widget.post.id?.trim();
-    if (postId != null && postId.isNotEmpty) {
-      try {
-        final postDoc = await FirebaseFirestore.instance
-            .collection('community_posts')
-            .doc(postId)
-            .get();
-        final mod = postDoc.data()?['moderation'];
-        if (mod is Map && mod['hiddenCommentIds'] is List) {
-          ids.addAll(
-            (mod['hiddenCommentIds'] as List).map((e) => e.toString()),
-          );
-        }
-      } catch (_) {}
-    }
+    // Moderator-hidden comments are removed by readAuthorizedPost.
 
     if (!mounted) return;
     setState(() => _hiddenCommentIds = ids);
@@ -32945,9 +32403,12 @@ class _CommentsScreenState extends State<CommentsScreen>
   }
 
   Future<void> _loadCommentPermission() async {
-    final authorId = widget.post.authorId ?? '';
-    final ok = await canCommentOnAuthor(authorId);
-    if (mounted) setState(() => _canComment = ok);
+    try {
+      final data = await _readAuthorizedPostData(widget.post.id);
+      if (mounted) setState(() => _canComment = data['canComment'] == true);
+    } catch (_) {
+      if (mounted) setState(() => _canComment = false);
+    }
   }
   Future<void> _loadSavedCommentIds() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -33014,10 +32475,21 @@ class _CommentsScreenState extends State<CommentsScreen>
       );
     }
   }
+  bool _checkingCommentBlocks = true;
+  bool _commentBlockError = false;
   Future<void> _loadBlockedIds() async {
-    final ids = await loadBlockedUserIds();
-
-    if (mounted) setState(() => _blockedIds = ids);
+    if (mounted) setState(() { _checkingCommentBlocks = true; _commentBlockError = false; });
+    try {
+      final ids = await loadBlockedUserIds();
+      if (!mounted) return;
+      setState(() { _blockedIds = ids; _checkingCommentBlocks = false; });
+      final jumpId = widget.initialCommentId?.trim();
+      if (jumpId != null && jumpId.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToComment(jumpId);
+      });
+    } catch (_) {
+      if (mounted) setState(() { _checkingCommentBlocks = false; _commentBlockError = true; });
+    }
   }
 
   bool _isBlockedAuthor(String? authorId) {
@@ -33120,15 +32592,7 @@ class _CommentsScreenState extends State<CommentsScreen>
     final postId = widget.post.id;
     if (postId == null || postId.isEmpty) return;
     try {
-      await FirebaseFirestore.instance
-          .collection('community_posts')
-          .doc(postId)
-          .delete();
-      try {
-        await FirebaseStorage.instance
-            .ref('community_posts/$postId')
-            .delete();
-      } catch (_) {}
+      await _deleteOwnPost(postId);
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
@@ -33138,55 +32602,9 @@ class _CommentsScreenState extends State<CommentsScreen>
       );
     }
   }
-  Future<void> _toggleCommentDownvote(_Comment comment) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+  Future<void> _toggleCommentDownvote(_Comment comment) =>
+      _setCommentVote(comment, comment.downvoted ? 0 : -1);
 
-    try {
-      await _updatePostComments((comments) {
-        _mutateCommentMap(comments, comment.id, (node) {
-          final upvotedBy = _stringList(node['upvotedBy']);
-          final downvotedBy = _stringList(node['downvotedBy']);
-          int votes = (node['votes'] as num?)?.toInt() ?? 0;
-
-          if (downvotedBy.contains(uid)) {
-            downvotedBy.remove(uid);
-            votes += 1;
-          } else {
-            downvotedBy.add(uid);
-            votes -= 1;
-            if (upvotedBy.contains(uid)) {
-              upvotedBy.remove(uid);
-              votes -= 1;
-            }
-          }
-          node['upvotedBy'] = upvotedBy;
-          node['downvotedBy'] = downvotedBy;
-          node['votes'] = votes;
-        });
-      });
-      if (!mounted) return;
-      setState(() {
-        _findCommentLocal(widget.post.comments, comment.id, (c) {
-          if (c.downvoted) {
-            c.downvoted = false;
-            c.votes += 1;
-          } else {
-            c.downvoted = false;
-            c.downvoted = true;
-            c.votes -= 1;
-            if (c.upvoted) {
-              c.upvoted = false;
-              c.votes -= 1;
-            }
-          }
-        });
-      });
-      HapticFeedback.lightImpact();
-    } catch (e) {
-      debugPrint('Toggle comment downvote failed: $e');
-    }
-  }
   bool _insertReplyIntoComments(
       List<Map<String, dynamic>> comments,
       String parentId,
@@ -33397,43 +32815,6 @@ class _CommentsScreenState extends State<CommentsScreen>
     return false;
   }
 
-  Future<void> _updatePostComments(
-      void Function(List<Map<String, dynamic>> comments) mutator,
-      ) async {
-    final postId = widget.post.id;
-    if (postId == null || postId.isEmpty) return;
-
-    final postRef =
-    FirebaseFirestore.instance.collection('community_posts').doc(postId);
-
-    await FirebaseFirestore.instance.runTransaction((tx) async {
-      final snap = await tx.get(postRef);
-      if (!snap.exists) throw Exception('Post does not exist');
-
-      final data = snap.data() ?? <String, dynamic>{};
-      final comments = <Map<String, dynamic>>[];
-      final raw = data['comments'];
-      if (raw is List) {
-        for (final item in raw) {
-          if (item is Map) comments.add(Map<String, dynamic>.from(item));
-        }
-      }
-
-      mutator(comments);
-
-      final rootCount = comments.where((c) {
-        final r = c['replyToId'];
-        return r == null || r.toString().isEmpty;
-      }).length;
-
-      tx.update(postRef, {
-        'comments': comments,
-        'commentsCount': rootCount,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
-  }
-
   Future<void> _editComment(_Comment comment) async {
     setState(() {
       _replyTo = null;
@@ -33451,17 +32832,26 @@ class _CommentsScreenState extends State<CommentsScreen>
     });
   }
 
+  Future<void> _mutateOwnComment(String action, String commentId, {String? text}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('mutateComment', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+        .call<Map<String, dynamic>>({
+          'action': action, 'postId': widget.post.id, 'commentId': commentId,
+          if (text != null) 'text': text,
+        });
+    if (FirebaseAuth.instance.currentUser?.uid != uid || response.data['action'] != action ||
+        response.data['commentId'] != commentId || response.data['commentsCount'] is! num) {
+      throw StateError('تعذر تأكيد تحديث التعليق');
+    }
+  }
+
   Future<void> _saveEditedComment(_Comment comment) async {
     final newText = _commentController.text.trim();
     if (newText.isEmpty) return;
 
     try {
-      await _updatePostComments((comments) {
-        _mutateCommentMap(comments, comment.id, (node) {
-          node['text'] = newText;
-          node['isEdited'] = true;
-        });
-      });
+      await _mutateOwnComment('edit', comment.id, text: newText);
       if (!mounted) return;
       setState(() {
         _findCommentLocal(widget.post.comments, comment.id, (c) {
@@ -33472,15 +32862,6 @@ class _CommentsScreenState extends State<CommentsScreen>
         _commentController.clear();
       });
       FocusScope.of(context).unfocus();
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        unawaited(FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('authored_comments')
-            .doc(comment.id)
-            .set({'text': newText, 'isEdited': true}, SetOptions(merge: true)));
-      }
     } catch (e) {
       debugPrint('Edit comment failed: $e');
       if (!mounted) return;
@@ -33520,22 +32901,11 @@ class _CommentsScreenState extends State<CommentsScreen>
     if (confirmed != true) return;
 
     try {
-      await _updatePostComments((comments) {
-        _removeCommentMap(comments, comment.id);
-      });
+      await _mutateOwnComment('delete', comment.id);
       if (!mounted) return;
       setState(() {
         _removeCommentLocal(widget.post.comments, comment.id);
       });
-      final uid = comment.authorId?.trim();
-      if (uid != null && uid.isNotEmpty) {
-        unawaited(FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('authored_comments')
-            .doc(comment.id)
-            .delete());
-      }
     } catch (e) {
       debugPrint('Delete comment failed: $e');
       if (!mounted) return;
@@ -33722,79 +33092,9 @@ class _CommentsScreenState extends State<CommentsScreen>
     );
     if (!mounted || draft == null) return;
 
-    String? authorPhotoUrl;
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      authorPhotoUrl = userDoc.data()?['profileImageUrl']?.toString();
-    } catch (_) {}
-    if (!mounted) return;
-
-    final authorName = (user.displayName ?? '').trim().isNotEmpty
-        ? user.displayName!.trim()
-        : 'طالب UniSpace';
-
-    final bodyPreview = comment.text.trim();
-    final shortBody = bodyPreview.length > 180
-        ? '${bodyPreview.substring(0, 180)}…'
-        : bodyPreview;
-
-    try {
-      await FirebaseFirestore.instance.collection('community_posts').add({
-        'authorId': user.uid,
-        'authorName': authorName,
-        'authorPhotoUrl': authorPhotoUrl,
-        'title': draft.title,
-        'body': draft.body,
-        'searchKeywords': buildSearchKeywords(
-          title: draft.title,
-          body: draft.body,
-          author: authorName,
-        ),
-        'status': 'published',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'isRepost': true,
-        'repostOf': {
-          'postId': originalId,
-          'authorId': original.authorId,
-          'authorName': original.author,
-          'authorPhotoUrl': original.authorPhotoUrl,
-          'title': original.title.trim(),
-          'body': shortBody,
-          'kind': 'comment',
-          'commentId': comment.id,
-          'commentAuthor': comment.author,
-          'commentAuthorId': comment.authorId,
-          'commentAuthorPhotoUrl': comment.authorPhotoUrl,
-          'commentText': comment.text,
-          'commentMediaUrl': comment.mediaUrl,
-          'commentMediaType': comment.mediaType,
-        },
-        'imageUrls': <String>[],
-        'videoUrls': <String>[],
-        'pollSlides': <Map<String, dynamic>>[],
-        'polls': <Map<String, dynamic>>[],
-        'tags': <String>[],
-        'votes': 0,
-        'upvotedBy': <String>[],
-        'downvotedBy': <String>[],
-        'commentsCount': 0,
-        'version': 1,
-      });
-
-      final commentOwner = comment.authorId?.trim();
-      if (commentOwner != null && commentOwner.isNotEmpty) {
-        unawaited(pushNotificationFromMe(
-          toUid: commentOwner,
-          type: 'repost',
-          message: 'أعاد نشر تعليقك',
-          postId: originalId,
-          commentId: comment.id,
-        ));
-      }
+      await _publishAuthorizedRepost(expectedUid: user.uid,
+        sourcePostId: originalId, draft: draft, commentId: comment.id);
 
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -33809,76 +33109,52 @@ class _CommentsScreenState extends State<CommentsScreen>
     }
   }
 
-  Future<void> _toggleCommentLike(_Comment comment) async {
+  final Set<String> _commentVotesInFlight = {};
+  Future<void> _toggleCommentLike(_Comment comment) =>
+      _setCommentVote(comment, comment.upvoted ? 0 : 1);
+
+  Future<void> _setCommentVote(_Comment comment, int vote) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
+    if (uid == null || _commentVotesInFlight.contains(comment.id)) return;
+    _commentVotesInFlight.add(comment.id);
     try {
-      await _updatePostComments((comments) {
-        _mutateCommentMap(comments, comment.id, (node) {
-          final upvotedBy = _stringList(node['upvotedBy']);
-          final downvotedBy = _stringList(node['downvotedBy']);
-          int votes = (node['votes'] as num?)?.toInt() ?? 0;
-          if (upvotedBy.contains(uid)) {
-            upvotedBy.remove(uid);
-            votes -= 1;
-          } else {
-            upvotedBy.add(uid);
-            votes += 1;
-            if (downvotedBy.contains(uid)) {
-              downvotedBy.remove(uid);
-              votes += 1;
-            }
-          }
-          node['upvotedBy'] = upvotedBy;
-          node['downvotedBy'] = downvotedBy;
-          node['votes'] = votes;
-        });
-      });
-      if (!mounted) return;
-
-      var likedNow = false;
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('mutateComment', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+          .call<Map<String, dynamic>>({
+            'action': 'vote', 'postId': widget.post.id, 'commentId': comment.id, 'vote': vote,
+          });
+      final data = response.data;
+      if (data['action'] != 'vote' || data['commentId'] != comment.id || data['vote'] != vote ||
+          data['votes'] is! num || data['previousVote'] is! num || data['ownerId'] is! String) {
+        throw const FormatException('Invalid comment vote response');
+      }
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
       setState(() {
-        _findCommentLocal(widget.post.comments, comment.id, (c) {
-          if (c.upvoted) {
-            c.upvoted = false;
-            c.votes -= 1;
-          } else {
-            likedNow = true;
-            c.upvoted = true;
-            c.votes += 1;
-            if (c.downvoted) {
-              c.downvoted = false;
-              c.votes += 1;
-            }
-          }
-        });
+        void apply(_Comment c) {
+          c.votes = (data['votes'] as num).toInt();
+          c.upvoted = vote == 1; c.downvoted = vote == -1;
+        }
+        apply(comment);
+        _findCommentLocal(widget.post.comments, comment.id, apply);
       });
       HapticFeedback.lightImpact();
-      if (likedNow) {
-        unawaited(pushAggregatedLikeFromMe(
-          toUid: comment.authorId ?? '',
-          postId: widget.post.id ?? '',
-          commentId: comment.id,
-        ));
-      } else {
-        unawaited(retractAggregatedLikeFromMe(
-          toUid: comment.authorId ?? '',
-          postId: widget.post.id ?? '',
-          commentId: comment.id,
-        ));
-      }
-    } catch (e) {
-      debugPrint('Toggle comment like failed: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل الإعجاب: $e')),
-      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر تحديث التصويت على التعليق. حاول مرة أخرى.')));
+    } finally {
+      _commentVotesInFlight.remove(comment.id);
     }
   }
-
   @override
   Widget build(BuildContext context) {
+    if (_checkingCommentBlocks || _commentBlockError) {
+      return Scaffold(appBar: AppBar(title: const Text('التعليقات')),
+        body: Center(child: _checkingCommentBlocks ? const CircularProgressIndicator()
+          : Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('تعذر التحقق من قائمة الحظر'),
+              TextButton(onPressed: _loadBlockedIds, child: const Text('إعادة المحاولة')),
+            ])));
+    }
     final allComments = _withoutBlocked(widget.post.comments);
     final filteredComments = _searchQuery.isEmpty
         ? allComments
@@ -36704,218 +35980,52 @@ class _CommentTheme {
 }
 
 Future<void> _postComment({required BuildContext context, required String postId, required String text,
-  required _Comment? replyTo,
-  CommentAttachment? attachment,
+  required _Comment? replyTo, CommentAttachment? attachment,
   required void Function(_Comment newComment, bool isReply) onSuccess,}) async {
   final txt = text.trim();
   if (txt.isEmpty && attachment == null) return;
-
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يجب تسجيل الدخول أولاً')));
     return;
   }
-
-  var postAuthorId = '';
-  try {
-    final postSnap = await FirebaseFirestore.instance
-        .collection('community_posts')
-        .doc(postId)
-        .get();
-    postAuthorId = (postSnap.data()?['authorId'] ?? '').toString();
-  } catch (_) {}
-
-  final allowed = await canCommentOnAuthor(postAuthorId);
-  if (!allowed) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('التعليق غير مسموح على هذا المنشور')),
-      );
-    }
-    return;
-  }
-
-  final isReply = replyTo != null;
   final commentId = FirebaseFirestore.instance.collection('community_comments').doc().id;
-  final now = DateTime.now();
-  final authorId = user.uid;
-
-
-  final authorName = (user.displayName?.trim().isNotEmpty ?? false)
-      ? user.displayName!.trim()
-      : (user.email?.trim().isNotEmpty ?? false)
-      ? user.email!.trim()
-      : ' ${user.uid.substring(0, 6)} User';
-
-  String? mediaUrl;
-  String? mediaType;
-
-  String? authorPhotoUrl;
   try {
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(authorId)
-        .get();
-    final saved = userDoc.data()?['profileImageUrl']?.toString().trim();
-    if (saved != null && saved.isNotEmpty) {
-      authorPhotoUrl = saved;
-    }
-  } catch (e) {
-    debugPrint('Fetch author photo failed: $e');
-  }
-
-  // صورة حساب Google / الإيميل إن لم توجد صورة مرفوعة
-  authorPhotoUrl ??= user.photoURL?.trim();
-  if (authorPhotoUrl != null && authorPhotoUrl.isEmpty) {
-    authorPhotoUrl = null;
-  }
-
-  if (attachment != null) {
-    try {
-      final storageRef = FirebaseStorage.instance.ref(
-        'community_posts/$postId/comments/$commentId/media.${attachment.extension}',
-      );
-      await storageRef.putData(attachment.bytes); // FIX: putData بدل putFile
-      mediaUrl = await storageRef.getDownloadURL();
+    // Check before uploading; the server checks again transactionally at creation.
+    final post = await _readAuthorizedPostData(postId);
+    if (post['canComment'] != true) throw StateError('التعليق غير مسموح على هذا المنشور');
+    String? mediaUrl;
+    String? mediaType;
+    if (attachment != null) {
+      final ref = FirebaseStorage.instance.ref(
+          'community_posts/$postId/comments/${user.uid}/$commentId/media.${attachment.extension}');
+      await ref.putData(attachment.bytes);
+      mediaUrl = await ref.getDownloadURL();
       mediaType = switch (attachment.kind) {
-        CommentMediaKind.video => 'video',
-        CommentMediaKind.gif => 'gif',
-        CommentMediaKind.image => 'image',
+        CommentMediaKind.video => 'video', CommentMediaKind.gif => 'gif', CommentMediaKind.image => 'image',
       };
-    } catch (e) {
-      debugPrint('Comment media upload failed: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر رفع الوسائط، حاول مجددًا')),
-        );
-      }
-      return;
     }
-  }
-
-  final newComment = _Comment(
-    id: commentId,
-    author: authorName,
-    authorId: authorId,
-    authorPhotoUrl: authorPhotoUrl,
-    text: txt,
-    createdAt: now,
-    replyToAuthor: replyTo?.author,
-    replyToId: replyTo?.id,
-    mediaUrl: mediaUrl,    // NEW
-    mediaType: mediaType,
-  );
-
-  final commentData = <String, dynamic>{
-    'id': commentId,
-    'author': authorName,
-    'authorId': authorId,
-    'authorPhotoUrl': authorPhotoUrl,
-    'text': txt,
-    'createdAt': Timestamp.fromDate(now),
-    'replyToAuthor': replyTo?.author,
-    'replyToId': replyTo?.id,
-    'votes': 0,
-    'upvotedBy': <String>[],
-    'downvotedBy': <String>[],
-    'mediaUrl': mediaUrl,    // NEW
-    'mediaType': mediaType,  // NEW
-    'replies': <Map<String, dynamic>>[],
-  };
-
-  try {
-    final postRef =
-    FirebaseFirestore.instance.collection('community_posts').doc(postId);
-
-    var postAuthorId = '';
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snapshot = await transaction.get(postRef);
-      if (!snapshot.exists) throw Exception('Post does not exist');
-
-      final data = snapshot.data() ?? <String, dynamic>{};
-      postAuthorId = (data['authorId'] ?? '').toString();
-
-      final comments = <Map<String, dynamic>>[];
-      final rawComments = data['comments'];
-      if (rawComments is List) {
-        for (final item in rawComments) {
-          if (item is Map) comments.add(Map<String, dynamic>.from(item));
-        }
-      }
-
-      if (isReply) {
-        final inserted =
-        _insertReplyIntoCommentsStatic(comments, replyTo.id, commentData);
-        if (!inserted) {
-          throw Exception('Parent comment not found: ${replyTo.id}');
-        }
-      } else {
-        comments.insert(0, commentData);
-      }
-
-      final rootCommentsCount = comments.where((comment) {
-        final replyToId = comment['replyToId'];
-        return replyToId == null || replyToId.toString().isEmpty;
-      }).length;
-
-      transaction.update(postRef, {
-        'comments': comments,
-        'commentsCount': rootCommentsCount,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
-
-    onSuccess(newComment, isReply);
-    unawaited(FirebaseFirestore.instance
-        .collection('users')
-        .doc(authorId)
-        .collection('authored_comments')
-        .doc(commentId)
-        .set({
-      'commentId': commentId,
-      'postId': postId,
-      'text': txt,
-      'createdAt': FieldValue.serverTimestamp(),
-      'mediaUrl': mediaUrl,
-      'mediaType': mediaType,
-      'replyToId': replyTo?.id,
-    }));
-
-    final preview = txt.isEmpty ? 'أرفق وسائط' : txt;
-    final short =
-    preview.length > 60 ? '${preview.substring(0, 60)}…' : preview;
-
-    if (isReply && (replyTo?.authorId ?? '').isNotEmpty) {
-      unawaited(pushNotificationFromMe(
-        toUid: replyTo!.authorId!,
-        type: 'reply',
-        message: 'رد على تعليقك: $short',
-        postId: postId,
-        commentId: commentId,
-      ));
+    if (FirebaseAuth.instance.currentUser?.uid != user.uid) throw StateError('تغيّر الحساب');
+    final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('createComment', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+        .call<Map<String, dynamic>>({
+          'postId': postId, 'commentId': commentId, 'text': txt, 'replyToId': replyTo?.id,
+          'media': mediaUrl == null ? null : {'url': mediaUrl, 'type': mediaType},
+        });
+    final raw = response.data['comment'];
+    if (raw is! Map || raw['id'] != commentId || raw['authorId'] != user.uid) {
+      throw const FormatException('Invalid comment response');
     }
-    if (postAuthorId.isNotEmpty &&
-        postAuthorId != authorId &&
-        postAuthorId != replyTo?.authorId) {
-      unawaited(pushNotificationFromMe(
-        toUid: postAuthorId,
-        type: 'comment',
-        message: 'علّق على منشورك: $short',
-        postId: postId,
-        commentId: commentId,
-      ));
-    }
-  } catch (e, stack) {
-    debugPrint('SAVE COMMENT FAILED: $e');
-    debugPrintStack(stackTrace: stack);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(isReply ? 'Not saved' : 'Not saved')),
-    );
+    if (!context.mounted || FirebaseAuth.instance.currentUser?.uid != user.uid) return;
+    onSuccess(_commentFromMap(Map<String, dynamic>.from(raw)), replyTo != null);
+  } catch (e) {
+    if (!context.mounted) return;
+    final denied = e is FirebaseFunctionsException && e.code == 'permission-denied';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(denied
+        ? 'التعليق غير مسموح وفق إعدادات الخصوصية الحالية.'
+        : 'تعذر تأكيد حفظ التعليق. حدّث القائمة قبل إعادة الإرسال.')));
   }
 }
-
 
 bool _insertReplyIntoCommentsStatic(List<Map<String, dynamic>> comments, String parentId, Map<String, dynamic> reply,) {
   for (final comment in comments) {
@@ -37093,25 +36203,15 @@ class _ProfileScreenState extends State<ProfileScreen>
   final ScrollController _scrollController = ScrollController();
   double _appBarOpacity = 0;
 
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _userPostsStream;
   late final TabController _tabController;
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _likedPostsStream;
   List<_ProfileCommentHit> _userComments = [];
-  bool _loadingComments = true;
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _dislikedPostsStream;
+  bool _loadingComments=true;
+  String? _commentsError;
+  int _commentsGeneration = 0;
   bool _showDisliked = false;
 
 // NEW: حذف منشور من داخل صفحة البروفايل (نفس منطق onDelete فالخلاصة الرئيسية)
-  Future<void> _deleteUserPost(String postId) async {
-    try {
-      await FirebaseFirestore.instance.collection('community_posts').doc(postId).delete();
-      try {
-        await FirebaseStorage.instance.ref('community_posts/$postId').delete();
-      } catch (_) {}
-    } catch (e) {
-      debugPrint('Delete user post failed: $e');
-    }
-  }
+  Future<void> _deleteUserPost(String postId) => _deleteOwnPost(postId);
 
   Future<void> _pickProfileImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -37152,31 +36252,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    _userPostsStream = uid == null
-        ? const Stream.empty()
-        : FirebaseFirestore.instance
-        .collection('community_posts')
-        .where('authorId', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
-        .snapshots();
     _loadSavedProfileImages();
     _scrollController.addListener(_onScroll);
     _tabController = TabController(length: 5, vsync: this);
-    _likedPostsStream = uid == null
-        ? const Stream.empty()
-        : FirebaseFirestore.instance
-        .collection('community_posts')
-        .where('upvotedBy', arrayContains: uid)
-        .snapshots();
     _loadUserComments();
     _loadFollowCounts();
     followRevision.addListener(_loadFollowCounts);
-    _dislikedPostsStream = uid == null
-        ? const Stream.empty()
-        : FirebaseFirestore.instance
-        .collection('community_posts')
-        .where('downvotedBy', arrayContains: uid)
-        .snapshots();
   }
 
   Future<void> _setPinnedPost(String? postId) async {
@@ -37648,22 +36729,21 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
   Future<void> _loadUserComments() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      setState(() => _loadingComments = false);
-      return;
-    }
-    setState(() => _loadingComments = true);
+    if (!mounted) return;
+    final generation = ++_commentsGeneration;
+    final viewer = FirebaseAuth.instance.currentUser?.uid;
+    final target = FirebaseAuth.instance.currentUser?.uid;
+    bool current() => mounted && generation == _commentsGeneration &&
+        viewer == FirebaseAuth.instance.currentUser?.uid;
+    setState(() { _loadingComments = true; _commentsError = null; _userComments = []; });
     try {
-      final hits = await loadCommentsByAuthor(uid);
-      if (!mounted) return;
-      setState(() {
-        _userComments = hits;
-        _loadingComments = false;
-      });
-    } catch (e) {
-      debugPrint('load my comments failed: $e');
-      if (mounted) setState(() => _loadingComments = false);
+      if (viewer == null || target == null) throw StateError('Sign in first');
+      final hits = await loadCommentsByAuthor(target);
+      if (!current()) return;
+      setState(() { _userComments = hits; _loadingComments = false; });
+    } catch (_) {
+      if (!current()) return;
+      setState(() { _loadingComments = false; _userComments = []; _commentsError = 'تعذر تحميل التعليقات'; });
     }
   }
 
@@ -38026,17 +37106,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       backgroundColor: t.pageBg,
       body: Stack(
         children: [
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _userPostsStream,
-            builder: (context, snap) {
-              final waiting =
-                  snap.connectionState == ConnectionState.waiting &&
-                      !snap.hasData;
-              final all = (snap.data?.docs ?? [])
-
-                  .map((d) => _Post.fromFirestore(d))
-
-                  .toList();
+          _AuthorizedProfilePostsBuilder(
+            userId: FirebaseAuth.instance.currentUser?.uid,
+            builder: (context, all, waiting, refreshPosts) {
               final originals = all.where((p) => !p.isRepost).toList();
               final reposts = all.where((p) => p.isRepost).toList();
 
@@ -38416,9 +37488,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           MaterialPageRoute(builder: (_) => const CreatePostScreen()),
                         );
                       },
-                      onChanged: () {
-                        if (mounted) setState(() {});
-                      },
+                      onChanged: refreshPosts,
                       onSetPinned: _setPinnedPost,
                       currentPinnedId: pinnedPostId,
                     ),
@@ -38434,13 +37504,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                       emptyLabel: 'لا توجد إعادة نشر',
                       emptyIcon: Icons.repeat_rounded,
                       t: t,
-                      onChanged: () {
-                        if (mounted) setState(() {});
-                      },
+                      onChanged: refreshPosts,
                     ),
                     // 3 تعليقات
                     _ProfileCommentsPane(
                       loading: _loadingComments,
+                      error: _commentsError,
+                      onRetry: _loadUserComments,
                       comments: _userComments,
                       t: t,
                     ),
@@ -38475,40 +37545,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                         ),
                         Expanded(
-                          child: StreamBuilder<
-                              QuerySnapshot<Map<String, dynamic>>>(
-                            stream: _showDisliked
-                                ? _dislikedPostsStream
-                                : _likedPostsStream,
-                            builder: (context, reactionSnap) {
-                              final reactionWaiting =
-                                  reactionSnap.connectionState ==
-                                      ConnectionState.waiting &&
-                                      !reactionSnap.hasData;
-                              if (reactionWaiting) {
-                                return const _ProfileTabLoading();
-                              }
-                              final posts = (reactionSnap.data?.docs ?? [])
-                                  .map((d) => _Post.fromFirestore(d))
-                                  .toList()
-                                ..sort(
-                                      (a, b) =>
-                                      b.createdAt.compareTo(a.createdAt),
-                                );
-                              return _ProfilePostsPane(
-                                posts: posts,
-                                emptyLabel: _showDisliked
-                                    ? 'لا توجد منشورات غير معجب بها'
-                                    : 'لا توجد إعجابات',
-                                emptyIcon: _showDisliked
-                                    ? Icons.heart_broken_rounded
-                                    : Icons.favorite_border_rounded,
-                                t: t,
-                                onChanged: () {
-                                  if (mounted) setState(() {});
-                                },
-                              );
-                            },
+                          child: _AuthorizedReactionPosts(
+                            key: ValueKey(_showDisliked),
+                            disliked: _showDisliked,
+                            t: t,
                           ),
                         ),
                       ],
@@ -40984,6 +40024,216 @@ class _ProfileMediaPane extends StatelessWidget {
   }
 }
 
+class _AuthorizedProfilePostsBuilder extends StatefulWidget {
+  const _AuthorizedProfilePostsBuilder({required this.userId, required this.builder, this.enabled = true});
+  final String? userId;
+  final bool enabled;
+  final Widget Function(BuildContext, List<_Post>, bool, VoidCallback) builder;
+  @override
+  State<_AuthorizedProfilePostsBuilder> createState() => _AuthorizedProfilePostsBuilderState();
+}
+
+class _AuthorizedProfilePostsBuilderState extends State<_AuthorizedProfilePostsBuilder> {
+  final List<_Post> _posts = [];
+  Map<String, dynamic>? _cursor;
+  bool _loading = false, _more = true;
+  String? _error, _viewer;
+  int _generation = 0;
+  StreamSubscription<User?>? _auth;
+  @override
+  void initState() {
+    super.initState();
+    _viewer = FirebaseAuth.instance.currentUser?.uid;
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || user?.uid == _viewer) return;
+      _viewer = user?.uid; _refresh();
+    });
+    blockedListRevision.addListener(_refresh);
+    authorProfileRevision.addListener(_refresh);
+    followRevision.addListener(_refresh);
+    _refresh();
+  }
+  @override
+  void didUpdateWidget(covariant _AuthorizedProfilePostsBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId || oldWidget.enabled != widget.enabled) _refresh();
+  }
+  void _refresh() { if (mounted) _load(reset: true); }
+  Future<void> _load({bool reset = false}) async {
+    if (!mounted || (!reset && (_loading || !_more))) return;
+    final generation = reset ? ++_generation : _generation;
+    final viewer = FirebaseAuth.instance.currentUser?.uid;
+    final target = widget.userId;
+    bool current() => mounted && generation == _generation &&
+        viewer == FirebaseAuth.instance.currentUser?.uid && target == widget.userId;
+    setState(() {
+      _error = null;
+      if (reset) { _posts.clear(); _cursor = null; _more = true; }
+      _loading = widget.enabled && target != null;
+    });
+    if (!_loading) return;
+    try {
+      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readProfilePosts', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+          .call<Map<String, dynamic>>({'userId': target, 'cursor': _cursor});
+      if (!current()) return;
+      final page = result.data;
+      if (page['posts'] is! List || page['exhausted'] is! bool ||
+          (page['cursor'] != null && page['cursor'] is! Map) ||
+          (page['exhausted'] == false && page['cursor'] == null)) throw StateError('Invalid profile page');
+      final incoming = (page['posts'] as List).map((row) {
+        if (row is! Map || row['id'] is! String || row['data'] is! Map) throw StateError('Invalid post');
+        final post = _Post.fromData(row['id'] as String, Map<String, dynamic>.from(row['data'] as Map));
+        if (post.authorId != target) throw StateError('Unexpected post author');
+        return post;
+      }).toList();
+      final ids = _posts.map((p) => p.id).toSet();
+      setState(() {
+        _posts.addAll(incoming.where((p) => !ids.contains(p.id)));
+        _posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _cursor = page['cursor'] == null ? null : Map<String, dynamic>.from(page['cursor'] as Map);
+        _more = page['exhausted'] == false; _loading = false;
+      });
+    } catch (_) {
+      if (!current()) return;
+      setState(() { _loading = false; _posts.clear(); _error = 'تعذر تحميل منشورات الملف'; });
+    }
+  }
+  @override
+  void dispose() {
+    _generation++; _auth?.cancel();
+    blockedListRevision.removeListener(_refresh);
+    authorProfileRevision.removeListener(_refresh);
+    followRevision.removeListener(_refresh);
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) => Column(children: [
+    Expanded(child: widget.builder(context, List<_Post>.from(_posts), _loading && _posts.isEmpty, _refresh)),
+    if (widget.enabled) SafeArea(top: false, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      if (_error != null) Flexible(child: Text(_error!)),
+      TextButton(onPressed: _loading ? null : _refresh, child: Text(_error == null ? 'تحديث' : 'إعادة المحاولة')),
+      if (_more && _error == null && widget.userId != null)
+        TextButton(onPressed: _loading ? null : () => _load(), child: Text(_loading ? 'جارٍ التحميل...' : 'تحميل المزيد')),
+    ])),
+  ]);
+}
+
+class _AuthorizedReactionPosts extends StatefulWidget {
+  const _AuthorizedReactionPosts({super.key, required this.disliked, required this.t});
+  final bool disliked;
+  final _ProfileTheme t;
+  @override
+  State<_AuthorizedReactionPosts> createState() => _AuthorizedReactionPostsState();
+}
+
+class _AuthorizedReactionPostsState extends State<_AuthorizedReactionPosts> {
+  final List<_Post> _posts = [];
+  Map<String, dynamic>? _cursor;
+  bool _loading = true, _more = true;
+  String? _error, _uid;
+  int _generation = 0;
+  StreamSubscription<User?>? _auth;
+
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || _uid == user?.uid) return;
+      _uid = user?.uid;
+      _refresh();
+    });
+    blockedListRevision.addListener(_refresh);
+    authorProfileRevision.addListener(_refresh);
+    followRevision.addListener(_refresh);
+    _refresh();
+  }
+
+  void _refresh() { if (mounted) _load(reset: true); }
+
+  Future<void> _load({bool reset = false}) async {
+    if (!mounted || (!reset && (_loading || !_more))) return;
+    final generation = reset ? ++_generation : _generation;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    bool current() => mounted && generation == _generation &&
+        uid == FirebaseAuth.instance.currentUser?.uid;
+    setState(() {
+      _loading = true;
+      _error = null;
+      if (reset) { _posts.clear(); _cursor = null; _more = true; }
+    });
+    try {
+      if (uid == null) throw StateError('Sign in first');
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readOwnReactionPosts', options: HttpsCallableOptions(
+            timeout: const Duration(seconds: 120),
+          )).call<Map<String, dynamic>>({
+            'reaction': widget.disliked ? 'dislike' : 'like', 'cursor': _cursor,
+          });
+      if (!current()) return;
+      final page = response.data;
+      if (page['posts'] is! List || page['exhausted'] is! bool ||
+          (page['cursor'] != null && page['cursor'] is! Map) ||
+          (page['exhausted'] == false && page['cursor'] == null)) {
+        throw StateError('Invalid reaction page');
+      }
+      final incoming = (page['posts'] as List).map((row) {
+        if (row is! Map || row['id'] is! String || row['data'] is! Map) {
+          throw StateError('Invalid reaction post');
+        }
+        return _Post.fromData(row['id'] as String, Map<String, dynamic>.from(row['data'] as Map));
+      }).toList();
+      final existing = _posts.map((p) => p.id).toSet();
+      setState(() {
+        _posts.addAll(incoming.where((p) => !existing.contains(p.id)));
+        _posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _cursor = page['cursor'] == null ? null : Map<String, dynamic>.from(page['cursor'] as Map);
+        _more = page['exhausted'] == false;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!current()) return;
+      setState(() { _loading = false; _posts.clear(); _error = 'تعذر تحميل التفاعلات'; });
+    }
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _auth?.cancel();
+    blockedListRevision.removeListener(_refresh);
+    authorProfileRevision.removeListener(_refresh);
+    followRevision.removeListener(_refresh);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) return Center(child: Column(
+      mainAxisSize: MainAxisSize.min, children: [Text(_error!),
+        TextButton(onPressed: _refresh, child: const Text('إعادة المحاولة'))],
+    ));
+    if (_loading && _posts.isEmpty) return const _ProfileTabLoading();
+    return Column(children: [
+      Align(alignment: AlignmentDirectional.centerEnd, child: TextButton.icon(
+        onPressed: _loading ? null : _refresh,
+        icon: const Icon(Icons.refresh), label: const Text('تحديث'),
+      )),
+      Expanded(child: _ProfilePostsPane(
+        posts: _posts, t: widget.t,
+        emptyLabel: widget.disliked ? 'لا توجد منشورات غير معجب بها' : 'لا توجد إعجابات',
+        emptyIcon: widget.disliked ? Icons.heart_broken_rounded : Icons.favorite_border_rounded,
+        onChanged: _refresh,
+      )),
+      if (_more) TextButton(
+        onPressed: _loading ? null : () => _load(),
+        child: Text(_loading ? 'جارٍ التحميل...' : 'تحميل المزيد'),
+      ),
+    ]);
+  }
+}
+
 class _ProfilePostsPane extends StatelessWidget {
   const _ProfilePostsPane({
     required this.posts,
@@ -41176,8 +40426,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   List<_ProfileCommentHit> _userComments = [];
-  bool _loadingComments = true;
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _postsStream;
+  bool _loadingComments=true;
+  String? _commentsError;
+  int _commentsGeneration = 0;
   final ScrollController _scrollController = ScrollController();
   StreamSubscription<Map<String, dynamic>>? _presenceSub;
   Set<String> _hiddenPostIds = {};
@@ -41237,11 +40488,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     super.initState();
     _displayName = (widget.initialName ?? '').trim();
     _photoUrl = widget.initialPhotoUrl;
-    _postsStream = FirebaseFirestore.instance
-        .collection('community_posts')
-        .where('authorId', isEqualTo: widget.userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots();
     _tabController = TabController(length: 3, vsync: this);
     _scrollController.addListener(_onScroll);
     _loadProfile();
@@ -41588,17 +40834,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
   Future<void> _loadUserComments() async {
-    setState(() => _loadingComments = true);
+    if (!mounted) return;
+    final generation = ++_commentsGeneration;
+    final viewer = FirebaseAuth.instance.currentUser?.uid;
+    final target = widget.userId;
+    bool current() => mounted && generation == _commentsGeneration &&
+        viewer == FirebaseAuth.instance.currentUser?.uid;
+    setState(() { _loadingComments = true; _commentsError = null; _userComments = []; });
     try {
-      final hits = await loadCommentsByAuthor(widget.userId);
-      if (!mounted) return;
-      setState(() {
-        _userComments = hits;
-        _loadingComments = false;
-      });
-    } catch (e) {
-      debugPrint('load user comments failed: $e');
-      if (mounted) setState(() => _loadingComments = false);
+      if (viewer == null || target == null) throw StateError('Sign in first');
+      final hits = await loadCommentsByAuthor(target);
+      if (!current()) return;
+      setState(() { _userComments = hits; _loadingComments = false; });
+    } catch (_) {
+      if (!current()) return;
+      setState(() { _loadingComments = false; _userComments = []; _commentsError = 'تعذر تحميل التعليقات'; });
     }
   }
 
@@ -42039,23 +41289,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       backgroundColor: t.pageBg,
       body: Stack(
         children: [
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _canSeePrivateContent ? _postsStream : null,
-            builder: (context, snap) {
+          _AuthorizedProfilePostsBuilder(
+            userId: widget.userId,
+            enabled: _canSeePrivateContent,
+            builder: (context, authorized, waiting, refreshPosts) {
               final t = _ProfileTheme.of(context);
-              final waiting = snap.connectionState == ConnectionState.waiting &&
-                  !snap.hasData;
-
-              final all = (_canSeePrivateContent ? (snap.data?.docs ?? []) : <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                  .where((d) => !isCommunityPostRemoved(d.data()))
-                  .map((d) => _Post.fromFirestore(d))
-                  .where((p) {
-                final id = p.id?.trim();
-                if (id == null || id.isEmpty) return false;
-                if (!_isSelf && _hiddenPostIds.contains(id)) return false;
-                return true;
-              })
-                  .toList();
+              final all = authorized.where((p) => _isSelf || !_hiddenPostIds.contains(p.id)).toList();
               final originals = all.where((p) => !p.isRepost).toList();
               final reposts = all.where((p) => p.isRepost).toList();
 
@@ -42121,7 +41360,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           ),
                         );
                       },
-                      onChanged: _loadHiddenPosts,
+                      onChanged: () { _loadHiddenPosts(); refreshPosts(); },
                     ),
                     waiting
                         ? const _ProfileTabLoading()
@@ -42130,10 +41369,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       emptyLabel: 'لا توجد إعادة نشر',
                       emptyIcon: Icons.repeat_rounded,
                       t: t,
-                      onChanged: _loadHiddenPosts,
+                      onChanged: () { _loadHiddenPosts(); refreshPosts(); },
                     ),
                     _ProfileCommentsPane(
                       loading: _loadingComments,
+                      error: _commentsError,
+                      onRetry: _loadUserComments,
                       comments: _userComments,
                       t: t,
                     ),
@@ -43189,27 +42430,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     );
   }
   Future<void> _openFollowList({required bool isFollowers}) async {
-    if (!_isSelf) {
-      final vis =
-      isFollowers ? _followersVisibility : _followingVisibility;
-      final ok = await canSeeAudienceList(
-        ownerId: widget.userId,
-        visibility: vis,
-      );
-      if (!ok) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isFollowers
-                  ? 'قائمة المتابعين خاصة'
-                  : 'قائمة المتابَعين خاصة',
-            ),
-          ),
-        );
-        return;
-      }
-    }
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
@@ -43269,11 +42489,15 @@ class _ProfileTabLoading extends StatelessWidget {
 class _ProfileCommentsPane extends StatelessWidget {
   const _ProfileCommentsPane({
     required this.loading,
+    this.error,
+    this.onRetry,
     required this.comments,
     required this.t,
   });
 
   final bool loading;
+  final String? error;
+  final VoidCallback? onRetry;
   final List<_ProfileCommentHit> comments;
   final _ProfileTheme t;
 
@@ -43288,6 +42512,9 @@ class _ProfileCommentsPane extends StatelessWidget {
         ),
       );
     }
+    if (error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Text(error!), TextButton(onPressed: onRetry, child: const Text('إعادة المحاولة')),
+    ]));
     if (comments.isEmpty) {
       return CustomScrollView(
         slivers: [
@@ -43820,152 +43047,101 @@ class _FollowListSheet extends StatefulWidget {
 class _FollowListSheetState extends State<_FollowListSheet> {
   final _search = TextEditingController();
   String _query = '';
-  Set<String> _iFollow = {};
-  Set<String> _followsMe = {};
-  bool _relLoading = true;
-  Set<String> _hiddenIds = {};
-  // NEW: تبديل بين المتابعين/المتابَعين بدون إغلاق الشيت
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String? _listError;
+  int? _nextOffset;
+  bool _truncated = false;
+  int _generation = 0;
+  final Set<String> _busyIds = {};
   late bool _showFollowers = widget.isFollowers;
 
   @override
   void initState() {
     super.initState();
-    _loadMyRelations();
-    _loadHidden();
-    blockedListRevision.addListener(_loadHidden);
+    _refresh();
+    blockedListRevision.addListener(_refresh);
   }
 
   @override
   void dispose() {
-    blockedListRevision.removeListener(_loadHidden);
+    blockedListRevision.removeListener(_refresh);
     _search.dispose();
     super.dispose();
   }
 
-  Future<void> _loadHidden() async {
-    final ids = await loadBlockedUserIds();
-    if (!mounted) return;
-    setState(() => _hiddenIds = ids);
-  }
+  void _refresh() { _loadPage(reset: true); }
 
-  Future<void> _loadMyRelations() async {
+  Future<void> _loadPage({bool reset = false}) async {
+    if (!reset && (_loading || _nextOffset == null)) return;
+    final generation = ++_generation;
     final me = FirebaseAuth.instance.currentUser?.uid;
-    if (me == null) {
-      if (mounted) setState(() => _relLoading = false);
-      return;
-    }
+    final offset = reset ? 0 : _nextOffset!;
+    setState(() {
+      _loading = true;
+      _listError = null;
+      if (reset) { _items = []; _nextOffset = null; _truncated = false; }
+    });
     try {
-      final following = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(me)
-          .collection('following')
-          .get();
-      final followers = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(me)
-          .collection('followers')
-          .get();
-      if (!mounted) return;
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readFollowList').call<Map<String, dynamic>>({
+        'userId': widget.ownerId, 'kind': _showFollowers ? 'followers' : 'following', 'offset': offset,
+      });
+      final rows = response.data['items'];
+      if (rows is! List) throw const FormatException('Invalid list response');
+      final items = rows.map((r) => Map<String, dynamic>.from(r as Map)).toList();
+      if (items.any((r) => r['id'] is! String || r['name'] is! String)) {
+        throw const FormatException('Invalid list member');
+      }
+      if (!mounted || generation != _generation) return;
+      if (FirebaseAuth.instance.currentUser?.uid != me) {
+        setState(() { _items = []; _loading = false; _listError = 'أعد فتح القائمة بعد تسجيل الدخول.'; });
+        return;
+      }
       setState(() {
-        _iFollow = following.docs.map((d) => d.id).toSet();
-        _followsMe = followers.docs.map((d) => d.id).toSet();
-        _relLoading = false;
+        final merged = {for (final item in _items) item['id']: item,
+          for (final item in items) item['id']: item};
+        _items = merged.values.toList()..sort((a,b) =>
+            ((b['createdAtMs'] as num?) ?? 0).compareTo((a['createdAtMs'] as num?) ?? 0));
+        _nextOffset = response.data['nextOffset'] as int?;
+        _truncated = response.data['truncated'] == true;
+        _loading = false;
       });
     } catch (e) {
-      debugPrint('load follow relations failed: $e');
-      if (mounted) setState(() => _relLoading = false);
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        // Clear previously loaded identities if access has changed or cannot be confirmed.
+        _items = []; _nextOffset = null; _loading = false;
+        _listError = e is FirebaseFunctionsException && e.code == 'permission-denied'
+            ? 'هذه القائمة خاصة وفق إعدادات صاحب الحساب.'
+            : 'تعذر عرض القائمة. قد تكون غير متاحة؛ حاول مجددًا.';
+      });
     }
   }
 
-  Future<void> _applyFollow({
-    required String id,
-    required String name,
-    String? photo,
-    required bool follow,
-  }) async {
-    final me = FirebaseAuth.instance.currentUser;
-    final myUid = me?.uid;
-    if (myUid == null) return;
-
-    if (!follow) {
-      final t = _ProfileTheme.of(context);
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('إلغاء المتابعة؟'),
-            content: Text('لن يظهر $name في قائمة المتابَعين.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('إلغاء'),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('إلغاء المتابعة'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (ok != true) return;
+  Future<void> _applyFollow({required String id, required String name,
+    String? photo, required bool follow}) async {
+    if (_busyIds.contains(id)) return;
+    final row = _items.firstWhere((r) => r['id'] == id);
+    final pending = row['pending'] == true;
+    if (!follow && !pending) {
+      final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('إلغاء المتابعة؟'), content: Text('لن يظهر $name في قائمة المتابَعين.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إلغاء المتابعة'))],
+      ));
+      if (ok != true || !mounted) return;
     }
-
-    setState(() {
-      if (follow) {
-        _iFollow.add(id);
-      } else {
-        _iFollow.remove(id);
-      }
-    });
-
+    if (!mounted || _busyIds.contains(id)) return;
+    setState(() => _busyIds.add(id));
     try {
-      String myName = (me?.displayName ?? '').trim();
-      String? myPhoto = me?.photoURL;
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(myUid)
-            .get();
-        final d = doc.data();
-        final fn = (d?['firstName'] ?? '').toString().trim();
-        final ln = (d?['lastName'] ?? '').toString().trim();
-        final fromNames = [fn, ln].where((e) => e.isNotEmpty).join(' ');
-        if (fromNames.isNotEmpty) myName = fromNames;
-        final p = d?['profileImageUrl']?.toString();
-        if (p != null && p.isNotEmpty) myPhoto = p;
-      } catch (_) {}
-
-      await setFollowing(
-        me: myUid,
-        targetId: id,
-        targetName: name,
-        targetPhotoUrl: photo,
-        myName: myName.isEmpty ? 'طالب UniSpace' : myName,
-        myPhotoUrl: myPhoto,
-        follow: follow,
-      );
-    } catch (e) {
-      debugPrint('list follow failed: $e');
-      if (!mounted) return;
-      setState(() {
-        if (follow) {
-          _iFollow.remove(id);
-        } else {
-          _iFollow.add(id);
-        }
-      });
-      final blocked = e.toString().contains('blocked');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            blocked ? 'لا يمكن المتابعة بسبب الحظر' : 'تعذر تحديث المتابعة',
-          ),
-        ),
-      );
+      await _manageFollow(pending ? 'cancel' : (follow ? 'follow' : 'unfollow'), id);
+      if (mounted) await _loadPage(reset: true);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر تحديث المتابعة. حاول مرة أخرى.')));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(id));
     }
   }
 
@@ -43996,11 +43172,6 @@ class _FollowListSheetState extends State<_FollowListSheet> {
     final t = _ProfileTheme.of(context);
     final me = FirebaseAuth.instance.currentUser?.uid;
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    final col = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.ownerId)
-        .collection(_showFollowers ? 'followers' : 'following');
-
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
       child: DraggableScrollableSheet(
@@ -44032,7 +43203,11 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                   child: _FollowSegmentedSwitch(
                     t: t,
                     showFollowers: _showFollowers,
-                    onChanged: (v) => setState(() => _showFollowers = v),
+                    onChanged: (v) {
+                      if (_showFollowers == v) return;
+                      setState(() => _showFollowers = v);
+                      _refresh();
+                    },
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -44055,73 +43230,60 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                 const SizedBox(height: 6),
 
                 Expanded(
-                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: col.snapshots(),
-                    builder: (context, snap) {
-                      final waiting =
-                          snap.connectionState == ConnectionState.waiting &&
-                              !snap.hasData;
-
-                      if (waiting || _relLoading) {
-                        return ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
-                          itemCount: 6,
-                          itemBuilder: (_, __) => _FollowTileSkeleton(t: t),
-                        );
+                  child: Builder(
+                    builder: (context) {
+                      if (_loading && _items.isEmpty) {
+                        return ListView.builder(itemCount: 6, itemBuilder: (_, __) => _FollowTileSkeleton(t: t));
                       }
-                      if (snap.hasError) {
+                      if (_listError != null) {
+                        return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(_listError!, textAlign: TextAlign.center),
+                          TextButton(onPressed: _refresh, child: const Text('إعادة المحاولة')),
+                        ]));
+                      }
+                      final docs = _items;
+                      final items = docs.where((d) => _query.isEmpty ||
+                          (d['name'] as String).toLowerCase().contains(_query)).toList();
+                      if (docs.isEmpty && _nextOffset == null) {
+                        return Column(children: [
+                          Expanded(child: _FollowEmptyState(t: t, isFollowers: _showFollowers)),
+                          if (_truncated) const Text('وصلت إلى حد العرض الحالي لهذه القائمة.'),
+                          TextButton(onPressed: _refresh, child: const Text('تحديث القائمة')),
+                        ]);
+                      }
+                      if (items.isEmpty && _nextOffset == null) {
                         return Center(
-                          child: Text('تعذر التحميل',
-                              style: TextStyle(color: t.textFaint)),
-                        );
-                      }
-
-                      final docs = [...(snap.data?.docs ?? [])];
-                      docs.sort((a, b) {
-                        final ta = a.data()['createdAt'];
-                        final tb = b.data()['createdAt'];
-                        if (ta is Timestamp && tb is Timestamp) {
-                          return tb.compareTo(ta);
-                        }
-                        return 0;
-                      });
-
-                      final items = docs.where((d) {
-                        final id = (d.data()['uid'] ?? d.id).toString();
-                        if (_hiddenIds.contains(id)) return false;
-                        if (_query.isEmpty) return true;
-                        final name =
-                        (d.data()['name'] ?? '').toString().toLowerCase();
-                        return name.contains(_query);
-                      }).toList();
-
-                      if (docs.isEmpty) {
-                        return _FollowEmptyState(
-                          t: t,
-                          isFollowers: _showFollowers,
-                        );
-                      }
-                      if (items.isEmpty) {
-                        return Center(
-                          child: Text('لا توجد نتائج',
-                              style: TextStyle(color: t.textFaint)),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text('لا توجد نتائج ضمن الحسابات المحمّلة', style: TextStyle(color: t.textFaint)),
+                            TextButton(onPressed: _refresh, child: const Text('تحديث القائمة')),
+                          ]),
                         );
                       }
 
                       return ListView.separated(
                         controller: sc,
                         padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
-                        itemCount: items.length,
+                        itemCount: items.length + 1,
                         separatorBuilder: (_, __) => const SizedBox(height: 2),
                         itemBuilder: (context, i) {
-                          final d = items[i].data();
-                          final id = (d['uid'] ?? items[i].id).toString();
-                          final name =
-                          (d['name'] ?? 'طالب UniSpace').toString();
-                          final photo = d['photoUrl']?.toString();
+                          if (i == items.length) {
+                            return Column(children: [
+                              if (_nextOffset != null) TextButton(
+                                onPressed: _loading ? null : () => _loadPage(),
+                                child: Text(_loading ? 'جارٍ التحميل…' : 'تحميل المزيد'),
+                              ),
+                              if (_truncated) const Text('وصلت إلى حد العرض الحالي لهذه القائمة.'),
+                              TextButton(onPressed: _refresh, child: const Text('تحديث القائمة')),
+                              if (_query.isNotEmpty) const Text('البحث يشمل الحسابات المحمّلة فقط.'),
+                            ]);
+                          }
+                          final d = items[i];
+                          final id = d['id'] as String;
+                          final name = d['name'] as String;
+                          final photo = d['photoUrl'] as String?;
                           final isMe = me != null && me == id;
-                          final iFollow = _iFollow.contains(id);
-                          final followsMe = _followsMe.contains(id);
+                          final iFollow = d['iFollow'] == true;
+                          final followsMe = d['followsMe'] == true;
 
                           return _FollowUserTile(
                             userId: id,
@@ -44130,6 +43292,8 @@ class _FollowListSheetState extends State<_FollowListSheet> {
                             t: t,
                             isMe: isMe,
                             iFollow: iFollow,
+                            pending: d['pending'] == true,
+                            busy: _busyIds.contains(id),
                             followsMe: followsMe,
                             onTap: () => _openUser(id, name, photo),
                             onFollow: () => _applyFollow(
@@ -44429,6 +43593,8 @@ class _FollowUserTile extends StatelessWidget {
     required this.t,
     required this.isMe,
     required this.iFollow,
+    this.pending = false,
+    this.busy = false,
     required this.followsMe,
     required this.onTap,
     required this.onFollow,
@@ -44441,6 +43607,8 @@ class _FollowUserTile extends StatelessWidget {
   final _ProfileTheme t;
   final bool isMe;
   final bool iFollow;
+  final bool pending;
+  final bool busy;
   final bool followsMe;
   final VoidCallback onTap;
   final VoidCallback onFollow;
@@ -44455,7 +43623,7 @@ class _FollowUserTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Row(
           children: [
-            LiveAuthorPhoto(
+            PublicProfilePhoto(
               userId: userId,
               fallbackUrl: photoUrl,
               size: 44,
@@ -44464,24 +43632,8 @@ class _FollowUserTile extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: AuthorProfiles.revision,
-                builder: (context, _, __) {
-                  AuthorProfiles.ensure(userId);
-                  final live = AuthorProfiles.nameOf(userId)?.trim();
-                  final shown = (live != null && live.isNotEmpty) ? live : name;
-                  return Text(
-                    shown,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: t.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  );
-                },
-              ),
+              child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: t.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
             ),
             if (!isMe) _actionButton(context),
           ],
@@ -44491,9 +43643,9 @@ class _FollowUserTile extends StatelessWidget {
   }
 
   Widget _actionButton(BuildContext context) {
-    if (iFollow) {
+    if (iFollow || pending) {
       return OutlinedButton(
-        onPressed: onUnfollow,
+        onPressed: busy ? null : onUnfollow,
         style: OutlinedButton.styleFrom(
           foregroundColor: t.textPrimary,
           side: BorderSide(color: t.cardBorder),
@@ -44504,16 +43656,16 @@ class _FollowUserTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        child: const Text(
-          'Following',
+        child: Text(
+          pending ? 'إلغاء الطلب' : 'متابَع',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
         ),
       );
     }
 
-    final label = followsMe ? 'Follow back' : 'Follow';
+    final label = followsMe ? 'ردّ المتابعة' : 'متابعة';
     return FilledButton(
-      onPressed: onFollow,
+      onPressed: busy ? null : onFollow,
       style: FilledButton.styleFrom(
         backgroundColor: t.isDark ? Colors.white : Colors.black,
         foregroundColor: t.isDark ? Colors.black : Colors.white,
@@ -44651,20 +43803,22 @@ Future<bool> canSeeAudienceList({
 Future<bool> canRepostAuthor(String authorId) async {
   final me = FirebaseAuth.instance.currentUser?.uid;
   if (me == null) return false;
-  if (me == authorId) return true;
   try {
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(authorId)
-        .get();
-    final raw = doc.data()?['privacy'];
-    final who = raw is Map
-        ? (raw['whoCanRepost'] ?? 'everyone').toString()
-        : 'everyone';
-    return canInteractWithAuthor(authorId: authorId, audience: who);
-  } catch (e) {
-    debugPrint('canRepostAuthor failed: $e');
-    return true;
+    final profile = await PublicProfileService.load(authorId);
+    if (FirebaseAuth.instance.currentUser?.uid != me || profile['canViewContent'] != true) return false;
+    if (me == authorId) return true;
+    final who = (profile['privacy'] as Map)['whoCanRepost'];
+    if (who == 'everyone') return true;
+    if (profile['isFollowing'] != true) return false;
+    if (who == 'followers') return true;
+    if (who == 'mutual') {
+      final follower = await FirebaseFirestore.instance.collection('users').doc(me)
+          .collection('followers').doc(authorId).get();
+      return FirebaseAuth.instance.currentUser?.uid == me && follower.exists;
+    }
+    return false;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -44687,164 +43841,29 @@ Future<bool> canCommentOnAuthor(String authorId) async {
     return true;
   }
 }
-Future<void> setFollowing({
-  required String me,
-  required String targetId,
-  required String targetName,
-  String? targetPhotoUrl,
-  required String myName,
-  String? myPhotoUrl,
-  required bool follow,
-}) async {
-  if (me.isEmpty || targetId.isEmpty || me == targetId) return;
-
-  if (follow) {
-    final blocked = await isAccountBlocked(targetId) ||
-        await isBlockedByAccount(targetId);
-    if (blocked) throw StateError('blocked');
+Future<void> _manageFollow(String action, String userId) async {
+  if (FirebaseAuth.instance.currentUser == null) throw StateError('Sign in first');
+  final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable('manageFollow').call<Map<String, dynamic>>({'action': action, 'userId': userId});
+  if (!['none', 'pending', 'following'].contains(result.data['state'])) {
+    throw StateError('Follow operation not confirmed');
   }
-
-  final db = FirebaseFirestore.instance;
-  final followingRef =
-  db.collection('users').doc(me).collection('following').doc(targetId);
-  final followerRef =
-  db.collection('users').doc(targetId).collection('followers').doc(me);
-  final requestRef = _followRequestRef(targetId, me);
-
-  if (follow) {
-    final already = await followingRef.get();
-    if (already.exists) {
-      await requestRef.delete();
-      return;
-    }
-
-    final targetPrivate = await isUserPrivate(targetId);
-    if (targetPrivate) {
-      await requestRef.set({
-        'uid': me,
-        'name': myName,
-        'photoUrl': myPhotoUrl,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      followRevision.value++;
-      unawaited(pushNotification(
-        toUid: targetId,
-        type: 'follow_request',
-        actorName: myName.isEmpty ? 'طالب UniSpace' : myName,
-        actorPhotoUrl: myPhotoUrl,
-        message: 'طلب متابعتك',
-      ));
-      return;
-    }
-
-    final batch = db.batch();
-    batch.set(followingRef, {
-      'uid': targetId,
-      'name': targetName,
-      'photoUrl': targetPhotoUrl,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-    batch.set(followerRef, {
-      'uid': me,
-      'name': myName,
-      'photoUrl': myPhotoUrl,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-    batch.delete(requestRef);
-    await batch.commit();
-    followRevision.value++;
-    unawaited(pushNotification(
-      toUid: targetId,
-      type: 'follow',
-      actorName: myName.isEmpty ? 'طالب UniSpace' : myName,
-      actorPhotoUrl: myPhotoUrl,
-      message: 'بدأ بمتابعتك',
-    ));
-    return;
-  }
-
-  final batch = db.batch();
-  batch.delete(followingRef);
-  batch.delete(followerRef);
-  batch.delete(requestRef);
-  await batch.commit();
   followRevision.value++;
 }
 
-Future<void> cancelFollowRequest(String targetId) async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null || targetId.isEmpty) return;
-  await _followRequestRef(targetId, me).delete();
-  followRevision.value++;
+Future<void> setFollowing({required String me, required String targetId,
+  required String targetName, String? targetPhotoUrl, required String myName,
+  String? myPhotoUrl, required bool follow}) async {
+  if (FirebaseAuth.instance.currentUser?.uid != me) throw StateError('Account changed');
+  await _manageFollow(follow ? 'follow' : 'unfollow', targetId);
 }
 
-Future<void> acceptFollowRequest({
-  required String fromId,
-  required String fromName,
-  String? fromPhotoUrl,
-}) async {
-  final me = FirebaseAuth.instance.currentUser;
-  final myUid = me?.uid;
-  if (myUid == null || fromId.isEmpty || fromId == myUid) return;
+Future<void> cancelFollowRequest(String targetId) => _manageFollow('cancel', targetId);
 
-  String myName = (me?.displayName ?? '').trim();
-  String? myPhoto = me?.photoURL;
-  try {
-    final myDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(myUid)
-        .get();
-    final d = myDoc.data();
-    final fn = (d?['firstName'] ?? '').toString().trim();
-    final ln = (d?['lastName'] ?? '').toString().trim();
-    final fromNames = [fn, ln].where((e) => e.isNotEmpty).join(' ');
-    if (fromNames.isNotEmpty) myName = fromNames;
-    final p = d?['profileImageUrl']?.toString();
-    if (p != null && p.isNotEmpty) myPhoto = p;
-  } catch (_) {}
-  if (myName.isEmpty) myName = 'طالب UniSpace';
+Future<void> acceptFollowRequest({required String fromId, required String fromName,
+  String? fromPhotoUrl}) => _manageFollow('accept', fromId);
 
-  final db = FirebaseFirestore.instance;
-  final batch = db.batch();
-  batch.set(
-    db.collection('users').doc(fromId).collection('following').doc(myUid),
-    {
-      'uid': myUid,
-      'name': myName,
-      'photoUrl': myPhoto,
-      'createdAt': FieldValue.serverTimestamp(),
-    },
-  );
-  batch.set(
-    db.collection('users').doc(myUid).collection('followers').doc(fromId),
-    {
-      'uid': fromId,
-      'name': fromName,
-      'photoUrl': fromPhotoUrl,
-      'createdAt': FieldValue.serverTimestamp(),
-    },
-  );
-  batch.delete(_followRequestRef(myUid, fromId));
-  await batch.commit();
-  followRevision.value++;
-
-  unawaited(pushNotification(
-    toUid: fromId,
-    type: 'follow_accepted',
-    actorName: myName,
-    actorPhotoUrl: myPhoto,
-    message: 'قبل طلب المتابعة',
-  ));
-}
-
-Future<void> rejectFollowRequest(String fromId) async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null || fromId.isEmpty) return;
-  await _followRequestRef(me, fromId).delete();
-  followRevision.value++;
-}
-
+Future<void> rejectFollowRequest(String fromId) => _manageFollow('reject', fromId);
 
 DocumentReference<Map<String, dynamic>> _blockedAccountRef(
     String ownerId,
@@ -44940,60 +43959,54 @@ Future<Set<String>> loadHiddenAuthorIds() async {
   return ids;
 }
 
-Future<void> blockAccount({
-  required String targetId,
-  required String targetName,
-  String? targetPhotoUrl,
-}) async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null || targetId.isEmpty || me == targetId) return;
-
-  final db = FirebaseFirestore.instance;
-  final batch = db.batch();
-
-  batch.set(_blockedAccountRef(me, targetId), {
-    'targetId': targetId,
-    'targetName': targetName,
-    'targetPhotoUrl': targetPhotoUrl,
-    'blockedAt': FieldValue.serverTimestamp(),
-  });
-  batch.set(_blockedByRef(targetId, me), {
-    'blockerId': me,
-    'blockedAt': FieldValue.serverTimestamp(),
-  });
-
-  // قطع المتابعة في الاتجاهين (الحاجب يملك الحذف بفضل القواعد)
-  batch.delete(db.collection('users').doc(me).collection('following').doc(targetId));
-  batch.delete(db.collection('users').doc(targetId).collection('followers').doc(me));
-  batch.delete(db.collection('users').doc(targetId).collection('following').doc(me));
-  batch.delete(db.collection('users').doc(me).collection('followers').doc(targetId));
-
-  await batch.commit();
+Future<void> blockAccount({required String targetId, required String targetName,
+  String? targetPhotoUrl}) async {
+  await _manageFollow('block', targetId);
   blockedListRevision.value++;
-  followRevision.value++;
 }
 
 Future<void> unblockAccount(String targetId) async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null || targetId.isEmpty) return;
-
-  final batch = FirebaseFirestore.instance.batch();
-  batch.delete(_blockedAccountRef(me, targetId));
-  batch.delete(_blockedByRef(targetId, me));
-  await batch.commit();
+  await _manageFollow('unblock', targetId);
   blockedListRevision.value++;
 }
 
 
 
 
-class FollowRequestsScreen extends StatelessWidget {
+class FollowRequestsScreen extends StatefulWidget {
   const FollowRequestsScreen({super.key});
+  @override
+  State<FollowRequestsScreen> createState() => _FollowRequestsScreenState();
+}
+class _FollowRequestsScreenState extends State<FollowRequestsScreen> {
+  String? _uid;
+  late Future<Set<String>> _blocked;
+  StreamSubscription<User?>? _auth;
+  int _revision = 0;
+  void _load() {
+    _blocked = _loadNotificationBlockedIds(_uid);
+    unawaited(_blocked.then<void>((_) {}, onError: (Object error, StackTrace stack) {}));
+  }
+  void _refresh() { if (mounted) setState(() { _revision++; _load(); }); }
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _load();
+    blockedListRevision.addListener(_refresh);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user?.uid != _uid) { _uid = user?.uid; _refresh(); }
+    });
+  }
+  @override
+  void dispose() { _auth?.cancel(); blockedListRevision.removeListener(_refresh); super.dispose(); }
+  Widget _retry() => Center(child: TextButton(onPressed: _refresh,
+    child: const Text('تعذر تحميل طلبات المتابعة. إعادة المحاولة')));
 
   @override
   Widget build(BuildContext context) {
     final t = _ProfileTheme.of(context);
-    final me = FirebaseAuth.instance.currentUser?.uid;
+    final me = _uid;
 
     return Scaffold(
       backgroundColor: t.pageBg,
@@ -45007,19 +44020,23 @@ class FollowRequestsScreen extends StatelessWidget {
         child: Text('سجّل الدخول أولاً', style: TextStyle(color: t.textFaint)),
       )
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        key: ValueKey('$me:$_revision'),
         stream: FirebaseFirestore.instance
             .collection('users')
             .doc(me)
             .collection('follow_requests')
             .snapshots(),
         builder: (context, snap) {
-          if (!snap.hasData) {
+          if (snap.hasError) return _retry();
+          if (snap.connectionState == ConnectionState.waiting || !snap.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           return FutureBuilder<Set<String>>(
-            future: loadBlockedUserIds(),
+            future: _blocked,
             builder: (context, blockedSnap) {
-              final blocked = blockedSnap.data ?? {};
+              if (blockedSnap.hasError) return _retry();
+              if (blockedSnap.connectionState != ConnectionState.done || !blockedSnap.hasData) return const Center(child: CircularProgressIndicator());
+              final blocked = blockedSnap.data!;
               final visible = snap.data!.docs.where((d) {
                 final id = (d.data()['uid'] ?? d.id).toString();
                 return !blocked.contains(id);
@@ -46554,6 +45571,7 @@ final FlutterLocalNotificationsPlugin _localNotifs =
 FlutterLocalNotificationsPlugin();
 
 Future<void> initPushNotifications() async {
+  PushPreferencesService.instance.start();
   try {
     final messaging = FirebaseMessaging.instance;
 
@@ -46582,13 +45600,17 @@ Future<void> initPushNotifications() async {
       },
     );
 
+    // Foreground presentation goes through the local preference check below.
     await messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
+      alert: false,
+      badge: false,
+      sound: false,
     );
 
     FirebaseMessaging.onMessage.listen((msg) async {
+      if (FirebaseAuth.instance.currentUser == null ||
+          (msg.data['recipientId'] != null && msg.data['recipientId'] != FirebaseAuth.instance.currentUser?.uid) ||
+          !PushPreferencesService.instance.allows(msg.data['type']?.toString() ?? '')) return;
       final n = msg.notification;
       if (n == null) return;
       await _localNotifs.show(
@@ -46630,7 +45652,7 @@ Future<void> initPushNotifications() async {
     await saveFcmToken();
     FirebaseMessaging.instance.onTokenRefresh.listen((t) => saveFcmToken(t));
     FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user != null) saveFcmToken();
+      saveFcmToken();
     });
   } catch (e, st) {
     debugPrint('initPushNotifications failed: $e');
@@ -46640,33 +45662,8 @@ Future<void> initPushNotifications() async {
 
 final unispaceNavigatorKey = GlobalKey<NavigatorState>();
 
-Future<void> saveFcmToken([String? token]) async {
-  final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null) return;
-  try {
-    token ??= await FirebaseMessaging.instance
-        .getToken()
-        .timeout(const Duration(seconds: 8));
-  } catch (e) {
-    debugPrint('getToken: $e');
-    return;
-  }
-  if (token == null || token.isEmpty) return;
-  try {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('fcm_tokens')
-        .doc(token.hashCode.toString())
-        .set({
-      'token': token,
-      'platform': defaultTargetPlatform.name,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  } catch (e) {
-    debugPrint('save FCM token failed: $e');
-  }
-}
+Future<void> saveFcmToken([String? token]) =>
+    PushPreferencesService.instance.sync(token);
 
 void _handleFcmPayload(String payload) {
   try {
@@ -46680,6 +45677,8 @@ void _handleFcmPayload(String payload) {
 }
 
 void _openFromFcmData(Map<String, dynamic> data) {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null || (data['recipientId'] != null && data['recipientId'] != uid)) return;
   final ctx = unispaceNavigatorKey.currentContext;
   if (ctx == null) return;
   final n = NotificationItem(

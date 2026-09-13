@@ -10,6 +10,21 @@ service cloud.firestore {
     match /mfaRecovery/{userId} { allow read, write: if false; }
     match /mfaRecoveryAttempts/{attemptId} { allow read, write: if false; }
 
+    match /peopleSearchLimits/{userId} { allow read, write: if false; }
+
+    match /contentSearchLimits/{userId} { allow read, write: if false; }
+
+    match /postDeletionReceipts/{postId} { allow read, write: if false; }
+
+    match /postPublicationReceipts/{postId} { allow read, write: if false; }
+
+    match /repostPublicationReceipts/{postId} { allow read, write: if false; }
+
+    match /pushTokenOwners/{deviceId} {
+      allow read, write: if false;
+      match /revocations/{uid} { allow read, write: if false; }
+    }
+
     function hasActiveAuthentication() {
       return request.auth != null
         && (!exists(/databases/$(database)/documents/authRevocations/$(request.auth.uid))
@@ -33,6 +48,31 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, update, delete: if hasActiveAuthentication() && request.auth.uid == userId;
       allow create: if false;
+
+      match /blocked_accounts/{targetId} {
+        allow get: if hasActiveAuthentication() && (request.auth.uid == userId || request.auth.uid == targetId);
+        allow list: if hasActiveAuthentication() && request.auth.uid == userId;
+        allow write: if false;
+      }
+      match /blocked_by/{blockerId} {
+        allow read: if hasActiveAuthentication() && request.auth.uid == userId;
+        allow write: if false;
+      }
+      // Only the callable can create or remove authoritative follow relationships.
+      match /followers/{memberId} {
+        allow get: if hasActiveAuthentication() && (request.auth.uid == userId || request.auth.uid == memberId);
+        allow list: if hasActiveAuthentication() && request.auth.uid == userId;
+        allow write: if false;
+      }
+      match /following/{memberId} {
+        allow read: if hasActiveAuthentication() && request.auth.uid == userId;
+        allow write: if false;
+      }
+      match /follow_requests/{requesterId} {
+        allow get: if hasActiveAuthentication() && (request.auth.uid == userId || request.auth.uid == requesterId);
+        allow list: if hasActiveAuthentication() && request.auth.uid == userId;
+        allow write: if false;
+      }
 
       match /sessions/{sessionId} {
         allow read: if hasActiveAuthentication() && request.auth.uid == userId;

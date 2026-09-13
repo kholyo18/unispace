@@ -7,7 +7,7 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "test:security": "node --test --test-concurrency=1 test/session-security.test.cjs test/mfa-recovery.test.cjs test/public-profile.test.cjs"
+    "test:security": "node --test --test-concurrency=1 test/session-security.test.cjs test/mfa-recovery.test.cjs test/public-profile.test.cjs test/follow-relationships.test.cjs"
   },
   "engines": {
     "node": "24"

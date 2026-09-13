@@ -1,3 +1,4 @@
+import '../../services/auth_session_service.dart';
 import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
@@ -179,7 +180,7 @@ class _TwoFactorOtpScreenState extends State<TwoFactorOtpScreen> {
               ),
             ),
             TextButton(
-              onPressed: _loading ? null : () => FirebaseAuth.instance.signOut(),
+              onPressed: _loading ? null : () => AuthSessionService.signOutFully(),
               child: Text(s.twoFactorBackToLogin),
             ),
           ],

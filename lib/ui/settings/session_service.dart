@@ -33,6 +33,7 @@ class SessionService with WidgetsBindingObserver {
   String? _lastHeartbeatSession;
   Future<void> _initialization = Future<void>.value();
   bool _isObservingLifecycle = false;
+  final ValueNotifier<int> sessionRevision = ValueNotifier<int>(0);
 
   Future<String> getOrCreateInstallationId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -101,6 +102,7 @@ class SessionService with WidgetsBindingObserver {
       return;
     }
     await markCurrentSession(uid, sessionId);
+    sessionRevision.value++;
     await _attachSessionRevocationListener(uid);
     _startHeartbeat();
     _ensureAuthListener();

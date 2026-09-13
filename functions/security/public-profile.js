@@ -15,6 +15,8 @@ function projectProfile(data, { self, following }) {
     showLastSeen: canViewContent && (self || p.showLastSeen === true),
     followersVisibility: audience(p.followersVisibility),
     followingVisibility: audience(p.followingVisibility),
+    whoCanComment: audience(p.whoCanComment),
+    whoCanRepost: audience(p.whoCanRepost),
   } };
   const copy = keys => { for (const key of keys) if (typeof data[key] === 'string') result[key] = data[key]; };
   copy(['firstName', 'lastName', 'displayName', 'username', 'profileImageUrl']);
