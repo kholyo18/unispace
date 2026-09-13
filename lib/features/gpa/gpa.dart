@@ -19,6 +19,1585 @@ import 'package:flutter/widgets.dart';
 import '../../../ui/widgets/app_scaffold.dart';
 import '../../core/translate_subject.dart';
 import 'package:UniSpace/main.dart';
+import 'package:UniSpace/ui/settings/drawer_screens.dart';
+import 'package:UniSpace/ui/faculty_search_page.dart';
+import 'package:UniSpace/ui/settings/app_settings.dart';
+import 'package:UniSpace/ui/widgets/metric_tile.dart';
+import 'package:UniSpace/ui/settings/user_profile_service.dart';
+import 'package:translator/translator.dart';
+
+SemesterSpec _pickSemester(List<SemesterSpec> specs, String label) {
+  final normalizedLabel = label.toUpperCase();
+  if (specs.isEmpty) {
+    return const SemesterSpec(name: 'S?', modules: []);
+  }
+  return specs.firstWhere(
+        (s) => s.name.toUpperCase() == normalizedLabel,
+    orElse: () {
+      if (normalizedLabel == 'S1') {
+        return specs.first;
+      }
+      if (normalizedLabel == 'S2' && specs.length > 1) {
+        return specs.last;
+      }
+      return specs.first;
+    },
+  );
+}
+
+class HomeLandingScreen extends StatefulWidget {
+  const HomeLandingScreen({
+    super.key,
+    this.showAppBar = false,
+    this.bottomPadding = 0,
+    this.onOpenDrawer,
+  });
+
+  final bool showAppBar;
+  final double bottomPadding;
+  final VoidCallback? onOpenDrawer;   // ← added
+
+  @override
+  State<HomeLandingScreen> createState() => _HomeLandingScreenState();
+}
+
+class _HomeLandingScreenState extends State<HomeLandingScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearchOpen = false;
+
+  Future<void> _openSearch(BuildContext context, String initialQuery) async {
+    if (_isSearchOpen) {
+      return;
+    }
+    _isSearchOpen = true;
+    FocusScope.of(context).unfocus();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FacultySearchPage(
+          faculties: getDemoFaculties(context),
+          initialQuery: initialQuery,
+          onFacultySelected: _openFaculty,
+        ),
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    _searchController.clear();
+    _isSearchOpen = false;
+  }
+
+  void _openFaculty(BuildContext context, ProgramFaculty faculty) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => FacultyMajorsScreen(faculty: faculty)),
+    );
+  }
+
+  void _openAcademicShortcut(BuildContext context, SettingsData settings) {
+    final faculties = getDemoFaculties(context);
+    final targetFaculty = settings.academicFacultyName.isNotEmpty
+        ? settings.academicFacultyName
+        : settings.academicFacultyId;
+    final targetDepartment = settings.academicDepartmentName.isNotEmpty
+        ? settings.academicDepartmentName
+        : settings.academicDepartmentId;
+    final targetSpecialty = settings.academicSpecialtyName.isNotEmpty
+        ? settings.academicSpecialtyName
+        : settings.academicSpecialtyId;
+    final targetLevel = settings.academicLevel;
+
+    ProgramFaculty? matchedFaculty;
+    ProgramMajor? matchedMajor;
+    ProgramTrack? matchedTrack;
+
+    for (final faculty in faculties) {
+      if (targetFaculty.isNotEmpty && faculty.name != targetFaculty) {
+        continue;
+      }
+      matchedFaculty = faculty;
+      for (final major in faculty.majors) {
+        if (targetDepartment.isNotEmpty && major.name != targetDepartment) {
+          continue;
+        }
+        matchedMajor = major;
+        for (final track in major.tracks) {
+          final matchesSpecialty = track.name == targetSpecialty ||
+              (settings.academicSpecialtyId.isNotEmpty &&
+                  track.name == settings.academicSpecialtyId);
+          final matchesLevel =
+              targetLevel.isEmpty || track.level == targetLevel;
+          if (matchesSpecialty && matchesLevel) {
+            matchedTrack = track;
+            break;
+          }
+        }
+        if (matchedTrack != null) {
+          break;
+        }
+      }
+      if (matchedTrack != null) {
+        break;
+      }
+    }
+
+    if (matchedTrack != null &&
+        matchedMajor != null &&
+        matchedFaculty != null) {
+      final selectedFaculty = matchedFaculty;
+      final selectedMajor = matchedMajor;
+      final selectedTrack = matchedTrack;
+      if (selectedFaculty == null ||
+          selectedMajor == null ||
+          selectedTrack == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AcademicSettingsScreen(),
+          ),
+        );
+        return;
+      }
+      final specs = createSemesterSpecsForTrack(selectedTrack);
+      final sem1 = _pickSemester(specs, 'S1');
+      final sem2 = _pickSemester(specs, 'S2');
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StudiesTableScreen(
+            facultyName: selectedFaculty.name,
+            programName: '${selectedMajor.name} • ${selectedTrack.name}',
+            collegeId: selectedFaculty.name,
+            departmentId: selectedMajor.name,
+            specialtyId: selectedTrack.name,
+            level: selectedTrack.level,
+            academicScopeId: buildAcademicStorageSignature(
+              semester1: sem1,
+              semester2: sem2,
+              level: selectedTrack.level,
+            ),
+            semester1Modules: sem1,
+            semester2Modules: sem2,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (matchedMajor != null && matchedFaculty != null) {
+      final selectedMajor = matchedMajor;
+      final selectedFaculty = matchedFaculty;
+      if (selectedMajor == null || selectedFaculty == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AcademicSettingsScreen(),
+          ),
+        );
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MajorTracksScreen(
+            major: selectedMajor,
+            faculty: selectedFaculty,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (matchedFaculty != null) {
+      final selectedFaculty = matchedFaculty;
+      if (selectedFaculty == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AcademicSettingsScreen(),
+          ),
+        );
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FacultyMajorsScreen(faculty: selectedFaculty),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
+    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AcademicSettingsScreen(),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final faculties = getDemoFaculties(context).take(6).toList();
+    final quickFaculty = faculties.isNotEmpty ? faculties.first : null;
+
+    return AppScaffold(
+      padding: EdgeInsets.zero,
+      appBar: widget.showAppBar
+          ? AppBar(
+        elevation: 0,
+        centerTitle: false,
+        automaticallyImplyLeading: true,
+        titleSpacing: 16,
+        title: Text(
+          S.of(context).gpu,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      )
+          : null,
+      body: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    S.of(context).gpu,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: colorScheme.onSurface,fontSize: 23.5
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Center(
+                      child:Text(
+                    'ابحث عن تخصصك, قم بادخال علاماتك واضطلع على معدلك',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  )),
+                  const SizedBox(height: 18),
+                  Material(
+                    color: colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.65,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    child: TextField(
+                      controller: _searchController,
+                      textInputAction: TextInputAction.search,
+                      onTap: () {
+                        _openSearch(
+                          context,
+                          _searchController.text,
+                        );
+                      },
+                      onSubmitted: (value) {
+                        if (value.trim().isNotEmpty) {
+                          _openSearch(context, value.trim());
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: S.of(context).searchFaculty,
+                        hintStyle: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: colorScheme.primary,
+                        ),
+                        suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _searchController,
+                          builder: (context, value, child) {
+                            if (value.text.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+
+                            return IconButton(
+                              tooltip: 'مسح',
+                              onPressed: _searchController.clear,
+                              icon: const Icon(Icons.close_rounded),
+                            );
+                          },
+                        ),
+                        filled: true,
+                        fillColor: Colors.transparent,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 15,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: colorScheme.outline.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: colorScheme.outline.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: colorScheme.primary,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          SliverToBoxAdapter(
+            child: ValueListenableBuilder<SettingsData>(
+              valueListenable: AppSettings.instance.notifier,
+              builder: (context, settings, _) {
+                final specialtyId =
+                settings.academicSpecialtyId.trim();
+
+                if (!settings.hasAcademicShortcut) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                    child: _AcademicShortcutCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _AcademicShortcutHeader(),
+                          const SizedBox(height: 18),
+                          Text(
+                            S.of(context).academicShortcutEmptyTitle,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'اختر كليتك وتخصصك للوصول السريع إلى حساب المعدل والمواد.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              height: 1.6,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          _AcademicShortcutActions(
+                            primaryLabel:
+                            S.of(context).academicShortcutEmptyAction,
+                            primaryIcon: Icons.add_circle_outline_rounded,
+                            onPrimaryPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                  const AcademicSettingsScreen(),
+                                ),
+                              );
+                            },
+                            secondaryLabel: S.of(context).quickCalc2,
+                            secondaryIcon: Icons.calculate_rounded,
+                            onSecondaryPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                  const QuickAverageScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                final facultyName =
+                (settings.academicFacultyName.isNotEmpty
+                    ? settings.academicFacultyName
+                    : settings.academicFacultyId)
+                    .trim();
+
+                final specialtyName =
+                (settings.academicSpecialtyName.isNotEmpty
+                    ? settings.academicSpecialtyName
+                    : specialtyId)
+                    .trim();
+
+                final displaySpecialty =
+                specialtyName.isNotEmpty ? specialtyName : '—';
+
+                final level = settings.academicLevel.trim();
+                final displayLevel = level.isNotEmpty ? level : '—';
+
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                  child: Dismissible(
+                    key: ValueKey<String>(
+                      'academic-shortcut-'
+                          '${settings.academicSpecialtyId}-'
+                          '${settings.academicLevel}',
+                    ),
+                    direction: DismissDirection.startToEnd,
+                    background: Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.error,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      alignment: AlignmentDirectional.centerStart,
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.delete_outline_rounded,
+                            color: colorScheme.onError,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            S.of(context).academicShortcutDeleteTitle,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onError,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    confirmDismiss: (_) async {
+                      return await showDialog<bool>(
+                        context: context,
+                        builder: (dialogContext) {
+                          return AlertDialog(
+                            title: Text(
+                              S.of(dialogContext)
+                                  .academicShortcutDeleteConfirmTitle,
+                            ),
+                            content: Text(
+                              S.of(dialogContext)
+                                  .academicShortcutDeleteConfirmBody,
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(dialogContext, false);
+                                },
+                                child: Text(
+                                  S.of(dialogContext)
+                                      .academicShortcutDeleteCancel,
+                                ),
+                              ),
+                              FilledButton(
+                                onPressed: () {
+                                  Navigator.pop(dialogContext, true);
+                                },
+                                child: Text(
+                                  S.of(dialogContext)
+                                      .academicShortcutDeleteConfirm,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ) ??
+                          false;
+                    },
+                    onDismissed: (_) async {
+                      await AppSettings.instance.clearAcademicShortcut();
+
+                      if (!context.mounted) {
+                        return;
+                      }
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          content: Text(
+                            S.of(context).academicShortcutDeleteSuccess,
+                          ),
+                        ),
+                      );
+                    },
+                    child: _AcademicShortcutCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _AcademicShortcutHeader(),
+                          const SizedBox(height: 18),
+                          if (facultyName.isNotEmpty)
+                            Text(
+                              facultyName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Text(
+                            S.of(context).academicShortcutDetails(
+                              displaySpecialty,
+                              displayLevel,
+                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              height: 1.6,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          _AcademicShortcutActions(
+                            primaryLabel:
+                            S.of(context).academicShortcutGo,
+                            primaryIcon: Icons.auto_stories_rounded,
+                            onPrimaryPressed: () {
+                              _openAcademicShortcut(
+                                context,
+                                settings,
+                              );
+                            },
+                            secondaryLabel: S.of(context).quickCalc2,
+                            secondaryIcon: Icons.calculate_rounded,
+                            onSecondaryPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                  const QuickAverageScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: TextButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                    const AcademicSettingsScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.tune_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                S.of(context).academicShortcutEdit,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          if (quickFaculty != null) ...[
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 10),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'الكليات',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      '${faculties.length}',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                    final faculty = faculties[index];
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _FacultyQuickCard(
+                        faculty: faculty,
+                        onTap: () {
+                          _openFaculty(context, faculty);
+                        },
+                      ),
+                    );
+                  },
+                  childCount: faculties.length,
+                ),
+              ),
+            ),
+          ] else
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: Text(
+                    'لا توجد كليات متاحة حالياً',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: widget.bottomPadding + 20,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
+
+
+class _AcademicShortcutCard extends StatelessWidget {
+  const _AcademicShortcutCard({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF16181C) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE6E8EC),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _AcademicShortcutHeader extends StatelessWidget {
+  const _AcademicShortcutHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = AppTeal.main;
+
+    final colors = theme.colorScheme;
+
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: colors.primary.withValues(alpha: isDark ? 0.18 : 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(Icons.school_rounded, color: colors.primary, size: 20),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            S.of(context).academicShortcutTitle,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            'جامعي',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: isDark ? Colors.white70 : const Color(0xFF6B7280),
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AcademicShortcutActions extends StatelessWidget {
+  const _AcademicShortcutActions({
+    required this.primaryLabel,
+    required this.primaryIcon,
+    required this.onPrimaryPressed,
+    required this.secondaryLabel,
+    required this.secondaryIcon,
+    required this.onSecondaryPressed,
+  });
+
+  final String primaryLabel;
+  final IconData primaryIcon;
+  final VoidCallback onPrimaryPressed;
+  final String secondaryLabel;
+  final IconData secondaryIcon;
+  final VoidCallback onSecondaryPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 6,
+          child: _AcademicShortcutButton(
+            label: primaryLabel,
+            icon: primaryIcon,
+            onPressed: onPrimaryPressed,
+            primary: true,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 5,
+          child: _AcademicShortcutButton(
+            label: secondaryLabel,
+            icon: secondaryIcon,
+            onPressed: onSecondaryPressed,
+            primary: false,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AcademicShortcutButton extends StatelessWidget {
+  const _AcademicShortcutButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    required this.primary,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppTeal.main;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SizedBox(
+      height: 44,
+      child: Material(
+        color: primary
+            ? accent
+            : (isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF4F6F8)),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: primary
+                      ? Colors.white
+                      : (isDark ? Colors.white : const Color(0xFF111827)),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: primary
+                          ? Colors.white
+                          : (isDark ? Colors.white : const Color(0xFF111827)),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _FacultyQuickCard extends StatelessWidget {
+  const _FacultyQuickCard({
+    required this.faculty,
+    required this.onTap,
+  });
+
+  final ProgramFaculty faculty;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    final majorsCount = faculty.majors.length;
+
+    final tracksCount = faculty.majors.fold<int>(
+      0,
+          (sum, major) => sum + major.tracks.length,
+    );
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colors.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: colors.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.apartment_outlined,
+                      color: colors.onPrimaryContainer,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      faculty.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Divider(
+                height: 1,
+                color: colors.outlineVariant.withValues(alpha: 0.35),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _FacultySimpleMetric(
+                      label: S.of(context).sections,
+                      value: majorsCount.toString(),
+                      icon: Icons.view_list_outlined,
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 30,
+                    color: colors.outlineVariant.withValues(alpha: 0.4),
+                  ),
+                  Expanded(
+                    child: _FacultySimpleMetric(
+                      label: S.of(context).majors,
+                      value: tracksCount.toString(),
+                      icon: Icons.track_changes_outlined,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FacultySimpleMetric extends StatelessWidget {
+  const _FacultySimpleMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: colors.primary,
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+
+
+
+class AcademicSettingsScreen extends StatefulWidget {
+  const AcademicSettingsScreen({super.key});
+
+  @override
+  State<AcademicSettingsScreen> createState() => _AcademicSettingsScreenState();
+}
+class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
+  final _collegeController = TextEditingController();
+  final _departmentController = TextEditingController();
+  final _specialtyController = TextEditingController();
+  final _levelController = TextEditingController();
+  final _collegeFocusNode = FocusNode();
+  final _departmentFocusNode = FocusNode();
+  final _specialtyFocusNode = FocusNode();
+  List<ProgramFaculty> _faculties = const [];
+  ProgramFaculty? _selectedFaculty;
+  ProgramMajor? _selectedDepartment;
+  ProgramTrack? _selectedSpecialty;
+  bool _seededProfileValues = false;
+  late final VoidCallback _profileListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _collegeController.addListener(_handleFacultyChanged);
+    _departmentController.addListener(_handleDepartmentChanged);
+    _specialtyController.addListener(_handleSpecialtyChanged);
+    _profileListener = () {
+      if (_seededProfileValues || _faculties.isEmpty) return;
+      final data = UserProfileService.instance.notifier.value;
+      if (data.college.isEmpty && data.major.isEmpty && data.level.isEmpty) {
+        return;
+      }
+      _seedFromProfile(data.college, data.major, data.level);
+    };
+    UserProfileService.instance.notifier.addListener(_profileListener);
+    _profileListener();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_faculties.isEmpty) {
+      _faculties = getDemoFaculties(context);
+      _profileListener();
+    }
+  }
+
+  @override
+  void dispose() {
+    UserProfileService.instance.notifier.removeListener(_profileListener);
+    _collegeController.dispose();
+    _departmentController.dispose();
+    _specialtyController.dispose();
+    _levelController.dispose();
+    _collegeFocusNode.dispose();
+    _departmentFocusNode.dispose();
+    _specialtyFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _seedFromProfile(String college, String major, String level) {
+    final savedCollege = college.trim();
+    final savedMajor = major.trim();
+    final savedLevel = level.trim();
+    ProgramFaculty? matchedFaculty = savedCollege.isEmpty
+        ? null
+        : _faculties.cast<ProgramFaculty?>().firstWhere(
+          (faculty) => faculty?.name == savedCollege,
+      orElse: () => null,
+    );
+    Iterable<ProgramFaculty> facultyPool =
+    matchedFaculty == null ? _faculties : [matchedFaculty];
+    ProgramMajor? matchedDepartment;
+    ProgramTrack? matchedSpecialty;
+
+    if (savedMajor.isNotEmpty) {
+      for (final faculty in facultyPool) {
+        for (final major in faculty.majors) {
+          for (final track in major.tracks) {
+            final matchesName = track.name == savedMajor;
+            final matchesLevel =
+                savedLevel.isEmpty || track.level == savedLevel;
+            if (matchesName && matchesLevel) {
+              matchedFaculty = faculty;
+              matchedDepartment = major;
+              matchedSpecialty = track;
+              break;
+            }
+          }
+          if (matchedSpecialty != null) break;
+        }
+        if (matchedSpecialty != null) break;
+      }
+    }
+
+    if (matchedSpecialty == null && savedMajor.isNotEmpty) {
+      for (final faculty in facultyPool) {
+        for (final major in faculty.majors) {
+          if (major.name == savedMajor) {
+            matchedFaculty ??= faculty;
+            matchedDepartment = major;
+            if (savedLevel.isNotEmpty) {
+              matchedSpecialty = major.tracks.cast<ProgramTrack?>().firstWhere(
+                    (track) => track?.level == savedLevel,
+                orElse: () => null,
+              );
+            }
+            break;
+          }
+        }
+        if (matchedDepartment != null) break;
+      }
+    }
+
+    setState(() {
+      _selectedFaculty = matchedFaculty;
+      _selectedDepartment = matchedDepartment;
+      _selectedSpecialty = matchedSpecialty;
+      _collegeController.text = matchedFaculty?.name ?? savedCollege;
+      _departmentController.text = matchedDepartment?.name ?? '';
+      _specialtyController.text = matchedSpecialty?.name ??
+          (matchedDepartment == null ? savedMajor : '');
+      _levelController.text = matchedSpecialty?.level ?? savedLevel;
+      _seededProfileValues = true;
+    });
+  }
+
+  void _handleFacultyChanged() {
+    final text = _collegeController.text.trim();
+    if (_selectedFaculty != null && _selectedFaculty?.name != text) {
+      setState(() {
+        _selectedFaculty = null;
+        _clearDepartmentSelection();
+        _clearSpecialtySelection();
+      });
+    }
+  }
+
+  void _handleDepartmentChanged() {
+    final text = _departmentController.text.trim();
+    if (_selectedDepartment != null && _selectedDepartment?.name != text) {
+      setState(() {
+        _selectedDepartment = null;
+        _clearSpecialtySelection();
+      });
+    }
+  }
+
+  void _handleSpecialtyChanged() {
+    final text = _specialtyController.text.trim();
+    if (_selectedSpecialty != null && _selectedSpecialty?.name != text) {
+      setState(() {
+        _selectedSpecialty = null;
+        _levelController.clear();
+      });
+    }
+  }
+
+  void _clearDepartmentSelection() {
+    _selectedDepartment = null;
+    _departmentController.clear();
+  }
+
+  void _clearSpecialtySelection() {
+    _selectedSpecialty = null;
+    _specialtyController.clear();
+    _levelController.clear();
+  }
+
+  String _normalizeQuery(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Iterable<ProgramFaculty> _facultyOptions(TextEditingValue textEditingValue) {
+    final query = _normalizeQuery(textEditingValue.text).toLowerCase();
+    if (query.isEmpty) return const Iterable<ProgramFaculty>.empty();
+    return _faculties.where(
+          (faculty) => faculty.name.toLowerCase().contains(query),
+    );
+  }
+
+  Iterable<ProgramMajor> _departmentOptions(TextEditingValue textEditingValue) {
+    if (_selectedFaculty == null) return const Iterable<ProgramMajor>.empty();
+    final query = _normalizeQuery(textEditingValue.text).toLowerCase();
+    if (query.isEmpty) return const Iterable<ProgramMajor>.empty();
+    return _selectedFaculty!.majors.where(
+          (major) => major.name.toLowerCase().contains(query),
+    );
+  }
+
+  Iterable<ProgramTrack> _specialtyOptions(TextEditingValue textEditingValue) {
+    if (_selectedDepartment == null) return const Iterable<ProgramTrack>.empty();
+    final query = _normalizeQuery(textEditingValue.text).toLowerCase();
+    if (query.isEmpty) return const Iterable<ProgramTrack>.empty();
+    return _selectedDepartment!.tracks.where(
+          (track) => track.name.toLowerCase().contains(query),
+    );
+  }
+
+  InputDecoration _fieldDecoration({
+    required String label,
+    required IconData icon,
+    String? hint,
+    bool enabled = true,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final fill = isDark ? const Color(0xFF1C1E22) : const Color(0xFFF6F7F9);
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      filled: true,
+      fillColor: enabled ? fill : fill.withValues(alpha: 0.55),
+      prefixIcon: Icon(icon, size: 20, color: AppTeal.main),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: AppTeal.main, width: 1.4),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
+  }
+
+  Future<void> _save() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(S.of(context).signInRequired)),
+      );
+      return;
+    }
+    final faculty = _selectedFaculty?.name ?? '';
+    final department = _selectedDepartment?.name ?? '';
+    final specialty = _selectedSpecialty?.name ?? '';
+    final level = _levelController.text.trim();
+    final hasShortcut = faculty.isNotEmpty ||
+        department.isNotEmpty ||
+        specialty.isNotEmpty ||
+        level.isNotEmpty;
+    await AppSettings.instance.setAcademicShortcut(
+      hasAcademicShortcut: hasShortcut,
+      facultyId: faculty,
+      departmentId: department,
+      specialtyId: specialty,
+      level: level,
+      facultyName: faculty,
+      departmentName: department,
+      specialtyName: specialty,
+    );
+    var syncFailed = false;
+    try {
+      await UserProfileService.instance.updateAcademic(
+        college: faculty,
+        major: specialty,
+        level: level,
+      );
+    } on FirebaseException {
+      syncFailed = true;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          syncFailed
+              ? 'Saved locally. Sync failed.'
+              : S.of(context).academicSettingsSaved,
+        ),
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  Widget _buildAutocompleteField<T extends Object>({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String labelText,
+    required IconData icon,
+    required String hint,
+    required bool enabled,
+    required Iterable<T> Function(TextEditingValue) optionsBuilder,
+    required String Function(T) displayStringForOption,
+    required ValueChanged<T> onSelected,
+  }) {
+    return IgnorePointer(
+      ignoring: !enabled,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.45,
+        child: RawAutocomplete<T>(
+          textEditingController: controller,
+          focusNode: focusNode,
+          optionsBuilder: optionsBuilder,
+          displayStringForOption: displayStringForOption,
+          onSelected: onSelected,
+          fieldViewBuilder:
+              (context, textController, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: textController,
+              focusNode: focusNode,
+              enabled: enabled,
+              textAlign: TextAlign.start,
+              decoration: _fieldDecoration(
+                label: labelText,
+                icon: icon,
+                hint: hint,
+                enabled: enabled,
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return Align(
+              alignment: AlignmentDirectional.topStart,
+              child: Material(
+                elevation: 8,
+                color: isDark ? const Color(0xFF1C1E22) : Colors.white,
+                shadowColor: Colors.black26,
+                borderRadius: BorderRadius.circular(14),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: (isDark ? Colors.white : Colors.black)
+                          .withValues(alpha: 0.06),
+                    ),
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          displayStringForOption(option),
+                          textAlign: TextAlign.start,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final hasValidSelections = _selectedFaculty != null &&
+        _selectedDepartment != null &&
+        _selectedSpecialty != null &&
+        _levelController.text.trim().isNotEmpty;
+    final allFieldsEmpty = _collegeController.text.trim().isEmpty &&
+        _departmentController.text.trim().isEmpty &&
+        _specialtyController.text.trim().isEmpty &&
+        _levelController.text.trim().isEmpty;
+    final canSave = hasValidSelections || allFieldsEmpty;
+
+    return Scaffold(
+      backgroundColor:
+      isDark ? theme.scaffoldBackgroundColor : const Color(0xFFF4F5F7),
+      appBar: AppBar(
+        title: Text(S.of(context).academicSettingsTitle),
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTeal.main,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                  child: const Icon(
+                    Icons.school_rounded,
+                    color: Colors.white,
+                    size: 27,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'بياناتك الأكاديمية',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        S.of(context).academicSettingsDescription,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.82),
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF16181C) : Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFE6E8EC),
+              ),
+            ),
+            child: Column(
+              children: [
+                _buildAutocompleteField<ProgramFaculty>(
+                  controller: _collegeController,
+                  focusNode: _collegeFocusNode,
+                  labelText: S.of(context).academicCollegeLabel,
+                  icon: Icons.account_balance_rounded,
+                  hint: 'ابدأ الكتابة لاختيار الكلية',
+                  enabled: true,
+                  optionsBuilder: _facultyOptions,
+                  displayStringForOption: (faculty) => faculty.name,
+                  onSelected: (faculty) {
+                    setState(() {
+                      _selectedFaculty = faculty;
+                      _collegeController.text = faculty.name;
+                      _clearDepartmentSelection();
+                      _clearSpecialtySelection();
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildAutocompleteField<ProgramMajor>(
+                  controller: _departmentController,
+                  focusNode: _departmentFocusNode,
+                  labelText: S.of(context).academicclass,
+                  icon: Icons.apartment_rounded,
+                  hint: _selectedFaculty == null
+                      ? 'اختر الكلية أولاً'
+                      : 'اختر القسم',
+                  enabled: _selectedFaculty != null,
+                  optionsBuilder: _departmentOptions,
+                  displayStringForOption: (major) => major.name,
+                  onSelected: (major) {
+                    setState(() {
+                      _selectedDepartment = major;
+                      _departmentController.text = major.name;
+                      _clearSpecialtySelection();
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildAutocompleteField<ProgramTrack>(
+                  controller: _specialtyController,
+                  focusNode: _specialtyFocusNode,
+                  labelText: S.of(context).academicMajorLabel,
+                  icon: Icons.school_outlined,
+                  hint: _selectedDepartment == null
+                      ? 'اختر القسم أولاً'
+                      : 'اختر التخصص',
+                  enabled: _selectedDepartment != null,
+                  optionsBuilder: _specialtyOptions,
+                  displayStringForOption: (track) => track.name,
+                  onSelected: (track) {
+                    setState(() {
+                      _selectedSpecialty = track;
+                      _specialtyController.text = track.name;
+                      _levelController.text = track.level;
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _levelController,
+                  readOnly: true,
+                  decoration: _fieldDecoration(
+                    label: S.of(context).academicLevelLabel,
+                    icon: Icons.layers_rounded,
+                    hint: 'يُملأ تلقائيًا',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 48,
+            child: FilledButton(
+              onPressed: canSave ? _save : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTeal.main,
+                disabledBackgroundColor:
+                AppTeal.main.withValues(alpha: 0.35),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                S.of(context).saveChanges,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 
 class QuickAverageScreen extends StatefulWidget {
@@ -99,9 +1678,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
   }
 
   Future<void> _persistStateSilently() async {
-    if (!_hasSavedState) {
-      return;
-    }
+    if (!_hasSavedState) return;
     final prefs = await SharedPreferences.getInstance();
     final payload = <String, dynamic>{
       'threshold': threshold,
@@ -130,14 +1707,10 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
   Future<void> _loadSavedState() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_quickCalcStorageKey);
-    if (raw == null || raw.isEmpty) {
-      return;
-    }
+    if (raw == null || raw.isEmpty) return;
     _hasSavedState = true;
     final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) {
-      return;
-    }
+    if (decoded is! Map<String, dynamic>) return;
     final decodedSubjects = decoded['subjects'];
     final List<NoteData> loaded = [];
     if (decodedSubjects is List) {
@@ -218,149 +1791,199 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
     return int.tryParse(value.toString()) ?? fallback;
   }
 
-  Widget _quickCalcActionButton({
-    required VoidCallback? onPressed,
-    VoidCallback? onLongPress,
-    required IconData icon,
+  Color get _statusColor {
+    if (avg == 0) return const Color(0xFF9CA3AF);
+    return avg >= threshold ? const Color(0xFF16A34A) : const Color(0xFFDC2626);
+  }
+
+  String get _statusText {
+    if (avg == 0) return '—';
+    return avg >= threshold ? 'Succeeded' : 'Failed';
+  }
+
+  Widget _calcKey({
     required String label,
-    required double horizontalPadding,
+    required IconData icon,
+    required VoidCallback? onTap,
+    VoidCallback? onLongPress,
+    required Color bg,
+    Color fg = Colors.white,
   }) {
-    return FilledButton(
-      onPressed: onPressed,
-      onLongPress: onLongPress,
-      style: FilledButton.styleFrom(
-        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              textAlign: TextAlign.center,
-            ),
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(40),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(40),
+        child: SizedBox(
+          height: 64,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: fg, size: 20),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: fg,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final passed = avg > 0 && avg >= threshold;
+    final failed = avg > 0 && avg < threshold;
+
     return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0D),
       appBar: AppBar(
         title: Text(S.of(context).quickCalc),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF0B0B0D),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
+      body: Column(
         children: [
-          ...subjects.asMap().entries.map((e) {
-            final i = e.key;
-            final s = e.value;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: _QuickCalcDismissibleItem(
-                data: s,
-                index: i,
-                threshold: _dismissThreshold,
-                onRemove: _removeSubjectAt,
-              ),
-            );
-          }),
-          const SizedBox(height: 8),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final horizontalPadding = constraints.maxWidth < 360 ? 8.0 : 12.0;
-              return Row(
-                children: [
-                  Expanded(
-                    child: _quickCalcActionButton(
-                      onPressed: _add,
-                      icon: Icons.add,
-                      label: S.of(context).add,
-                      horizontalPadding: horizontalPadding,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _quickCalcActionButton(
-                      onPressed: _calc,
-                      icon: Icons.calculate,
-                      label: S.of(context).calculate,
-                      horizontalPadding: horizontalPadding,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _quickCalcActionButton(
-                      onPressed: _saveState,
-                      onLongPress: _clearSavedState,
-                      icon: Icons.save,
-                      label: S.of(context).save,
-                      horizontalPadding: horizontalPadding,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                textDirection: TextDirection.ltr,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Moy: ${avg.toStringAsFixed(2)}',
-                      textDirection: TextDirection.ltr,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 18),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      avg == 0
-                          ? '___'
-                          : (avg >= threshold ? "✅ Succeeded" : "❌ Failed"),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: avg == 0
-                            ? Colors.grey
-                            : (avg >= threshold ? Colors.green : Colors.red),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                      ),
-                    ),
-                  )
-                ],
-              ),
-              const SizedBox(height: 12),
-              Align(
-                  alignment: Alignment.centerLeft,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
                   child: Text(
-                    'Cred: $totalcred',
-                    textDirection: TextDirection.ltr,
+                    failed
+                        ? 'FAILED'
+                        : passed
+                        ? 'SUCCEED'
+                        : 'MOYENNE',
+                    style: TextStyle(
+                      color: failed
+                          ? const Color(0xFFFF453A)
+                          : passed
+                          ? const Color(0xFF30D158)
+                          : const Color(0xFF8E8E93),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    avg.toStringAsFixed(2),
+                    maxLines: 1,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 18),
-                  )),
-            ],
-          )
+                      color: Colors.white,
+                      fontSize: 64,
+                      height: 1,
+                      fontWeight: FontWeight.w300,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'CRED  ${totalcred.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: subjects.isEmpty
+                ? const Center(
+              child: Text(
+                'أضف مادة',
+                style: TextStyle(color: Color(0xFF8E8E93)),
+              ),
+            )
+                : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              itemCount: subjects.length,
+              itemBuilder: (context, i) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Theme(
+                    data: ThemeData.dark(),
+                    child: _QuickCalcDismissibleItem(
+                      data: subjects[i],
+                      index: i,
+                      threshold: _dismissThreshold,
+                      onRemove: _removeSubjectAt,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _calcKey(
+                      label: S.of(context).add,
+                      icon: Icons.add,
+                      onTap: _add,
+                      bg: const Color(0xFF2C2C2E),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _calcKey(
+                      label: S.of(context).calculate,
+                      icon: Icons.calculate,
+                      onTap: _calc,
+                      bg: const Color(0xFFFF9F0A),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _calcKey(
+                      label: S.of(context).save,
+                      icon: Icons.save_outlined,
+                      onTap: _saveState,
+                      onLongPress: _clearSavedState,
+                      bg: const Color(0xFF2C2C2E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
+
+
 
 // -------------------------
 // بيانات البطاقة
@@ -408,7 +2031,6 @@ class _QuickCalcDismissibleItem extends StatefulWidget {
   State<_QuickCalcDismissibleItem> createState() =>
       _QuickCalcDismissibleItemState();
 }
-
 class _QuickCalcDismissibleItemState extends State<_QuickCalcDismissibleItem> {
   double _progress = 0;
   bool _hapticTriggered = false;
@@ -506,9 +2128,6 @@ class _QuickCalcDismissibleItemState extends State<_QuickCalcDismissibleItem> {
   }
 }
 
-// -------------------------
-// واجهة البطاقة
-// -------------------------
 class NoteCardWidget extends StatefulWidget {
   final NoteData data;
 
@@ -520,7 +2139,6 @@ class NoteCardWidget extends StatefulWidget {
   @override
   State<NoteCardWidget> createState() => _NoteCardWidgetState();
 }
-
 class _NoteCardWidgetState extends State<NoteCardWidget> {
   late TextEditingController nameController;
   late TextEditingController coefController;
@@ -552,242 +2170,230 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          width: 2,
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
+  void dispose() {
+    nameController.dispose();
+    coefController.dispose();
+    credController.dispose();
+    tdController.dispose();
+    tpController.dispose();
+    WtdController.dispose();
+    WtpController.dispose();
+    WexamController.dispose();
+    examController.dispose();
+    super.dispose();
+  }
+
+  Color get _moyColor {
+    final m = widget.data.moy;
+    if (m <= 0) return const Color(0xFF8E8E93);
+    return m >= 10 ? const Color(0xFF30D158) : const Color(0xFFFF453A);
+  }
+
+  Widget _keyPad({
+    required String label,
+    required TextEditingController controller,
+    required ValueChanged<String> onChanged,
+    int? maxLength,
+  }) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      textAlign: TextAlign.center,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      maxLength: maxLength,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        fontFeatures: [FontFeature.tabularFigures()],
       ),
-      child: Column(
-        children: [
-          // Header: Delete, Subject Name, Moy
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: TextField(
-                    controller: nameController,
-                    onChanged: (v) {
-                      widget.data.subject = v;
-                      setState(() {});
-                    },
-                    textAlign: TextAlign.center,
-                    decoration: const InputDecoration(
-                      contentPadding:
-                      EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
-                      border: InputBorder.none,
-                    ),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                widget.data.moy.toStringAsFixed(2),
-                style:
-                const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    expanded = !expanded;
-                  });
-                },
-                icon: Icon(expanded
-                    ? Icons.keyboard_arrow_up
-                    : Icons.keyboard_arrow_down),
-              )
-            ],
-          ),
-          if (expanded)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Coef & Cred أولاً
-                Flexible(
-                  flex: 2,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      //coef
-                      SizedBox(
-                        width: double.infinity,
-                        child: Column(
-                          children: [
-                            const Text("Coef"),
-                            TextField(
-                              controller: coefController,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 15),
-                              decoration: const InputDecoration(
-                                counterText: '',
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 5,
-                                ),
-                                border: OutlineInputBorder(),
-                              ),
-                              keyboardType: TextInputType.number,
-                              maxLength: 1,
-                              onChanged: (v) {
-                                widget.data.coef = int.tryParse(v) ?? 1;
-                                setState(() {});
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      //cred
-                      SizedBox(
-                        width: double.infinity,
-                        child: Column(
-                          children: [
-                            const Text("Cred"),
-                            TextField(
-                              controller: credController,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 15),
-                              decoration: const InputDecoration(
-                                counterText: '',
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 5,
-                                ),
-                                border: OutlineInputBorder(),
-                              ),
-                              keyboardType: TextInputType.number,
-                              maxLength: 1,
-                              onChanged: (v) {
-                                widget.data.cred = int.tryParse(v) ?? 1;
-                                setState(() {});
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  height: 180,
-                  width: 1,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 5,
-                  child: Row(
-                    children: [
-                      // wTD / wTP / wExam
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _buildScoreField("W.TD", WtdController, (v) {
-                              widget.data.Wtd = double.tryParse(v) ?? 0;
-                              setState(() {});
-                            }),
-                            const SizedBox(height: 5),
-                            Container(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              height: 1,
-                              width: double.infinity,
-                            ),
-                            _buildScoreField("W.TP", WtpController, (v) {
-                              widget.data.Wtp = double.tryParse(v) ?? 0;
-                              setState(() {});
-                            }),
-                            const SizedBox(height: 5),
-                            Container(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              height: 1,
-                              width: double.infinity,
-                            ),
-                            _buildScoreField("W.EX", WexamController, (v) {
-                              widget.data.Wexam = double.tryParse(v) ?? 0;
-                              setState(() {});
-                            }),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // TD / TP / Exam
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _buildScoreField("TD", tdController, (v) {
-                              widget.data.td = double.tryParse(v) ?? 0;
-                              setState(() {});
-                            }),
-                            const SizedBox(height: 5),
-                            Container(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              height: 1,
-                              width: double.infinity,
-                            ),
-                            _buildScoreField("TP", tpController, (v) {
-                              widget.data.tp = double.tryParse(v) ?? 0;
-                              setState(() {});
-                            }),
-                            const SizedBox(height: 5),
-                            Container(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              height: 1,
-                              width: double.infinity,
-                            ),
-                            _buildScoreField("Exam", examController, (v) {
-                              widget.data.exam = double.tryParse(v) ?? 0;
-                              setState(() {});
-                            }),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-        ],
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: Color(0xFF8E8E93),
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+        filled: true,
+        fillColor: const Color(0xFF2C2C2E),
+        counterText: '',
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFFF9F0A), width: 1.3),
+        ),
       ),
     );
   }
 
-  Widget _buildScoreField(String label, TextEditingController controller,
-      Function(String) onChange) {
-    return Column(
-      children: [
-        Text(label),
-        const SizedBox(height: 4),
-        SizedBox(
-          height: 40,
-          child: TextField(
-            controller: controller,
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            onChanged: (v) => onChange(v),
-            style: const TextStyle(fontSize: 15),
-            decoration: const InputDecoration(
-              contentPadding:
-              EdgeInsets.only(top: 2, bottom: 0, left: 0, right: 0),
-              border: InputBorder.none,
-            ),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: nameController,
+                  onChanged: (v) {
+                    widget.data.subject = v;
+                    setState(() {});
+                  },
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: 'المادة',
+                    hintStyle: TextStyle(
+                      color: Color(0xFF636366),
+                      fontWeight: FontWeight.w600,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+              Text(
+                widget.data.moy.toStringAsFixed(2),
+                style: TextStyle(
+                  color: _moyColor,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w300,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              IconButton(
+                onPressed: () => setState(() => expanded = !expanded),
+                icon: Icon(
+                  expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: const Color(0xFF8E8E93),
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+          if (expanded) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _keyPad(
+                    label: 'COEF',
+                    controller: coefController,
+                    maxLength: 1,
+                    onChanged: (v) {
+                      widget.data.coef = int.tryParse(v) ?? 1;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _keyPad(
+                    label: 'CRED',
+                    controller: credController,
+                    maxLength: 1,
+                    onChanged: (v) {
+                      widget.data.cred = int.tryParse(v) ?? 1;
+                      setState(() {});
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _keyPad(
+                    label: 'TD',
+                    controller: tdController,
+                    onChanged: (v) {
+                      widget.data.td = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _keyPad(
+                    label: 'TP',
+                    controller: tpController,
+                    onChanged: (v) {
+                      widget.data.tp = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _keyPad(
+                    label: 'EXAM',
+                    controller: examController,
+                    onChanged: (v) {
+                      widget.data.exam = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _keyPad(
+                    label: 'W.TD',
+                    controller: WtdController,
+                    onChanged: (v) {
+                      widget.data.Wtd = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _keyPad(
+                    label: 'W.TP',
+                    controller: WtpController,
+                    onChanged: (v) {
+                      widget.data.Wtp = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _keyPad(
+                    label: 'W.EX',
+                    controller: WexamController,
+                    onChanged: (v) {
+                      widget.data.Wexam = double.tryParse(v) ?? 0;
+                      setState(() {});
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -805,12 +2411,15 @@ class ModuleSpec {
   final double coef;
   final double credits;
   final List<EvalWeight> evalWeights;
+  final String unitLabel;
+
   const ModuleSpec({
     required this.id,
     required this.name,
     required this.coef,
     required this.credits,
     required this.evalWeights,
+    this.unitLabel = '',
   });
 
   double get totalWeight =>
@@ -824,38 +2433,31 @@ class SemesterSpec {
 }
 
 List<SemesterSpec> createSemesterSpecsForTrack(ProgramTrack track) {
-  return track.semesters.asMap().entries.map(
-        (semEntry) {
-      final semIndex = semEntry.key;
-      final sem = semEntry.value;
-      // جمع كل modules من كل الوحدات داخل السداسي
-      final allModules =
-      sem.unit.expand((u) => u.modules).toList(growable: false);
+  return track.semesters.asMap().entries.map((semEntry) {
+    final semIndex = semEntry.key;
+    final sem = semEntry.value;
+    final modules = <ModuleSpec>[];
+    var moduleIndex = 0;
 
-      return SemesterSpec(
-        name: sem.label,
-        modules: allModules
-            .asMap()
-            .entries
-            .map(
-              (moduleEntry) {
-            final moduleIndex = moduleEntry.key;
-            final module = moduleEntry.value;
-            return ModuleSpec(
-              id: 'sem${semIndex + 1}-module${moduleIndex + 1}',
-              name: module.name,
-              coef: module.coef.toDouble(),
-              credits: module.credits.toDouble(),
-              evalWeights: _normalizeEvalWeights(module.components),
-            );
-          },
-        )
-            .toList(growable: false),
-      );
-    },
-  ).toList(growable: false);
+    for (final unit in sem.unit) {
+      for (final module in unit.modules) {
+        modules.add(
+          ModuleSpec(
+            id: 'sem${semIndex + 1}-module${moduleIndex + 1}',
+            name: module.name,
+            coef: module.coef.toDouble(),
+            credits: module.credits.toDouble(),
+            evalWeights: _normalizeEvalWeights(module.components),
+            unitLabel: unit.label,
+          ),
+        );
+        moduleIndex++;
+      }
+    }
+
+    return SemesterSpec(name: sem.label, modules: modules);
+  }).toList(growable: false);
 }
-
 List<SemesterSpec> demoL1GpaSpecs(BuildContext context) {
   final track = getDemoFaculties(context).first.majors.first.tracks.first;
 
@@ -932,6 +2534,7 @@ class ModuleModel {
   ModuleModel({
     required this.id,
     required this.title,
+    this.unitLabel = '',
     required num coef,
     required num credits,
     required double tdWeight,
@@ -950,6 +2553,7 @@ class ModuleModel {
 
   final String id;
   final String title;
+  final String unitLabel;
   double coef;
   double credits;
   final bool _hasTD;
@@ -1007,6 +2611,7 @@ class SemesterModel {
             ? module.id
             : _moduleIdForSemester(spec.name, module.name),
         title: module.name,
+        unitLabel: module.unitLabel,
         coef: module.coef,
         credits: module.credits,
         tdWeight: weightFor('TD'),
@@ -1049,6 +2654,9 @@ class SemesterModel {
   }
 
   double creditsEarned() {
+    if (semesterAverage() >= 10) {
+      return modules.fold<double>(0, (sum, module) => sum + module.credits);
+    }
     return modules.fold<double>(
         0, (sum, module) => sum + moduleCreditsEarned(module));
   }
@@ -1171,24 +2779,6 @@ Widget _cell(String s, {bool bold = false, bool center = false}) => Text(
 );
 // -----------------------------------
 
-SemesterSpec _pickSemester(List<SemesterSpec> specs, String label) {
-  final normalizedLabel = label.toUpperCase();
-  if (specs.isEmpty) {
-    return const SemesterSpec(name: 'S?', modules: []);
-  }
-  return specs.firstWhere(
-        (s) => s.name.toUpperCase() == normalizedLabel,
-    orElse: () {
-      if (normalizedLabel == 'S1') {
-        return specs.first;
-      }
-      if (normalizedLabel == 'S2' && specs.length > 1) {
-        return specs.last;
-      }
-      return specs.first;
-    },
-  );
-}
 
 // ================================ UI: Faculties ==============================
 class FacultiesScreen extends StatelessWidget {
@@ -1255,171 +2845,309 @@ class FacultiesScreen extends StatelessWidget {
 }
 
 // =============================== UI: Majors =================================
+
 class FacultyMajorsScreen extends StatelessWidget {
   final ProgramFaculty faculty;
-  const FacultyMajorsScreen({super.key, required this.faculty});
 
-  static  Color _primaryColor = AppTeal.main;
+  const FacultyMajorsScreen({
+    super.key,
+    required this.faculty,
+  });
+
+  static final Color _primaryColor = AppTeal.main;
   static const Color _blueColor = Color(0xFF1565C0);
   static const Color _lightBackgroundColor = Color(0xFFEAF7F8);
+
+  static const _accents = <Color>[
+    Color(0xFF0D9488),
+    Color(0xFF2563EB),
+    Color(0xFF7C3AED),
+    Color(0xFFE11D48),
+    Color(0xFFEA580C),
+    Color(0xFF0891B2),
+    Color(0xFF16A34A),
+    Color(0xFFDB2777),
+    Color(0xFF4F46E5),
+    Color(0xFFCA8A04),
+    Color(0xFF0E7490),
+    Color(0xFF9333EA),
+    Color(0xFF65A30D),
+    Color(0xFFBE123C),
+    Color(0xFF0284C7),
+    Color(0xFFB45309),
+  ];
+
+
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final textDirection = Directionality.of(context);
-    final isRtl = textDirection == TextDirection.rtl;
     final majors = faculty.majors;
+    final tracksTotal = majors.fold<int>(0, (n, m) => n + m.tracks.length);
 
     return AppScaffold(
-      //endDrawer: const AppEndDrawer(),
       padding: EdgeInsets.zero,
-      background: isDark ? theme.scaffoldBackgroundColor : const Color(0xFFF6FBFC),
-      body: Directionality(
-        textDirection: textDirection,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: isDark
-                  ? [
-                theme.colorScheme.surface,
-                theme.scaffoldBackgroundColor,
-              ]
-                  : const [
-                Color(0xFFEAF7F8),
-                Color(0xFFF8FCFD),
-              ],
-            ),
+      appBar: AppBar(
+        title: Text(faculty.name),
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          _FacultySummary(
+            facultyName: faculty.name,
+            totalMajors: majors.length,
+            totalTracks: tracksTotal,
           ),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
-            children: [
-              _FacultyMajorsHeader(
-                facultyName: faculty.name,
-                isRtl: isRtl,
-                onBack: () => Navigator.pop(context),
-              ),
-              const SizedBox(height: 22),
-              if (majors.isEmpty)
-                const _FacultyMajorsEmptyState()
-              else
-                ...List.generate(majors.length, (index) {
-                  final major = majors[index];
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index == majors.length - 1 ? 0 : 14,
+          const SizedBox(height: 18),
+          if (majors.isEmpty)
+            const _EmptyMajorsState()
+          else
+            ...List.generate(majors.length, (index) {
+              final major = majors[index];
+              final accent = _accents[index % _accents.length];
+              final tracksCount = major.tracks.length;
+              final subtitle = tracksCount == 0
+                  ? 'لا توجد مسارات'
+                  : tracksCount == 1
+                  ? 'مسار واحد'
+                  : '$tracksCount مسارات';
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index == majors.length - 1 ? 0 : 10,
+                ),
+                child: Material(
+                  color: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: BorderSide(
+                      color: theme.dividerColor.withValues(alpha: 0.22),
                     ),
-                    child: _FacultyMajorCard(
-                      major: major,
-                      isRtl: isRtl,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => MajorTracksScreen(
-                              major: major,
-                              faculty: faculty,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MajorTracksScreen(
+                            major: major,
+                            faculty: faculty,
+                          ),
+                        ),
+                      );
+                    },
+                    child: IntrinsicHeight(
+                      child: Row(
+                        children: [
+                          Container(width: 4, color: accent),
+                          Expanded(
+                            child: Padding(
+                              padding:
+                              const EdgeInsets.fromLTRB(12, 14, 12, 14),
+                              child: Row(
+                                children: [
+                                  // Container(
+                                  //   width: 48,
+                                  //   height: 48,
+                                  //   alignment: Alignment.center,
+                                  //   decoration: BoxDecoration(
+                                  //     border: Border.all(color:Theme.of(context).colorScheme.onSurface ),
+                                  //     borderRadius: BorderRadius.circular(14),
+                                  //   ),
+                                  //   child: Text(
+                                  //     '${index + 1}'.padLeft(2, '0'),
+                                  //     style: theme.textTheme.titleSmall
+                                  //         ?.copyWith(
+                                  //       color: accent,
+                                  //       fontWeight: FontWeight.w900,
+                                  //     ),
+                                  //   ),
+                                  // ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          major.name,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w800,
+                                            height: 1.25,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: [
+                                            _MajorChip(
+                                              label: subtitle,
+                                              accent: accent,
+                                              isDark: isDark,
+                                            ),
+                                            _MajorChip(
+                                              label: 'عرض المسارات',
+                                              accent: theme.colorScheme
+                                                  .onSurfaceVariant,
+                                              isDark: isDark,
+                                              outlined: true,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: 0.12),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.chevron_left_rounded,
+                                      size: 18,
+                                      color: accent,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
-                  );
-                }),
-            ],
-          ),
-        ),
+                  ),
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
 }
 
-class _FacultyMajorsHeader extends StatelessWidget {
-  const _FacultyMajorsHeader({
+class _FacultySummary extends StatelessWidget {
+  const _FacultySummary({
     required this.facultyName,
-    required this.isRtl,
-    required this.onBack,
+    required this.totalMajors,
+    required this.totalTracks,
   });
 
   final String facultyName;
-  final bool isRtl;
-  final VoidCallback onBack;
+  final int totalMajors;
+  final int totalTracks;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final foregroundColor = isDark ? Colors.white : const Color(0xFF083D43);
+    final accent = AppTeal.main;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
           begin: AlignmentDirectional.topStart,
           end: AlignmentDirectional.bottomEnd,
           colors: isDark
               ? [
-            theme.colorScheme.surfaceContainerHighest,
-            theme.colorScheme.surface,
+            accent.withValues(alpha: 0.22),
+            const Color(0xFF1C1C1F),
           ]
-              : const [
+              : [
+            accent.withValues(alpha: 0.16),
+            const Color(0xFFEAF7F8),
             Colors.white,
-            FacultyMajorsScreen._lightBackgroundColor,
           ],
         ),
         border: Border.all(
-          color: (isDark ? Colors.white : FacultyMajorsScreen._primaryColor)
-              .withValues(alpha: isDark ? .08 : .12),
+          color: accent.withValues(alpha: isDark ? 0.28 : 0.18),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? .22 : .07),
-            blurRadius: 24,
-            offset: const Offset(0, 16),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              _FacultyBackButton(isRtl: isRtl, onPressed: onBack),
-              const SizedBox(width: 12),
               Container(
-                width: 44,
-                height: 44,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  color: FacultyMajorsScreen._primaryColor.withValues(alpha: .12),
+                  color: accent,
                   borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.28),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-                child:  Icon(
-                  Icons.apartment_rounded,
-                  color: FacultyMajorsScreen._primaryColor,
+                child: const Icon(
+                  Icons.account_balance_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      facultyName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'التخصصات الأكاديمية المتاحة',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          Text(
-            facultyName,
-            textAlign: TextAlign.start,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: foregroundColor,
-              fontWeight: FontWeight.w800,
-              height: 1.25,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'اختر القسم أو التخصص للمتابعة',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: foregroundColor.withValues(alpha: .68),
-              fontWeight: FontWeight.w600,
-            ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _SummaryStat(
+                  value: '$totalMajors',
+                  label: 'تخصص',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SummaryStat(
+                  value: '$totalTracks',
+                  label: 'مسار',
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1427,166 +3155,11 @@ class _FacultyMajorsHeader extends StatelessWidget {
   }
 }
 
-class _FacultyBackButton extends StatelessWidget {
-  const _FacultyBackButton({required this.isRtl, required this.onPressed});
+class _SummaryStat extends StatelessWidget {
+  const _SummaryStat({required this.value, required this.label});
 
-  final bool isRtl;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Material(
-      color: isDark
-          ? Colors.white.withValues(alpha: .08)
-          : Colors.white.withValues(alpha: .9),
-      borderRadius: BorderRadius.circular(16),
-      elevation: 0,
-      shadowColor: Colors.black.withValues(alpha: .08),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: (isDark ? Colors.white : FacultyMajorsScreen._primaryColor)
-                  .withValues(alpha: isDark ? .10 : .12),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? .18 : .05),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Icon(
-            isRtl ? Icons.arrow_forward_rounded : Icons.arrow_back_rounded,
-            color: isDark ? Colors.white : FacultyMajorsScreen._primaryColor,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FacultyMajorCard extends StatelessWidget {
-  const _FacultyMajorCard({
-    required this.major,
-    required this.isRtl,
-    required this.onTap,
-  });
-
-  final ProgramMajor major;
-  final bool isRtl;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final cardColor = isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF083D43);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        splashColor: FacultyMajorsScreen._primaryColor.withValues(alpha: .08),
-        highlightColor: FacultyMajorsScreen._primaryColor.withValues(alpha: .04),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: (isDark ? Colors.white : FacultyMajorsScreen._primaryColor)
-                  .withValues(alpha: isDark ? .08 : .10),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? .20 : .06),
-                blurRadius: 20,
-                offset: const Offset(0, 14),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient:  LinearGradient(
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                    colors: [
-                      FacultyMajorsScreen._primaryColor,
-                      FacultyMajorsScreen._blueColor,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: FacultyMajorsScreen._primaryColor.withValues(alpha: .22),
-                      blurRadius: 14,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.school_rounded,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  major.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                    height: 1.25,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: FacultyMajorsScreen._lightBackgroundColor,
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(
-                    color: FacultyMajorsScreen._primaryColor.withValues(alpha: .10),
-                  ),
-                ),
-                child: Icon(
-                  isRtl
-                      ? Icons.arrow_back_ios_new_rounded
-                      : Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color: FacultyMajorsScreen._primaryColor,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FacultyMajorsEmptyState extends StatelessWidget {
-  const _FacultyMajorsEmptyState();
+  final String value;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -1594,46 +3167,95 @@ class _FacultyMajorsEmptyState extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 30),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 34),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? theme.colorScheme.surfaceContainerHighest : Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: FacultyMajorsScreen._primaryColor.withValues(alpha: .10),
+          color: theme.dividerColor.withValues(alpha: 0.22),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? .18 : .05),
-            blurRadius: 20,
-            offset: const Offset(0, 14),
+      ),
+      child: Row(
+        children: [
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppTeal.main,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MajorChip extends StatelessWidget {
+  const _MajorChip({
+    required this.label,
+    required this.accent,
+    required this.isDark,
+    this.outlined = false,
+  });
+
+  final String label;
+  final Color accent;
+  final bool isDark;
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: outlined
+            ? Colors.transparent
+            : accent.withValues(alpha: isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: outlined
+            ? Border.all(color: accent.withValues(alpha: 0.35))
+            : null,
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyMajorsState extends StatelessWidget {
+  const _EmptyMajorsState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 48),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: FacultyMajorsScreen._lightBackgroundColor,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child:  Icon(
-              Icons.school_rounded,
-              color: FacultyMajorsScreen._primaryColor,
-              size: 32,
-            ),
+          Icon(
+            Icons.school_outlined,
+            size: 40,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Text(
             'لا توجد أقسام متاحة حاليًا',
             textAlign: TextAlign.center,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : const Color(0xFF083D43),
             ),
           ),
         ],
@@ -1653,173 +3275,265 @@ class MajorTracksScreen extends StatelessWidget {
     required this.faculty,
   });
 
-  static final Color _primaryColor = FacultyMajorsScreen._primaryColor;
-  static const Color _blueColor = FacultyMajorsScreen._blueColor;
-  static const Color _lightBackgroundColor = FacultyMajorsScreen._lightBackgroundColor;
+  static final Color _primaryColor = AppTeal.main;
+  static const Color _blueColor = Color(0xFF2563EB);
+  static const Color _lightBackgroundColor = Color(0xFFEAF7F8);
+
+  static const _accents = <Color>[
+    Color(0xFF0D9488),
+    Color(0xFF2563EB),
+    Color(0xFF7C3AED),
+    Color(0xFFE11D48),
+    Color(0xFFEA580C),
+    Color(0xFF0891B2),
+    Color(0xFF16A34A),
+    Color(0xFFDB2777),
+    Color(0xFF4F46E5),
+    Color(0xFFCA8A04),
+    Color(0xFF0E7490),
+    Color(0xFF9333EA),
+    Color(0xFF65A30D),
+    Color(0xFFBE123C),
+    Color(0xFF0284C7),
+    Color(0xFFB45309),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    // تجميع التراكات حسب المستوى مع الحفاظ على ترتيب البيانات كما هو
     final Map<String, List<ProgramTrack>> tracksByLevel = {};
-    for (var track in major.tracks) {
+    for (final track in major.tracks) {
       tracksByLevel.putIfAbsent(track.level, () => []).add(track);
     }
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final textDirection = Directionality.of(context);
-    final isRtl = textDirection == TextDirection.rtl;
+    final levels = tracksByLevel.entries.toList();
 
-    return Scaffold(
-      backgroundColor: isDark ? theme.scaffoldBackgroundColor : const Color(0xFFF6FBFC),
+    return AppScaffold(
+      padding: EdgeInsets.zero,
       appBar: AppBar(
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
+        title: Text(major.name),
+        centerTitle: false,
         elevation: 0,
-        backgroundColor: isDark ? theme.scaffoldBackgroundColor : const Color(0xFFEAF7F8),
-        surfaceTintColor: Colors.transparent,
-        leadingWidth: 64,
-        leading: Padding(
-          padding: const EdgeInsetsDirectional.only(start: 12),
-          child: _TrackBackButton(
-            isRtl: isRtl,
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        title: Text(
-          major.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: isDark ? Colors.white : const Color(0xFF083D43),
-          ),
-        ),
+        scrolledUnderElevation: 0,
       ),
-      body: Directionality(
-        textDirection: textDirection,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: isDark
-                  ? [
-                theme.colorScheme.surface,
-                theme.scaffoldBackgroundColor,
-              ]
-                  : const [
-                Color(0xFFEAF7F8),
-                Color(0xFFF8FCFD),
-              ],
-            ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          _TrackSummary(
+            majorName: major.name,
+            facultyName: faculty.name,
+            totalTracks: major.tracks.length,
+            totalLevels: levels.length,
           ),
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 36),
-            itemCount: tracksByLevel.length,
-            itemBuilder: (context, index) {
-              final entry = tracksByLevel.entries.elementAt(index);
-              return _TrackLevelSection(
-                level: entry.key,
-                tracks: entry.value,
-                major: major,
-                faculty: faculty,
-                isRtl: isRtl,
-                isLast: index == tracksByLevel.length - 1,
+          const SizedBox(height: 18),
+          if (levels.isEmpty)
+            const _EmptyTracksState()
+          else
+            ...List.generate(levels.length, (sectionIndex) {
+              final entry = levels[sectionIndex];
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: sectionIndex == levels.length - 1 ? 0 : 22,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TrackLevelHeader(
+                      level: entry.key,
+                      count: entry.value.length,
+                    ),
+                    const SizedBox(height: 10),
+                    ...List.generate(entry.value.length, (index) {
+                      final track = entry.value[index];
+                      final globalIndex = levels
+                          .take(sectionIndex)
+                          .fold<int>(0, (n, e) => n + e.value.length) +
+                          index;
+                      final accent =
+                      _accents[globalIndex % _accents.length];
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          bottom: index == entry.value.length - 1 ? 0 : 10,
+                        ),
+                        child: _TrackSpecialtyCard(
+                          track: track,
+                          major: major,
+                          faculty: faculty,
+                          index: index,
+                          accent: accent,
+                          isDark: isDark,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
               );
-            },
-          ),
-        ),
+            }),
+        ],
       ),
     );
   }
 }
 
-class _TrackBackButton extends StatelessWidget {
-  const _TrackBackButton({required this.isRtl, required this.onPressed});
+class _TrackSummary extends StatelessWidget {
+  const _TrackSummary({
+    required this.majorName,
+    required this.facultyName,
+    required this.totalTracks,
+    required this.totalLevels,
+  });
 
-  final bool isRtl;
-  final VoidCallback onPressed;
+  final String majorName;
+  final String facultyName;
+  final int totalTracks;
+  final int totalLevels;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = AppTeal.main;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: AlignmentDirectional.topStart,
+          end: AlignmentDirectional.bottomEnd,
+          colors: isDark
+              ? [
+            accent.withValues(alpha: 0.22),
+            const Color(0xFF1C1C1F),
+          ]
+              : [
+            accent.withValues(alpha: 0.16),
+            const Color(0xFFEAF7F8),
+            Colors.white,
+          ],
+        ),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.28 : 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.28),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.auto_stories_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      majorName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      facultyName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _TrackSummaryStat(
+                  value: '$totalTracks',
+                  label: 'مسار',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _TrackSummaryStat(
+                  value: '$totalLevels',
+                  label: 'مستوى',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrackSummaryStat extends StatelessWidget {
+  const _TrackSummaryStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(14),
-          child: Ink(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: .72)
-                  : Colors.white.withValues(alpha: .94),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: MajorTracksScreen._primaryColor.withValues(alpha: isDark ? .18 : .12),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? .18 : .05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Icon(
-              isRtl ? Icons.arrow_forward_rounded : Icons.arrow_back_rounded,
-              size: 21,
-              color: isDark ? Colors.white : MajorTracksScreen._primaryColor,
-            ),
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.22),
         ),
       ),
-    );
-  }
-}
-
-class _TrackLevelSection extends StatelessWidget {
-  const _TrackLevelSection({
-    required this.level,
-    required this.tracks,
-    required this.major,
-    required this.faculty,
-    required this.isRtl,
-    required this.isLast,
-  });
-
-  final String level;
-  final List<ProgramTrack> tracks;
-  final ProgramMajor major;
-  final ProgramFaculty faculty;
-  final bool isRtl;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          _TrackLevelHeader(level: level),
-          const SizedBox(height: 10),
-          ...List.generate(tracks.length, (index) {
-            final track = tracks[index];
-            return Padding(
-              padding: EdgeInsets.only(bottom: index == tracks.length - 1 ? 0 : 10),
-              child: _TrackSpecialtyCard(
-                track: track,
-                major: major,
-                faculty: faculty,
-                isRtl: isRtl,
-              ),
-            );
-          }),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppTeal.main,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );
@@ -1827,65 +3541,49 @@ class _TrackLevelSection extends StatelessWidget {
 }
 
 class _TrackLevelHeader extends StatelessWidget {
-  const _TrackLevelHeader({required this.level});
+  const _TrackLevelHeader({
+    required this.level,
+    required this.count,
+  });
 
   final String level;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final foregroundColor = isDark ? Colors.white : const Color(0xFF083D43);
+    final accent = AppTeal.main;
 
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 34,
-          height: 34,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(
-            gradient:  LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [
-                MajorTracksScreen._primaryColor,
-                MajorTracksScreen._blueColor,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(13),
-            boxShadow: [
-              BoxShadow(
-                color: MajorTracksScreen._primaryColor.withValues(alpha: isDark ? .18 : .14),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.school_rounded,
-            size: 18,
-            color: Colors.white,
+            color: accent,
+            shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Text(
           level,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleLarge?.copyWith(
-            color: foregroundColor,
-            fontSize: 21,
+          style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w900,
-            height: 1.15,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Container(
-          width: 30,
-          height: 4,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: MajorTracksScreen._primaryColor.withValues(alpha: .22),
-            borderRadius: BorderRadius.circular(999),
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '$count',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: accent,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ],
@@ -1898,30 +3596,32 @@ class _TrackSpecialtyCard extends StatelessWidget {
     required this.track,
     required this.major,
     required this.faculty,
-    required this.isRtl,
+    required this.index,
+    required this.accent,
+    required this.isDark,
   });
 
   final ProgramTrack track;
   final ProgramMajor major;
   final ProgramFaculty faculty;
-  final bool isRtl;
-
-  static const List<IconData> _specialtyIcons = [
-    Icons.menu_book_rounded,
-    Icons.auto_stories_rounded,
-    Icons.library_books_rounded,
-    Icons.school_rounded,
-  ];
+  final int index;
+  final Color accent;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : const Color(0xFF083D43);
-    final icon = _specialtyIcons[track.name.hashCode.abs() % _specialtyIcons.length];
 
     return Material(
-      color: Colors.transparent,
+      color: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: theme.dividerColor.withValues(alpha: 0.22),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           final specs = createSemesterSpecsForTrack(track);
@@ -1949,95 +3649,118 @@ class _TrackSpecialtyCard extends StatelessWidget {
             ),
           );
         },
-        borderRadius: BorderRadius.circular(20),
-        splashColor: MajorTracksScreen._primaryColor.withValues(alpha: .08),
-        highlightColor: MajorTracksScreen._primaryColor.withValues(alpha: .04),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 60),
-          child: Ink(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: .78)
-                  : Colors.white.withValues(alpha: .96),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: (isDark ? Colors.white : MajorTracksScreen._primaryColor)
-                    .withValues(alpha: isDark ? .08 : .11),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? .18 : .045),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient:  LinearGradient(
-                      begin: Alignment.topRight,
-                      end: Alignment.bottomLeft,
-                      colors: [
-                        MajorTracksScreen._primaryColor,
-                        MajorTracksScreen._blueColor,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: MajorTracksScreen._primaryColor.withValues(alpha: .18),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Container(width: 4, color: accent),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+                  child: Row(
+                    children: [
+                      // Container(
+                      //   width: 48,
+                      //   height: 48,
+                      //   alignment: Alignment.center,
+                      //   decoration: BoxDecoration(
+                      //     color: accent.withValues(alpha: 0.14),
+                      //     borderRadius: BorderRadius.circular(14),
+                      //   ),
+                      //   child: Text(
+                      //     '${index + 1}'.padLeft(2, '0'),
+                      //     style: theme.textTheme.titleSmall?.copyWith(
+                      //       color: accent,
+                      //       fontWeight: FontWeight.w900,
+                      //     ),
+                      //   ),
+                      // ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              track.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                height: 1.25,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(
+                                    alpha: isDark ? 0.18 : 0.10),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                track.level,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.chevron_left_rounded,
+                          size: 18,
+                          color: accent,
+                        ),
                       ),
                     ],
                   ),
-                  child: Icon(
-                    icon,
-                    size: 22,
-                    color: Colors.white,
-                  ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    track.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: textColor,
-                      fontWeight: FontWeight.w800,
-                      height: 1.25,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? MajorTracksScreen._primaryColor.withValues(alpha: .14)
-                        : MajorTracksScreen._lightBackgroundColor,
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(
-                      color: MajorTracksScreen._primaryColor.withValues(alpha: .12),
-                    ),
-                  ),
-                  child: Icon(
-                    isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-                    size: 24,
-                    color: MajorTracksScreen._primaryColor,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _EmptyTracksState extends StatelessWidget {
+  const _EmptyTracksState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 48),
+      child: Column(
+        children: [
+          Icon(
+            Icons.auto_stories_outlined,
+            size: 40,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'لا توجد مسارات متاحة حاليًا',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2071,59 +3794,37 @@ class StudiesTableScreen extends StatefulWidget {
   @override
   State<StudiesTableScreen> createState() => _StudiesTableScreenState();
 }
-
-class _KeepAlive extends StatefulWidget {
-  final Widget child;
-
-  const _KeepAlive({required this.child});
-
-  @override
-  State<_KeepAlive> createState() => _KeepAliveState();
-}
-
-class _KeepAliveState extends State<_KeepAlive>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context); // مهم لمنع ضياع الحالة
-    return widget.child;
-  }
-}
-
-class _StudiesTableScreenState extends State<StudiesTableScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _StudiesTableScreenState extends State<StudiesTableScreen> {
+  late final PageController _pageController;
+  int _settledPage = 0;
   late SemesterModel _semester1;
   late SemesterModel _semester2;
   late GradesLocalStore _gradesStore;
   final Set<String> _loadedModuleStates = {};
 
-  int currentIndex = 0; // ← هذا يمثل index الحالي
-
   @override
   void initState() {
     super.initState();
     _initializeGradesStore();
-    _tabController = TabController(length: 2, vsync: this);
+    _pageController = PageController();
+    _pageController.addListener(_onPageScroll);
     _initSemesters();
-    Future.microtask(() async {
-      await loadSemesterNotes();
-    });
-
-    // الاستماع لتغييرات الـ index عند التمرير أو الضغط على الـ Tab
-    _tabController.addListener(() {
-      if (_tabController.index == currentIndex) return;
-      setState(() {
-        currentIndex = _tabController.index;
-      });
-      Future.microtask(() async {
-        await loadSemesterNotes();
-      });
-    });
+    Future.microtask(loadSemesterNotes);
   }
+
+  void _onPageScroll() {
+    final page = _pageController.page;
+    if (page == null) return;
+    if ((page - page.round()).abs() > 0.001) return;
+    final i = page.round();
+    if (i == _settledPage) return;
+    _settledPage = i;
+    loadSemesterNotes();
+  }
+
+  int get _semesterIndex => _pageController.hasClients
+      ? (_pageController.page?.round() ?? _settledPage)
+      : _settledPage;
 
   void _initializeGradesStore() {
     _gradesStore = GradesLocalStore(
@@ -2137,7 +3838,6 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     );
   }
 
-
   void _initSemesters() {
     _semester1 = SemesterModel.fromSpec(
       widget.semester1Modules,
@@ -2148,18 +3848,13 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
       onChanged: () => setState(() {}),
     );
   }
-  // Regression checklist (manual):
-  // 1) Edit grades/coef/cred/weights in Department A + Specialty X, then Save.
-  // 2) Open Department B + Specialty Y (same level/semester/module names) => values must remain unchanged.
-  // 3) Return to Department A + Specialty X => edited values must persist.
-  // 4) First load with old global data migrates once into scoped storage, then reads scoped keys only.
-  /// ==================== حفظ بيانات الفصل الحالي باستخدام SharedPreferences ====================
+
   Future<void> saveCurrentSemesterNotes() async {
     debugPrint('SAVE_CLICKED');
-    FocusScope.of(context).unfocus(); // ← يفرض إنهاء تحرير أي TextField
+    FocusScope.of(context).unfocus();
 
     final currentSemester =
-    _tabController.index == 0 ? _semester1 : _semester2;
+    _semesterIndex == 0 ? _semester1 : _semester2;
     final semesterKey = currentSemester.name.trim().toUpperCase();
     for (final module in currentSemester.modules) {
       debugPrint(
@@ -2180,7 +3875,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Saved")),
+          const SnackBar(content: Text('Saved')),
         );
       }
     } catch (error, stackTrace) {
@@ -2189,33 +3884,21 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     }
   }
 
-  /// ==================== تحميل بيانات الفصل الحالي من SharedPreferences ====================
   Future<void> loadSemesterNotes() async {
     final currentSemester =
-    _tabController.index == 0 ? _semester1 : _semester2;
+    _semesterIndex == 0 ? _semester1 : _semester2;
     final semesterKey = currentSemester.name.trim().toUpperCase();
     debugPrint('LOAD_START semesterKey=$semesterKey');
     final overrides = await _gradesStore.loadModuleStates(semesterKey);
     debugPrint(
       'LOAD_OVERRIDES semesterKey=$semesterKey data=${jsonEncode(overrides)}',
     );
-    if (overrides.isEmpty) {
-      debugPrint(
-        'LOAD_DEFAULT semesterKey=$semesterKey reason=no_saved_data',
-      );
-    }
 
     var updated = false;
     if (!_loadedModuleStates.contains(semesterKey)) {
       for (final module in currentSemester.modules) {
         final moduleOverride = overrides[module.id];
-        if (moduleOverride == null) {
-          debugPrint(
-            'LOAD_DEFAULT semesterKey=$semesterKey moduleId=${module.id} '
-                'reason=missing_override',
-          );
-          continue;
-        }
+        if (moduleOverride == null) continue;
         module.coef = moduleOverride['coef']?.toDouble() ?? module.coef;
         module.credits = moduleOverride['cred']?.toDouble() ?? module.credits;
         module.td = moduleOverride['td'] ?? module.td;
@@ -2232,10 +3915,6 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
     if (mounted && updated) setState(() {});
   }
 
-
-
-
-
   @override
   void didUpdateWidget(covariant StudiesTableScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -2243,167 +3922,285 @@ class _StudiesTableScreenState extends State<StudiesTableScreen>
         oldWidget.departmentId != widget.departmentId ||
         oldWidget.specialtyId != widget.specialtyId ||
         oldWidget.level != widget.level;
-    final modulesChanged = oldWidget.semester1Modules != widget.semester1Modules ||
-        oldWidget.semester2Modules != widget.semester2Modules;
+    final modulesChanged =
+        oldWidget.semester1Modules != widget.semester1Modules ||
+            oldWidget.semester2Modules != widget.semester2Modules;
     if (trackChanged || modulesChanged) {
-      if (trackChanged) {
-        _initializeGradesStore();
-      }
+      if (trackChanged) _initializeGradesStore();
       _initSemesters();
       _loadedModuleStates.clear();
-      Future.microtask(() async {
-        await loadSemesterNotes();
-      });
+      Future.microtask(loadSemesterNotes);
     }
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _pageController.removeListener(_onPageScroll);
+    _pageController.dispose();
     super.dispose();
   }
-  Widget _buildSemesterTabContent(SemesterModel semester) {
-    return Builder(
-      builder: (context) {
-        final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-        const summaryPadding = 220.0;
 
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          child: SingleChildScrollView(
-            //key: ValueKey('${semester.name}_${semester.modules.length}'),
-            padding: EdgeInsets.fromLTRB(0, 8, 0, bottomInset),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // محتوى الجدول الخاص بالفصل
-                buildSemesterTable(context, semester),
 
-                const SizedBox(height: 16),
 
-                // بطاقة الملخص السنوي داخل التمرير
-                if (_tabController.index == 0)
-                  _AnnualSummaryCard(
-                    semester1: _semester1,
-                    semester2: _semester2,
-                    showS1: true,
-                    showS2: false,
-                    showAnnual: false,
-                  ),
-                if (_tabController.index == 1)
-                  _AnnualSummaryCard(
-                    semester1: _semester1,
-                    semester2: _semester2,
-                    showS1: false,
-                    showS2: true,
-                    showAnnual: true,
-                  )
-              ],
+  Widget _cinematicPage({
+    required int index,
+    required Widget child,
+  }) {
+    return AnimatedBuilder(
+      animation: _pageController,
+      builder: (context, child) {
+        final page =
+        _pageController.hasClients ? (_pageController.page ?? 0) : 0.0;
+        final delta = page - index;
+        final t = (1 - delta.abs()).clamp(0.0, 1.0);
+        return Opacity(
+          opacity: 0.35 + (0.65 * t),
+          child: Transform.translate(
+            offset: Offset(delta * 56, (1 - t) * 18),
+            child: Transform.scale(
+              scale: 0.94 + (0.06 * t),
+              child: child,
             ),
           ),
         );
       },
+      child: RepaintBoundary(child: child),
     );
   }
 
+  Future<void> _goToSemester(int index) {
+    return _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 620),
+      curve: Curves.easeInOutCubicEmphasized,
+    );
+  }
 
-
-
-
+  Widget _buildSemesterTabContent(
+      SemesterModel semester, {
+        required bool showS1,
+        required bool showS2,
+        required bool showAnnual,
+      }) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return ListView(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 24 + bottomInset),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      children: [
+        buildSemesterTable(context, semester),
+        const SizedBox(height: 8),
+        _AnnualSummaryCard(
+          semester1: _semester1,
+          semester2: _semester2,
+          showS1: showS1,
+          showS2: showS2,
+          showAnnual: showAnnual,
+        ),
+      ],
+    );
+  }
   @override
   Widget build(BuildContext context) {
-    final sem1 = _semester1;
-    final sem2 = _semester2;
-    final canPop = Navigator.canPop(context);
+    final accent = AppTeal.main;
 
     return AppScaffold(
-
-        body:
-        NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) => [
-            SliverAppBar(
-                pinned: false,
-                floating: true,
-                snap: true,
-                expandedHeight: 50,
-                actionsIconTheme: IconThemeData(
-                    color: Theme.of(context).colorScheme.onSurface
-                    ,size: 15
-                ),
-                flexibleSpace:
-                FlexibleSpaceBar(
-                    background: Padding(
-                        padding:  EdgeInsets.symmetric(horizontal: 0, vertical: 1),
-                        child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              SizedBox(width: 45),
-                              // النص طويل
-                              Expanded(
-                                child: Text(
-                                  widget.facultyName+' :',
-                                  style: TextStyle(fontSize: 20,
-                                      color: Theme.of(context).colorScheme.onSurface),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              // زر الحفظ
-                              IconButton(
-                                icon: Icon(Icons.save, color: Theme.of(context).colorScheme.onSurface ),
-                                onPressed: saveCurrentSemesterNotes,
-                                tooltip: "Save current semester",
-                                iconSize:  25,
-                              ),
-                              IconButton(
-                                icon:  Icon(Icons.insert_drive_file_rounded,
-                                    color: Theme.of(context).colorScheme.onSurface),
-                                iconSize: 25,
-                                tooltip: "Download as PDF",
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => ResultsScreen(
-                                        semester1: _semester1,
-                                        semester2: _semester2,
-                                        programLabel: '${widget.programName}',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              )
-
-                            ]
-                        )
-                    )
-                )
-            ),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: TabBarDelegate(
-                TabBar(
-                  controller: _tabController,
-                  tabs: const [
-                    Tab(text: 'S1'),
-                    Tab(text: 'S2'),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              _KeepAlive(child: _buildSemesterTabContent(sem1)),
-              _KeepAlive(child: _buildSemesterTabContent(sem2)),
-            ],
+      padding: EdgeInsets.zero,
+      appBar: AppBar(
+        automaticallyImplyLeading: true,
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          widget.facultyName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'حفظ',
+            onPressed: saveCurrentSemesterNotes,
+            icon: const Icon(Icons.save_outlined),
           ),
-        )
+          IconButton(
+            tooltip: 'كشف النقاط',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ResultsScreen(
+                    semester1: _semester1,
+                    semester2: _semester2,
+                    programLabel: widget.programName,
+                    facultyName: widget.collegeId,
+                    level: widget.level,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: AnimatedBuilder(
+              animation: _pageController,
+              builder: (context, _) {
+                final page = _pageController.hasClients
+                    ? (_pageController.page ?? 0)
+                    : 0.0;
+                return _CinemaSemesterSwitch(
+                  page: page,
+                  accent: accent,
+                  onSelect: _goToSemester,
+                );
+              },
+            ),
+          ),
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              physics: const BouncingScrollPhysics(),
+              children: [
+                _cinematicPage(
+                  index: 0,
+                  child: _KeepAlive(
+                    child: _buildSemesterTabContent(
+                      _semester1,
+                      showS1: true,
+                      showS2: false,
+                      showAnnual: false,
+                    ),
+                  ),
+                ),
+                _cinematicPage(
+                  index: 1,
+                  child: _KeepAlive(
+                    child: _buildSemesterTabContent(
+                      _semester2,
+                      showS1: false,
+                      showS2: true,
+                      showAnnual: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
+
+class _CinemaSemesterSwitch extends StatelessWidget {
+  const _CinemaSemesterSwitch({
+    required this.page,
+    required this.accent,
+    required this.onSelect,
+  });
+
+  final double page;
+  final Color accent;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return SizedBox(
+      height: 44,
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          Align(
+            alignment: AlignmentDirectional.lerp(
+              AlignmentDirectional.centerStart,
+              AlignmentDirectional.centerEnd,
+              page.clamp(0.0, 1.0),
+            )!,
+            child: FractionallySizedBox(
+              widthFactor: 0.5,
+              heightFactor: 1,
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.28),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              _cell(theme, 'الفصل 1', () => onSelect(0)),
+              _cell(theme, 'الفصل 2', () => onSelect(1)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cell(ThemeData theme, String title, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Center(
+          child: Text(
+            title,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+class _KeepAlive extends StatefulWidget {
+  final Widget child;
+
+  const _KeepAlive({required this.child});
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // مهم لمنع ضياع الحالة
+    return widget.child;
+  }
+}
+
+
+
+
+
 
 class GradesStorageScope {
   const GradesStorageScope({
@@ -3764,13 +5561,17 @@ class ResultsScreen extends StatelessWidget {
   final SemesterModel semester1;
   final SemesterModel semester2;
   final String programLabel; // مثال: "Licence 2ème Année" (اختياري)
+  final String facultyName;
+  final String level;
 
   const ResultsScreen({
-    Key? key,
+    super.key,
     required this.semester1,
     required this.semester2,
     this.programLabel = '',
-  }) : super(key: key);
+    this.facultyName = '',
+    this.level = '',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3794,8 +5595,9 @@ class ResultsScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final file = await PdfReportService.generateReport(
-            faculty: programLabel, // مثال: يمكنك تمرير قيمة من parameters
+            faculty: facultyName.isNotEmpty ? facultyName : programLabel,
             program: programLabel,
+            level: level,
             semester1: semester1,
             semester2: semester2,
           );
@@ -4068,8 +5870,12 @@ class ResultsScreen extends StatelessWidget {
   }
 
   Widget _buildModuleListSection(
-      BuildContext context, String title, List<ModuleModel> modules) {
-    final scheme = Theme.of(context).colorScheme;
+      BuildContext context,
+      String title,
+      List<ModuleModel> modules,
+      ) {
+    final theme = Theme.of(context);
+    final accent = AppTeal.main;
 
     if (modules.isEmpty) {
       return Column(
@@ -4077,35 +5883,87 @@ class ResultsScreen extends StatelessWidget {
         children: [
           Text(
             title,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: scheme.onSurface,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             S.of(context).noSubjectsThisSemester,
-            style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
           ),
         ],
       );
     }
 
+    final grouped = <String, List<ModuleModel>>{};
+    for (final m in modules) {
+      final key = m.unitLabel.trim().isEmpty ? 'مواد أخرى' : m.unitLabel;
+      grouped.putIfAbsent(key, () => []).add(m);
+    }
+
     return Column(
-      //crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              textDirection: TextDirection.ltr,
-              title,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: scheme.onSurface,
-              ),
-            )),
-        const SizedBox(height: 8),
-        ...modules.map((m) => _buildModuleRow(context, m)).toList(),
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ...grouped.entries.map((entry) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${entry.value.length}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ...entry.value.map((m) => _buildModuleRow(context, m)),
+              ],
+            ),
+          );
+        }),
       ],
     );
   }
@@ -4249,226 +6107,606 @@ class PdfReportService {
     required String program,
     required SemesterModel semester1,
     required SemesterModel semester2,
+    String level = '',
+    String department = '',
   }) async {
     final generatedAt = DateTime.now();
-    final pdf = pw.Document(
-      title: 'Relevé des résultats UniSpace',
-      author: 'UniSpace',
-      subject: 'Relevé annuel des résultats',
-      creator: 'UniSpace Flutter App',
-      producer: 'UniSpace PDF Service',
-    );
+    final regularFont =
+    pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Regular.ttf'));
+    final boldFont =
+    pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Bold.ttf'));
 
-    // حساب المتوسطات
     final moy1 = semester1.semesterAverage();
     final moy2 = semester2.semesterAverage();
-    final ann = (moy1 + moy2) / 2;
-
+    final ann = _annualAverage(moy1, moy2);
     final cred1 = semester1.creditsEarned();
     final cred2 = semester2.creditsEarned();
     final totalCred = cred1 + cred2;
+    final decision = ann == 0
+        ? '---'
+        : (ann >= 10 ? 'Admitted (regular session)' : 'Not admitted');
+    final academicYear = _academicYear(generatedAt);
+    final docId = _buildDocumentId(generatedAt, semester1, semester2);
 
-    final decision = ann == 0 ? '---' : (ann >= 10 ? 'SUCCÈS' : 'AJOURNÉ');
-    final regularFont =
-    pw.Font.ttf(await rootBundle.load("assets/fonts/Tajawal-Regular.ttf"));
-    final boldFont =
-    pw.Font.ttf(await rootBundle.load("assets/fonts/Tajawal-Bold.ttf"));
     final user = FirebaseAuth.instance.currentUser;
     final fullName = (user?.displayName?.trim().isNotEmpty ?? false)
         ? user!.displayName!.trim()
-        : 'Étudiant UniSpace';
+        : 'UniSpace student';
+    final names = _splitName(fullName);
     final email = _maskEmail(user?.email);
-    final docId = _buildDocumentId(generatedAt, semester1, semester2);
-    final academicYear = _academicYear(generatedAt);
+
+    final logo = _graduationCap();
+    final translatedTitles = await _translateAll([
+      ...semester1.modules,
+      ...semester2.modules,
+    ]);
+
+    final pdf = pw.Document(
+      title: 'UniSpace grade report',
+      author: 'UniSpace',
+      subject: 'Annual grade report',
+      creator: 'UniSpace Flutter App',
+    );
 
     pdf.addPage(
       pw.MultiPage(
-        margin: const pw.EdgeInsets.all(24),
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.fromLTRB(18, 16, 18, 18),
         theme: pw.ThemeData.withFont(base: regularFont, bold: boldFont),
         footer: (context) => _footer(context, generatedAt, docId),
         build: (context) => [
-          pw.Directionality(
-            textDirection: pw.TextDirection.ltr,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('Université : Université UniSpace',
-                    style: pw.TextStyle(font: boldFont, fontSize: 14)),
-                pw.Text('Faculté : ${faculty.isEmpty ? 'Non renseignée' : faculty}'),
-                pw.Text('Programme / Spécialité : ${program.isEmpty ? 'Non renseigné' : program}'),
-                pw.Text('Année universitaire : $academicYear'),
-                pw.Text('Nom & Prénom : $fullName'),
-                pw.Text('Email : ${email ?? 'Non renseigné'}'),
-                pw.SizedBox(height: 16),
-                _sectionTitle('DÉCISION', font: boldFont),
-                pw.SizedBox(height: 8),
-                pw.Table(
-                  border: pw.TableBorder.all(color: PdfColors.grey400),
-                  columnWidths: const {
-                    0: pw.FlexColumnWidth(3),
-                    1: pw.FlexColumnWidth(2),
-                    2: pw.FlexColumnWidth(3),
-                    3: pw.FlexColumnWidth(2),
-                    4: pw.FlexColumnWidth(2),
-                    5: pw.FlexColumnWidth(2),
-                  },
-                  children: [
-                    _decisionHeaderRow(),
-                    _decisionValueRow(
-                      ann,
-                      totalCred,
-                      decision,
-                      moy1,
-                      moy2,
-                      cred1,
-                      cred2,
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 14),
-                _sectionTitle('SEMESTRE 1', font: boldFont),
-                pw.SizedBox(height: 8),
-                _modulesTable(semester1.modules),
-                pw.SizedBox(height: 14),
-                _sectionTitle('SEMESTRE 2', font: boldFont),
-                pw.SizedBox(height: 8),
-                _modulesTable(semester2.modules),
-              ],
+          _header(
+            logo: logo,
+            faculty: faculty,
+            program: program,
+            department: department,
+            bold: boldFont,
+          ),
+          pw.SizedBox(height: 8),
+          pw.Center(
+            child: pw.Text(
+              'GRADE REPORT',
+              style: pw.TextStyle(
+                font: boldFont,
+                fontSize: 16,
+                letterSpacing: 1.2,
+              ),
             ),
+          ),
+          pw.SizedBox(height: 8),
+          _identityBlock(
+            year: academicYear,
+            lastName: names.$1,
+            firstName: names.$2,
+            level: level,
+            faculty: faculty,
+            program: program,
+            email: email,
+            inscription: user?.uid != null
+                ? 'US-${user!.uid.substring(0, user.uid.length.clamp(0, 12))}'
+                : '—',
+            bold: boldFont,
+          ),
+          pw.SizedBox(height: 10),
+          _semesterBlock(
+            title: 'Semester 1',
+            semester: semester1,
+            moyenne: moy1,
+            credits: cred1,
+            semNumber: 1,
+            bold: boldFont,
+            translatedTitles: translatedTitles,
+          ),
+          pw.SizedBox(height: 10),
+          _semesterBlock(
+            title: 'Semester 2',
+            semester: semester2,
+            moyenne: moy2,
+            credits: cred2,
+            semNumber: 2,
+            bold: boldFont,
+            translatedTitles: translatedTitles,
+          ),
+          pw.SizedBox(height: 10),
+          _decisionBlock(
+            moyenne: ann,
+            decision: decision,
+            yearCredits: totalCred,
+            bold: boldFont,
           ),
         ],
       ),
     );
 
     final dir = await getTemporaryDirectory();
-    final file = File("${dir.path}/results.pdf");
+    final file = File('${dir.path}/results.pdf');
     return file.writeAsBytes(await pdf.save());
   }
 
-  // ----------- Helpers -----------
-
-  static pw.Widget _sectionTitle(String text, {required pw.Font font}) {
-    return pw.Container(
-      width: double.infinity,
-      padding: const pw.EdgeInsets.symmetric(vertical: 8),
-      color: PdfColors.grey300,
-      child: pw.Text(
-        text,
-        textAlign: pw.TextAlign.center,
-        style: pw.TextStyle(
-          fontSize: 15,
-          fontWeight: pw.FontWeight.bold,
-          font: font, // استخدم الخط الممرر
+  static pw.Widget _header({
+    required pw.Widget logo,
+    required String faculty,
+    required String program,
+    required String department,
+    required pw.Font bold,
+  }) {
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('UniSpace',
+                  style: pw.TextStyle(font: bold, fontSize: 11)),
+              pw.Text('University platform',
+                  style: const pw.TextStyle(fontSize: 8)),
+              pw.Text(
+                'Faculty: ${faculty.isEmpty ? 'Not specified' : faculty}',
+                style: const pw.TextStyle(fontSize: 8),
+              ),
+              if (department.isNotEmpty)
+                pw.Text('Department: $department',
+                    style: const pw.TextStyle(fontSize: 8)),
+              pw.Text(
+                'Major: ${program.isEmpty ? 'Not specified' : program}',
+                style: const pw.TextStyle(fontSize: 8),
+              ),
+            ],
+          ),
         ),
+        pw.Container(width: 64, height: 64, child: logo),
+        pw.Expanded(child: pw.SizedBox()),
+      ],
+    );
+  }
+
+  static pw.Widget _identityBlock({
+    required String year,
+    required String lastName,
+    required String firstName,
+    required String level,
+    required String faculty,
+    required String program,
+    required String? email,
+    required String inscription,
+    required pw.Font bold,
+  }) {
+    pw.Widget cell(String k, String v) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 2, right: 8),
+        child: pw.RichText(
+          text: pw.TextSpan(
+            children: [
+              pw.TextSpan(
+                text: '$k: ',
+                style: pw.TextStyle(font: bold, fontSize: 8),
+              ),
+              pw.TextSpan(
+                text: v.isEmpty ? '—' : v,
+                style: const pw.TextStyle(fontSize: 8),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return pw.Column(
+      children: [
+        pw.Row(children: [
+          pw.Expanded(child: cell('Academic year', year)),
+          pw.Expanded(child: cell('Last name', lastName)),
+          pw.Expanded(child: cell('First name', firstName)),
+        ]),
+        pw.Row(children: [
+          pw.Expanded(child: cell('ID', inscription)),
+          pw.Expanded(child: cell('Level', level)),
+          pw.Expanded(child: cell('Major', program)),
+        ]),
+        pw.Row(children: [
+          pw.Expanded(child: cell('Faculty', faculty)),
+          pw.Expanded(child: cell('Email', email ?? 'Not specified')),
+          pw.Expanded(child: cell('Degree', level)),
+        ]),
+      ],
+    );
+  }
+
+  static const _ueWidths = <double>[1.1, 1.7, 0.9, 0.8, 0.8, 0.95, 0.7];
+  static const _modWidths = <double>[3.4, 0.85, 0.8, 0.85, 0.95, 0.7];
+
+  static pw.Widget _semesterBlock({
+    required String title,
+    required SemesterModel semester,
+    required double moyenne,
+    required double credits,
+    required int semNumber,
+    required pw.Font bold,
+    required Map<String, String> translatedTitles,
+  }) {
+    final groups = _groupUnits(semester.modules);
+    final rows = <pw.TableRow>[
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+        children: [
+          _headCell('Teaching unit (UE)'),
+          _headCell('Subject(s) of the teaching unit'),
+        ],
       ),
-    );
-  }
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+        children: [
+          _innerTable(
+            widths: _ueWidths,
+            rows: [
+              pw.TableRow(children: [
+                _th('Type'),
+                _th('UE code'),
+                _th('Credits'),
+                _th('Coef'),
+                _th('Avg'),
+                _th('Earned'),
+                _th('Sess'),
+              ]),
+            ],
+          ),
+          _innerTable(
+            widths: _modWidths,
+            rows: [
+              pw.TableRow(children: [
+                _th('Title'),
+                _th('Credits'),
+                _th('Coef'),
+                _th('Avg'),
+                _th('Earned'),
+                _th('Sess'),
+              ]),
+            ],
+          ),
+        ],
+      ),
+    ];
 
-  static pw.TableRow _decisionHeaderRow() {
-    return pw.TableRow(
-      decoration: const pw.BoxDecoration(color: PdfColors.grey200),
-      children: [
-        _tableCell('Année (moyenne générale)', bold: true),
-        _tableCell('Total Crédits', bold: true),
-        _tableCell('Résultat', bold: true),
-        _tableCell('Moyenne S1', bold: true),
-        _tableCell('Moyenne S2', bold: true),
-        _tableCell('Crédits S1/S2', bold: true),
-      ],
-    );
-  }
+    if (groups.isEmpty) {
+      rows.add(
+        pw.TableRow(children: [_td('—'), _td('—')]),
+      );
+    } else {
+      for (var u = 0; u < groups.length; u++) {
+        final g = groups[u];
+        final ueCoef = g.modules.fold<double>(0, (n, m) => n + m.coef);
+        final ueCred = g.modules.fold<double>(0, (n, m) => n + m.credits);
+        final ueEarned = g.modules.fold<double>(
+          0,
+              (n, m) => n + (m.moy >= 10 ? m.credits : 0),
+        );
+        final ueWeighted =
+        g.modules.fold<double>(0, (n, m) => n + (m.moy * m.coef));
+        final ueMoy = ueCoef == 0 ? 0.0 : ueWeighted / ueCoef;
+        final ueSess = ueMoy == 0 ? '—' : (ueMoy >= 10 ? 'N' : 'R');
+        final nature = _ueNature(g.label);
+        final code =
+            '$nature${(u + 1).toString().padLeft(3, '0')}S$semNumber';
 
-  static pw.TableRow _decisionValueRow(
-      double ann,
-      double totalCred,
-      String decision,
-      double moy1,
-      double moy2,
-      double cred1,
-      double cred2,
-      ) {
-    return pw.TableRow(
-      children: [
-        _tableCell(ann.toStringAsFixed(2)),
-        _tableCell(totalCred.toStringAsFixed(0)),
-        _tableCell(decision),
-        _tableCell(moy1.toStringAsFixed(2)),
-        _tableCell(moy2.toStringAsFixed(2)),
-        _tableCell('${cred1.toStringAsFixed(0)} / ${cred2.toStringAsFixed(0)}'),
-      ],
-    );
-  }
+        rows.add(
+          pw.TableRow(
+            verticalAlignment: pw.TableCellVerticalAlignment.middle,
+            children: [
+              _innerTable(
+                widths: _ueWidths,
+                rows: [
+                  pw.TableRow(children: [
+                    _td(nature),
+                    _td(code),
+                    _td(ueCred.toStringAsFixed(0)),
+                    _td(ueCoef.toStringAsFixed(1)),
+                    _td(ueMoy.toStringAsFixed(2)),
+                    _td(ueEarned.toStringAsFixed(0)),
+                    _td(ueSess),
+                  ]),
+                ],
+              ),
+              _innerTable(
+                widths: _modWidths,
+                rows: [
+                  for (final m in g.modules)
+                    pw.TableRow(children: [
+                      _td(
+                        translatedTitles[m.id] ?? m.title,
+                        align: pw.TextAlign.left,
+                      ),
+                      _td(m.credits.toStringAsFixed(0)),
+                      _td(m.coef.toStringAsFixed(0)),
+                      _td(m.moy.toStringAsFixed(2)),
+                      _td((m.moy >= 10 ? m.credits : 0).toStringAsFixed(0)),
+                      _td(m.moy == 0 ? '—' : (m.moy >= 10 ? 'N' : 'R')),
+                    ]),
+                ],
+              ),
+            ],
+          ),
+        );
+      }
+    }
 
-  static pw.Widget _modulesTable(List<ModuleModel> modules) {
-    final rows = modules
-        .map((m) => [
-      m.title.ellipsize(42),
-      m.coef.toString(),
-      m.credits.toString(),
-      m.moy.toStringAsFixed(2),
-    ])
-        .toList();
-
-    return pw.Table.fromTextArray(
-      headers: const ['Module', 'Coef', 'Crédit', 'Moyenne'],
-      data: rows,
-      border: pw.TableBorder.all(color: PdfColors.grey400),
-      headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-      headerStyle:
-      pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-      cellStyle: const pw.TextStyle(fontSize: 10),
-      columnWidths: const {
-        0: pw.FixedColumnWidth(250),
-        1: pw.FixedColumnWidth(55),
-        2: pw.FixedColumnWidth(55),
-        3: pw.FixedColumnWidth(70),
-      },
-      cellAlignments: const {
-        0: pw.Alignment.centerLeft,
-        1: pw.Alignment.center,
-        2: pw.Alignment.center,
-        3: pw.Alignment.center,
-      },
-    );
-  }
-
-  static pw.Widget _footer(
-      pw.Context context, DateTime generatedAt, String docId) {
-    final generated = _formatDate(generatedAt);
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Divider(color: PdfColors.grey300),
-        pw.Text('Généré le : $generated', style: const pw.TextStyle(fontSize: 9)),
-        pw.Text('Document ID : $docId', style: const pw.TextStyle(fontSize: 9)),
-        pw.Text('Page ${context.pageNumber} / ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 9)),
-        pw.Text(
-          'Ce document est généré automatiquement par UniSpace et n’a pas de valeur administrative officielle.',
-          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey700, width: 0.5),
+          defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+          columnWidths: const {
+            0: pw.FlexColumnWidth(4.3),
+            1: pw.FlexColumnWidth(5.7),
+          },
+          children: rows,
+        ),
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey700, width: 0.5),
+          ),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                '$title average: ${moyenne == 0 ? '—' : moyenne.toStringAsFixed(2)}',
+                style: pw.TextStyle(font: bold, fontSize: 8),
+              ),
+              pw.Text(
+                '$title credits: ${credits.toStringAsFixed(0)}',
+                style: pw.TextStyle(font: bold, fontSize: 8),
+              ),
+              pw.Text(
+                'N = regular session    R = resit',
+                style: const pw.TextStyle(fontSize: 7),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  static pw.Widget _tableCell(String text, {bool bold = false}) {
+  static pw.Table _innerTable({
+    required List<double> widths,
+    required List<pw.TableRow> rows,
+  }) {
+    return pw.Table(
+      border: pw.TableBorder.symmetric(
+        inside: const pw.BorderSide(color: PdfColors.grey500, width: 0.3),
+      ),
+      defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+      columnWidths: {
+        for (var i = 0; i < widths.length; i++) i: pw.FlexColumnWidth(widths[i]),
+      },
+      children: rows,
+    );
+  }
+
+  static pw.Widget _decisionBlock({
+    required double moyenne,
+    required String decision,
+    required double yearCredits,
+    required pw.Font bold,
+  }) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(
+          'Annual average: ${moyenne == 0 ? '—' : moyenne.toStringAsFixed(2)}',
+          style: pw.TextStyle(font: bold, fontSize: 10),
+        ),
+        pw.Text(
+          'Decision: $decision',
+          style: pw.TextStyle(font: bold, fontSize: 10),
+        ),
+        pw.Text(
+          'Credits earned this year: ${yearCredits.toStringAsFixed(0)}',
+          style: const pw.TextStyle(fontSize: 9),
+        ),
+      ],
+    );
+  }
+
+  static List<({String label, List<ModuleModel> modules})> _groupUnits(
+      List<ModuleModel> modules,
+      ) {
+    final grouped = <String, List<ModuleModel>>{};
+    final order = <String>[];
+    for (final m in modules) {
+      String key = 'Teaching unit';
+      try {
+        final v = m.unitLabel.trim();
+        if (v.isNotEmpty) key = v;
+      } catch (_) {}
+      if (!grouped.containsKey(key)) order.add(key);
+      grouped.putIfAbsent(key, () => []).add(m);
+    }
+    return [for (final k in order) (label: k, modules: grouped[k]!)];
+  }
+
+  static String _ueNature(String label) {
+    final t = label.toLowerCase();
+    if (t.contains('fond') || t.contains('uef') || t.contains('أساس')) {
+      return 'UEF';
+    }
+    if (t.contains('method') ||
+        t.contains('méthod') ||
+        t.contains('uem') ||
+        t.contains('منهج')) {
+      return 'UEM';
+    }
+    if (t.contains('decouv') ||
+        t.contains('découv') ||
+        t.contains('ued') ||
+        t.contains('استكش')) {
+      return 'UED';
+    }
+    if (t.contains('trans') || t.contains('uet') || t.contains('أفق')) {
+      return 'UET';
+    }
+    return 'UE';
+  }
+
+  static pw.Widget _headCell(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(6),
+      padding: const pw.EdgeInsets.all(4),
       child: pw.Text(
         text,
         textAlign: pw.TextAlign.center,
-        style: pw.TextStyle(
-          fontSize: 10,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-        ),
+        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
       ),
+    );
+  }
+
+  static pw.Widget _th(String text) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(3),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+      ),
+    );
+  }
+
+  static pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.center}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(3),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: const pw.TextStyle(fontSize: 7),
+      ),
+    );
+  }
+
+  static Future<Map<String, String>> _translateAll(
+      List<ModuleModel> modules,
+      ) async {
+    final out = <String, String>{};
+    final cache = <String, String>{};
+
+    Future<String> fr(String raw) async {
+      final src = raw.trim();
+      if (src.isEmpty) return src;
+      if (cache.containsKey(src)) return cache[src]!;
+      try {
+        final result = await GoogleTranslator().translate(src, to: 'fr');
+        final text = result.text.trim();
+        cache[src] = text.isEmpty ? src : text;
+      } catch (_) {
+        cache[src] = src;
+      }
+      return cache[src]!;
+    }
+
+    for (final m in modules) {
+      out[m.id] = await fr(m.title);
+      String unit = 'Teaching unit';
+      try {
+        if (m.unitLabel.trim().isNotEmpty) unit = m.unitLabel.trim();
+      } catch (_) {}
+      out['unit:$unit'] = await fr(unit);
+    }
+    return out;
+  }
+
+  static pw.Widget _graduationCap() {
+    final color = PdfColor.fromInt(0xFF0F766E);
+    return pw.SizedBox(
+      width: 58,
+      height: 58,
+      child: pw.Stack(
+        alignment: pw.Alignment.center,
+        children: [
+          pw.Positioned(
+            top: 10,
+            child: pw.Transform.rotate(
+              angle: 0.785398,
+              child: pw.Container(
+                width: 22,
+                height: 22,
+                color: color,
+              ),
+            ),
+          ),
+          pw.Positioned(
+            top: 28,
+            child: pw.Container(
+              width: 20,
+              height: 9,
+              decoration: pw.BoxDecoration(
+                color: color,
+                borderRadius: const pw.BorderRadius.only(
+                  bottomLeft: pw.Radius.circular(2),
+                  bottomRight: pw.Radius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          pw.Positioned(
+            right: 8,
+            top: 20,
+            child: pw.Container(width: 1.4, height: 16, color: color),
+          ),
+          pw.Positioned(
+            right: 5,
+            top: 36,
+            child: pw.Container(
+              width: 6,
+              height: 6,
+              decoration: pw.BoxDecoration(
+                color: color,
+                shape: pw.BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static (String, String) _splitName(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) return (parts.first, '—');
+    return (parts.sublist(1).join(' '), parts.first);
+  }
+
+  static double _annualAverage(double moy1, double moy2) {
+    if (moy1 == 0 && moy2 == 0) return 0;
+    if (moy1 == 0) return moy2;
+    if (moy2 == 0) return moy1;
+    return double.parse(((moy1 + moy2) / 2).toStringAsFixed(2));
+  }
+
+  static pw.Widget _footer(
+      pw.Context context,
+      DateTime generatedAt,
+      String docId,
+      ) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Divider(color: PdfColors.grey400),
+        pw.Text(
+          'Generated on ${_formatDate(generatedAt)}  •  Document ID: $docId  •  Page ${context.pageNumber}/${context.pagesCount}',
+          style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+        ),
+        pw.Text(
+          'Generated by UniSpace. This document has no official administrative value.',
+          style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+        ),
+      ],
     );
   }
 
   static String _academicYear(DateTime now) {
     final startYear = now.month >= 9 ? now.year : now.year - 1;
-    final endYear = startYear + 1;
-    return '$startYear-$endYear';
+    return '$startYear-${startYear + 1}';
   }
 
   static String? _maskEmail(String? email) {
@@ -4493,7 +6731,8 @@ class PdfReportService {
       (semester1.semesterAverage() * 100).round(),
       (semester2.semesterAverage() * 100).round(),
     ].join('-');
-    final shortHash = hashSeed.codeUnits.fold<int>(0, (a, b) => (a + b) % 99999);
+    final shortHash =
+    hashSeed.codeUnits.fold<int>(0, (a, b) => (a + b) % 99999);
     return 'US-$ts-${shortHash.toRadixString(16).padLeft(4, '0')}';
   }
 

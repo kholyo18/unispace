@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/branding.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class _UniSpaceBottomTabItem {
   const _UniSpaceBottomTabItem({
@@ -197,14 +199,25 @@ class _ModernUniSpaceBottomBarState extends State<ModernUniSpaceBottomBar> {
                                       duration:
                                       const Duration(milliseconds: 180),
                                       curve: Curves.easeOutCubic,
-                                      child: Icon(
-                                        item.icon,
-                                        size: 20,
-                                        color: selected
-                                            ? item.color
-                                            : theme.colorScheme.onSurfaceVariant
-                                            .withValues(alpha: 0.55),
-                                      ),
+                                      child: index == 1
+                                      ? _ChatTabIcon(
+                                      selected: selected,
+                                      color: selected
+                                          ? item.color
+                                          : theme.colorScheme
+                                          .onSurfaceVariant
+                                          .withValues(alpha: 0.55),
+                                      icon: item.icon,
+                                    )
+                                        : Icon(
+                                    item.icon,
+                                    size: 20,
+                                    color: selected
+                                        ? item.color
+                                        : theme.colorScheme
+                                        .onSurfaceVariant
+                                        .withValues(alpha: 0.55),
+                                  ),
                                     ),
                                   ),
                                 );
@@ -221,6 +234,69 @@ class _ModernUniSpaceBottomBarState extends State<ModernUniSpaceBottomBar> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ChatTabIcon extends StatelessWidget {
+  const _ChatTabIcon({
+    required this.selected,
+    required this.color,
+    required this.icon,
+  });
+
+  final bool selected;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final iconWidget = Icon(icon, size: 20, color: color);
+    if (uid == null) return iconWidget;
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('chats')
+          .where('memberIds', arrayContains: uid)
+          .snapshots(),
+      builder: (context, snap) {
+        var n = 0;
+        for (final d in snap.data?.docs ?? []) {
+          final unread = Map<String, dynamic>.from(d.data()['unread'] ?? {});
+          n += (unread[uid] as num?)?.toInt() ?? 0;
+        }
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            iconWidget,
+            if (n > 0)
+              Positioned(
+                right: -7,
+                top: -5,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  constraints: const BoxConstraints(minWidth: 16),
+                  child: Text(
+                    n > 99 ? '99+' : '$n',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

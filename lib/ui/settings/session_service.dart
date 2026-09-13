@@ -45,19 +45,21 @@ class SessionService with WidgetsBindingObserver {
   }
 
   Future<String> getOrCreateSessionId(String uid) async {
-    final deviceId = await getOrCreateInstallationId();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_sessionIdKeyPrefix$uid', deviceId);
-    return deviceId;
+    final existing = prefs.getString('$_sessionIdKeyPrefix$uid');
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final generated =
+        '${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}_${uid.substring(0, 6)}';
+    await prefs.setString('$_sessionIdKeyPrefix$uid', generated);
+    return generated;
   }
 
   Future<String?> getCurrentSessionId(String uid) async {
     final prefs = await SharedPreferences.getInstance();
     final current = prefs.getString('$_sessionIdKeyPrefix$uid');
     if (current != null && current.isNotEmpty) return current;
-    final deviceId = await getOrCreateInstallationId();
-    await prefs.setString('$_sessionIdKeyPrefix$uid', deviceId);
-    return deviceId;
+    return null;
   }
 
   Future<void> clearCurrentSessionId(String uid) async {
@@ -265,21 +267,38 @@ class SessionService with WidgetsBindingObserver {
   Future<void> _attachSessionRevocationListener(String uid) async {
     final sessionId = await getCurrentSessionId(uid);
     if (sessionId == null || sessionId.isEmpty) return;
+
     await _sessionSubscription?.cancel();
-    _sessionSubscription = _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId).snapshots().listen((snapshot) async {
-      final data = snapshot.data();
-      if (data == null) return;
-      final revoked = data['isRevoked'] as bool? ?? false;
-      if (!revoked) return;
-      _stopHeartbeat();
-      await _sessionSubscription?.cancel();
-      _sessionSubscription = null;
-      await clearCurrentSessionId(uid);
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null && currentUser.uid == uid) {
-        await AuthSessionService.signOutFully();
-      }
-    });
+    _sessionSubscription = _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('sessions')
+        .doc(sessionId)
+        .snapshots()
+        .listen(
+          (snapshot) async {
+        if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+        final data = snapshot.data();
+        if (data == null) return;
+        if (data['isRevoked'] != true) return;
+
+        final currentId = await getCurrentSessionId(uid);
+        if (currentId != sessionId) return;
+
+        _stopHeartbeat();
+        await _sessionSubscription?.cancel();
+        _sessionSubscription = null;
+        await clearCurrentSessionId(uid);
+
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null && currentUser.uid == uid) {
+          await AuthSessionService.signOutFully();
+        }
+      },
+      onError: (Object error, StackTrace st) {
+        debugPrint('[Session] listen ignored: $error');
+      },
+    );
   }
 
   void _stopHeartbeat() {

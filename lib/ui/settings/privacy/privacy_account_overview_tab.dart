@@ -1,22 +1,20 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:UniSpace/generated/l10n.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
-import 'package:local_auth/local_auth.dart';
 
-import '../../../models/security_audit.dart';
-import '../../../services/security_audit_service.dart';
-import '../session_service.dart';
-import 'privacy_account_repository.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import 'package:UniSpace/features/settings/privacy/privacy_policy_screen.dart';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 
 class PrivacySettings {
   const PrivacySettings({
@@ -40,6 +38,8 @@ class PrivacySettings {
     this.whoCanRepost = 'everyone',
     this.whoCanMention = 'everyone',
     this.whoCanMessage = 'mutual',
+    this.hiddenWords = const [],
+
   });
 
   final bool privateAccount;
@@ -62,6 +62,7 @@ class PrivacySettings {
   final String whoCanRepost;
   final String whoCanMention;
   final String whoCanMessage;
+  final List<String> hiddenWords;
 
   factory PrivacySettings.fromMap(Map<String, dynamic>? raw) {
     final m = raw ?? const <String, dynamic>{};
@@ -69,14 +70,23 @@ class PrivacySettings {
     String s(String k, String d) {
       final v = m[k]?.toString().trim();
       return (v == null || v.isEmpty) ? d : v;
+
+    }
+    List<String> words() {
+      final raw = m['hiddenWords'];
+      if (raw is! List) return const [];
+      return raw
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
 
     return PrivacySettings(
       privateAccount: b('privateAccount', false),
       appearInSearch: b('appearInSearch', true),
       suggestAccount: b('suggestAccount', true),
-      findByEmail: b('findByEmail', false),
-      findByPhone: b('findByPhone', false),
+      findByEmail: m['findByEmail'] == true,
+      findByPhone: m['findByPhone'] == true,
       hideLikeCounts: b('hideLikeCounts', false),
       messageRequests: b('messageRequests', true),
       readReceipts: b('readReceipts', true),
@@ -92,6 +102,7 @@ class PrivacySettings {
       whoCanRepost: s('whoCanRepost', 'everyone'),
       whoCanMention: s('whoCanMention', 'everyone'),
       whoCanMessage: s('whoCanMessage', 'mutual'),
+      hiddenWords: words(),
     );
   }
 
@@ -116,6 +127,7 @@ class PrivacySettings {
     'whoCanRepost': whoCanRepost,
     'whoCanMention': whoCanMention,
     'whoCanMessage': whoCanMessage,
+    'hiddenWords': hiddenWords,
   };
 
   PrivacySettings copyWith({
@@ -139,6 +151,7 @@ class PrivacySettings {
     String? whoCanRepost,
     String? whoCanMention,
     String? whoCanMessage,
+    List<String>? hiddenWords,
   }) {
     return PrivacySettings(
       privateAccount: privateAccount ?? this.privateAccount,
@@ -161,6 +174,7 @@ class PrivacySettings {
       whoCanRepost: whoCanRepost ?? this.whoCanRepost,
       whoCanMention: whoCanMention ?? this.whoCanMention,
       whoCanMessage: whoCanMessage ?? this.whoCanMessage,
+      hiddenWords: hiddenWords ?? this.hiddenWords,
     );
   }
 }
@@ -247,6 +261,109 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         const SnackBar(content: Text('تعذر حفظ الإعداد')),
       );
     }
+  }
+
+  bool _exporting = false;
+
+  Future<void> _downloadMyData() async {
+    if (_exporting) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
+      );
+      return;
+    }
+
+    setState(() => _exporting = true);
+    try {
+      final db = FirebaseFirestore.instance;
+      final userRef = db.collection('users').doc(uid);
+
+      final userSnap = await userRef.get();
+      final userData = Map<String, dynamic>.from(userSnap.data() ?? {});
+      userData.remove('fcmTokens');
+
+      Future<List<Map<String, dynamic>>> col(String name) async {
+        final snap = await userRef.collection(name).get();
+        return snap.docs
+            .map((d) => {'id': d.id, ...d.data()})
+            .toList();
+      }
+
+      final postsSnap = await db
+          .collection('community_posts')
+          .where('authorId', isEqualTo: uid)
+          .get();
+      final posts = postsSnap.docs.map((d) {
+        final m = Map<String, dynamic>.from(d.data());
+        m['id'] = d.id;
+        return m;
+      }).toList();
+
+      Object? jsonSafe(Object? v) {
+        if (v == null) return null;
+        if (v is Timestamp) return v.toDate().toIso8601String();
+        if (v is DateTime) return v.toIso8601String();
+        if (v is GeoPoint) {
+          return {'lat': v.latitude, 'lng': v.longitude};
+        }
+        if (v is DocumentReference) return v.path;
+        if (v is List) return v.map(jsonSafe).toList();
+        if (v is Map) {
+          return v.map((k, val) => MapEntry(k.toString(), jsonSafe(val)));
+        }
+        return v;
+      }
+
+      final payload = jsonSafe({
+        'exportedAt': DateTime.now().toIso8601String(),
+        'uid': uid,
+        'profile': userData,
+        'privacy': _settings.toMap(),
+        'posts': posts,
+        'blockedAccounts': await col('blocked_accounts'),
+        'hiddenPosts': await col('hidden_posts'),
+        'following': await col('following'),
+        'followers': await col('followers'),
+        'savedPosts': await col('saved_posts'),
+        'hiddenComments': await col('hidden_comments'),
+      });
+
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/unispace-data-$uid.json',
+      );
+      await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(payload),
+      );
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/json')],
+        text: 'نسخة بيانات UniSpace',
+      );
+    } catch (e) {
+      debugPrint('export data failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر تجهيز الملف')),
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _editHiddenWords() async {
+    final saved = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _HiddenWordsSheet(initial: _settings.hiddenWords),
+    );
+    if (saved == null) return;
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    await _apply(_settings.copyWith(hiddenWords: saved));
   }
 
   @override
@@ -371,20 +488,18 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                   _apply(_settings.copyWith(suggestAccount: v)),
             ),
             _switchTile(
-              icon: Icons.alternate_email_rounded,
-              title: 'العثور عليّ عبر البريد',
-              subtitle: 'من يملك بريدك يمكنه إيجاد حسابك.',
+              icon: Icons.alternate_email_outlined,
+              title: 'العثور عليّ بالبريد',
+              subtitle: 'يسمح بالبحث عن حسابك إذا كُتب إيميلك كاملاً.',
               value: _settings.findByEmail,
-              onChanged: (v) =>
-                  _apply(_settings.copyWith(findByEmail: v)),
+              onChanged: (v) => _apply(_settings.copyWith(findByEmail: v)),
             ),
             _switchTile(
               icon: Icons.phone_outlined,
-              title: 'العثور عليّ عبر الهاتف',
-              subtitle: 'من يملك رقمك يمكنه إيجاد حسابك.',
+              title: 'العثور عليّ برقم الهاتف',
+              subtitle: 'يسمح بالبحث عن حسابك إذا كُتب رقمك.',
               value: _settings.findByPhone,
-              onChanged: (v) =>
-                  _apply(_settings.copyWith(findByPhone: v)),
+              onChanged: (v) => _apply(_settings.copyWith(findByPhone: v)),
             ),
           ]),
 
@@ -438,12 +553,15 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                 }
               },
             ),
-            _navTile(
-              icon: Icons.filter_alt_outlined,
-              title: 'الكلمات المخفية',
-              subtitle: 'إخفاء تعليقات تحتوي كلمات معيّنة.',
-              value: 'غير مفعّل',
-            ),
+            // _navTile(
+            //   icon: Icons.filter_alt_outlined,
+            //   title: 'الكلمات المخفية',
+            //   subtitle: 'إخفاء تعليقات تحتوي كلمات معيّنة.',
+            //   value: _settings.hiddenWords.isEmpty
+            //       ? 'غير مفعّل'
+            //       : '${_settings.hiddenWords.length} كلمة',
+            //   onTap: _editHiddenWords,
+            // ),
           ]),
 
           _header('الرسائل'),
@@ -540,17 +658,38 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
               icon: Icons.block_rounded,
               title: 'الحسابات المحظورة',
               subtitle: 'إدارة من حظرتهم.',
+              onTap: () {
+                final go = PrivacyExternalRoutes.blockedAccounts;
+                if (go == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تعذر فتح القائمة')),
+                  );
+                  return;
+                }
+                Navigator.of(context).push(MaterialPageRoute(builder: go));
+              },
             ),
             _navTile(
               icon: Icons.visibility_off_outlined,
-              title: 'المنشورات المخفية',
+              title: 'العناصر المخفية',
               subtitle: 'منشورات أخفيتها من الفيد.',
+              onTap: () {
+                final go = PrivacyExternalRoutes.hiddenPosts;
+                if (go == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تعذر فتح القائمة')),
+                  );
+                  return;
+                }
+                Navigator.of(context).push(MaterialPageRoute(builder: go));
+              },
             ),
-            _navTile(
-              icon: Icons.download_outlined,
-              title: 'تنزيل بياناتي',
-              subtitle: 'نسخة من منشوراتك وإعداداتك.',
-            ),
+            // _navTile(
+            //   icon: Icons.download_outlined,
+            //   title: 'تنزيل بياناتي',
+            //   subtitle: 'نسخة من منشوراتك وإعداداتك.',
+            //   onTap: _downloadMyData,
+            // ),
             _navTile(
               icon: Icons.privacy_tip_outlined,
               title: 'سياسة الخصوصية',
@@ -779,4 +918,127 @@ Future<void> syncAuthorHideLikesOnPosts({
     }
   }
   if (n > 0) await batch.commit();
+}
+
+class _HiddenWordsSheet extends StatefulWidget {
+  const _HiddenWordsSheet({required this.initial});
+  final List<String> initial;
+
+  @override
+  State<_HiddenWordsSheet> createState() => _HiddenWordsSheetState();
+}
+
+class _HiddenWordsSheetState extends State<_HiddenWordsSheet> {
+  late final TextEditingController _ctrl;
+  late List<String> _words;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+    _words = List<String>.from(widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _add() {
+    final w = _ctrl.text.trim();
+    if (w.isEmpty) return;
+    if (_words.any((e) => e.toLowerCase() == w.toLowerCase())) {
+      _ctrl.clear();
+      return;
+    }
+    setState(() => _words.add(w));
+    _ctrl.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        8,
+        16,
+        16 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'الكلمات المخفية',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'لن تظهر لك التعليقات التي تحتوي هذه الكلمات.',
+            style: TextStyle(color: Theme.of(context).hintColor),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _ctrl,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    hintText: 'أضف كلمة أو عبارة',
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _add(),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_rounded),
+                onPressed: _add,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_words.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'لا توجد كلمات بعد',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).hintColor),
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _words.length,
+                itemBuilder: (_, i) {
+                  return ListTile(
+                    dense: true,
+                    title: Text(_words[i]),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () =>
+                          setState(() => _words.removeAt(i)),
+                    ),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(List<String>.from(_words)),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PrivacyExternalRoutes {
+  static WidgetBuilder? blockedAccounts;
+  static WidgetBuilder? hiddenPosts;
 }

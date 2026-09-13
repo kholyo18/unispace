@@ -10,6 +10,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'dart:ui' as ui;
 import 'dart:math';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
@@ -86,6 +87,8 @@ import 'package:flutter/rendering.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'ui/settings/privacy/privacy_account_overview_tab.dart';
+
 import 'core/branding.dart';
 import 'features/shell/presentation/pages/bottom_bar.dart';
 export 'features/shell/presentation/pages/bottom_bar.dart';
@@ -103,6 +106,8 @@ export 'core/translate_subject.dart';
 import 'features/shell/presentation/pages/end_drawer.dart';
 import 'core/translate_subject.dart';
 import 'features/shell/UniSpace_App.dart';
+
+
 
 Future<void> openPdf(String filePath) async {
   final result = await OpenFilex.open(filePath);
@@ -134,41 +139,82 @@ Color appTealDark(BuildContext context) {
 // ============================================================================
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  PrivacyExternalRoutes.blockedAccounts =
+      (_) => const BlockedUsersScreen();
+  PrivacyExternalRoutes.hiddenPosts =
+      (_) => const HiddenPostsScreen();
+
+  ThemeMode themeMode = ThemeMode.system;
+  Locale locale = const Locale('en');
+
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    await initPushNotifications();
+    await _initFirebaseWithRetry();
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (error, stackTrace) {
     debugPrint('Firebase initialization failed: $error');
     debugPrintStack(stackTrace: stackTrace);
   }
-  await Hive.initFlutter();
-  tz.initializeTimeZones();
-  tz.setLocalLocation(tz.getLocation('Africa/Algiers'));
 
-  Hive.registerAdapter(ModuleModelAdapter());
-  await AppSettings.instance.load();
-  await UserProfileService.instance.initialize();
+  try {
+    await Hive.initFlutter();
+    tz.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Africa/Algiers'));
+    if (!Hive.isAdapterRegistered(ModuleModelAdapter().typeId)) {
+      Hive.registerAdapter(ModuleModelAdapter());
+    }
+    await AppSettings.instance.load();
+  } catch (e, st) {
+    debugPrint('local bootstrap failed: $e');
+    debugPrintStack(stackTrace: st);
+  }
 
-  final p = await SharedPreferences.getInstance();
-  final themeIdx = p.getInt('pref_themeMode');
-  final lang = p.getString('pref_locale');
+  if (Firebase.apps.isNotEmpty) {
+    try {
+      await UserProfileService.instance.initialize();
+    } catch (e) {
+      debugPrint('UserProfileService.initialize: $e');
+    }
+  }
 
-  final themeMode = (themeIdx != null &&
-      themeIdx >= 0 &&
-      themeIdx < ThemeMode.values.length)
-      ? ThemeMode.values[themeIdx]
-      : ThemeMode.system;
-
-  final locale = (lang != null && lang.isNotEmpty)
-      ? Locale(lang)
-      : const Locale('en');
+  try {
+    final p = await SharedPreferences.getInstance();
+    final themeIdx = p.getInt('pref_themeMode');
+    final lang = p.getString('pref_locale');
+    if (themeIdx != null &&
+        themeIdx >= 0 &&
+        themeIdx < ThemeMode.values.length) {
+      themeMode = ThemeMode.values[themeIdx];
+    }
+    if (lang != null && lang.isNotEmpty) locale = Locale(lang);
+  } catch (_) {}
 
   runApp(UniSpaceApp(
     initialThemeMode: themeMode,
     initialLocale: locale,
   ));
+
+  if (Firebase.apps.isNotEmpty) {
+    unawaited(initPushNotifications());
+  }
+}
+
+Future<void> _initFirebaseWithRetry() async {
+  Object? last;
+  for (var i = 0; i < 5; i++) {
+    try {
+      if (Firebase.apps.isNotEmpty) return;
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      return;
+    } catch (e) {
+      last = e;
+      debugPrint('Firebase init attempt ${i + 1} failed: $e');
+      await Future<void>.delayed(Duration(milliseconds: 250 * (i + 1)));
+    }
+  }
+  throw last ?? StateError('Firebase.initializeApp failed');
 }
 
 // ============================================================================
@@ -190,6 +236,8 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
   Timer? _otpTimer;
   bool _hidePrivacyEntry = false;
   String? _coverImageUrl;
+  bool _isLoggingOut = false;
+
 
   @override
   void initState() {
@@ -483,13 +531,26 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     _sectionHeader(context, S.of(context).drawerSectionStudent),
                     _drawerItem(
                       context,
+                      icon: Icons.chat_outlined,
+                      title: 'Chat',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ChatPage(onOpenDrawer: () {}),
+                          ),
+                        );
+                      },
+                    ),
+                    _drawerItem(
+                      context,
                       icon: Icons.school_outlined,
                       title: S.of(context).gpu,
                       onTap: () {
-                        Navigator.push(
-                          context,
+                        Navigator.of(context).pop();
+                        Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const HomeLandingScreen(),
+                            builder: (_) => const HomeLandingScreen(showAppBar: true),
                           ),
                         );
                       },
@@ -497,19 +558,19 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
 
 
                     _sectionHeader(context, S.of(context).drawerSectionContent),
-                    _drawerItem(
-                      context,
-                      icon: Icons.download_outlined,
-                      title: S.of(context).downloadsTitle,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const DownloadsScreen(),
-                          ),
-                        );
-                      },
-                    ),
+                    // _drawerItem(
+                    //   context,
+                    //   icon: Icons.download_outlined,
+                    //   title: S.of(context).downloadsTitle,
+                    //   onTap: () {
+                    //     Navigator.push(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (_) => const DownloadsScreen(),
+                    //       ),
+                    //     );
+                    //   },
+                    // ),
                     _drawerItem(
                       context,
                       icon: Icons.bookmark_border_rounded,
@@ -521,58 +582,109 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                         );
                       },
                     ),
-                    _drawerItem(
-                      context,
-                      icon: Icons.notifications_outlined,
-                      title: 'الإشعارات',
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const NotificationsScreen(),
-                          ),
+                    Builder(
+                      builder: (context) {
+                        if (uid == null) {
+                          return _drawerItem(
+                            context,
+                            icon: Icons.notifications_outlined,
+                            title: 'الإشعارات',
+                            onTap: () {
+                              // يمكن توجيه المستخدم إلى تسجيل الدخول هنا
+                            },
+                          );
+                        }
+
+                        final notificationsQuery = FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid)
+                            .collection('notifications')
+                            .where('read', isEqualTo: false)
+                            .limit(100);
+
+                        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: notificationsQuery.snapshots(),
+                          builder: (context, snap) {
+                            if (snap.hasError) {
+                              return _drawerItem(
+                                context,
+                                icon: Icons.notifications_outlined,
+                                title: 'الإشعارات',
+                                onTap: () {
+                                  Navigator.of(context).pop();
+
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const NotificationsScreen(),
+                                    ),
+                                  );
+                                },
+                              );
+                            }
+
+                            final unreadCount = snap.data?.docs.length ?? 0;
+
+                            return _drawerItem(
+                              context,
+                              icon: unreadCount > 0
+                                  ? Icons.notifications_rounded
+                                  : Icons.notifications_outlined,
+                              title: 'الإشعارات',
+                              badge: unreadCount,
+                              onTap: () {
+                                Navigator.of(context).pop();
+
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const NotificationsScreen(),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         );
                       },
                     ),
-                    _drawerItem(
-                      context,
-                      icon: Icons.note_alt_outlined,
-                      title: S.of(context).clipboard,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const NotesScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _drawerItem(
-                      context,
-                      icon: Icons.psychology_outlined,
-                      title: S.of(context).smartReviewPlanTitle,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const SmartReviewPlanPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    _drawerItem(
-                      context,
-                      icon: Icons.calendar_month_outlined,
-                      title: S.of(context).examCalendar,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ExamsCalendarPage(),
-                          ),
-                        );
-                      },
-                    ),
+
+                    // _drawerItem(
+                    //   context,
+                    //   icon: Icons.note_alt_outlined,
+                    //   title: S.of(context).clipboard,
+                    //   onTap: () {
+                    //     Navigator.push(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (_) => const NotesScreen(),
+                    //       ),
+                    //     );
+                    //   },
+                    // ),
+                    // _drawerItem(
+                    //   context,
+                    //   icon: Icons.psychology_outlined,
+                    //   title: S.of(context).smartReviewPlanTitle,
+                    //   onTap: () {
+                    //     Navigator.push(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (_) => const SmartReviewPlanPage(),
+                    //       ),
+                    //     );
+                    //   },
+                    // ),
+                    // _drawerItem(
+                    //   context,
+                    //   icon: Icons.calendar_month_outlined,
+                    //   title: S.of(context).examCalendar,
+                    //   onTap: () {
+                    //     Navigator.push(
+                    //       context,
+                    //       MaterialPageRoute(
+                    //         builder: (_) => const ExamsCalendarPage(),
+                    //       ),
+                    //     );
+                    //   },
+                    // ),
                     _sectionHeader(context, S.of(context).drawerSectionApp),
                     // _drawerItem(
                     //   context,
@@ -588,13 +700,16 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     //   },
                     // ),
 
-                    ListTile(
-                      leading: const Icon(Icons.settings_sharp),
-                      title: Text('Settings'),
-
-                      onTap:  _openSettings,
-
+                    _drawerItem(
+                      context,
+                      icon: Icons.settings_rounded,
+                      title: 'Settings',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _openSettings();
+                      },
                     ),
+
 
                     _drawerItem(
                       context,
@@ -653,20 +768,33 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                         title: S.of(context).logout,
                         iconColor: Colors.redAccent,
                         textColor: Colors.redAccent,
-                        onTap: () async {
-                          final currentUser = FirebaseAuth.instance.currentUser;
-                          if (currentUser != null) {
-                            await SessionService.instance.revokeCurrentSession(currentUser.uid);
+                        onTap: _isLoggingOut
+                            ? null
+                            : () async {
+                          setState(() {
+                            _isLoggingOut = true;
+                          });
+
+                          try {
+                            final currentUser = FirebaseAuth.instance.currentUser;
+
+                            if (currentUser != null) {
+                              await SessionService.instance
+                                  .revokeCurrentSession(currentUser.uid);
+                            }
+
+                            await AuthSessionService.signOutFully();
+
+                            if (!context.mounted) return;
+
+                            Navigator.of(context).pop();
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _isLoggingOut = false;
+                              });
+                            }
                           }
-                          if (kDebugMode) {
-                            debugPrint('[Auth] drawer logout requested');
-                          }
-                          await AuthSessionService.signOutFully();
-                          if (kDebugMode) {
-                            debugPrint('[Auth] logout complete');
-                          }
-                          if (!context.mounted) return;
-                          Navigator.of(context).pop();
                         },
                       )
                     else
@@ -700,17 +828,44 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
   }
 
   Widget _sectionHeader(BuildContext context, String title) {
+    final theme = Theme.of(context);
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w600,
-        ),
+      padding: const EdgeInsetsDirectional.fromSTEB(
+        22,
+        20,
+        22,
+        8,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 17,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
+
 
   Widget _drawerItem(
       BuildContext context, {
@@ -719,27 +874,132 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
         VoidCallback? onTap,
         Color? iconColor,
         Color? textColor,
+        int badge = 0,
+        bool selected = false,
       }) {
     final theme = Theme.of(context);
-    return ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      leading: Icon(
-        icon,
-        size: 22,
-        color: iconColor ?? theme.colorScheme.onSurface.withValues(alpha: 0.75),
+    final colorScheme = theme.colorScheme;
+
+    final Color primaryColor = colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 3,
       ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          color: textColor ?? theme.colorScheme.onSurface,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          splashColor: primaryColor.withValues(alpha: 0.10),
+          highlightColor: primaryColor.withValues(alpha: 0.06),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 9,
+            ),
+            decoration: BoxDecoration(
+              color: selected
+                  ? primaryColor.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              border: selected
+                  ? Border.all(
+                color: primaryColor.withValues(alpha: 0.16),
+                width: 1,
+              )
+                  : null,
+            ),
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? primaryColor.withValues(alpha: 0.16)
+                        : colorScheme.onSurface.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 21,
+                    color: selected
+                        ? primaryColor
+                        : iconColor ??
+                        colorScheme.onSurface.withValues(alpha: 0.70),
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected
+                          ? primaryColor
+                          : textColor ?? colorScheme.onSurface,
+                      fontSize: 14.5,
+                      fontWeight:
+                      selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+
+                if (badge > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 25,
+                      minHeight: 23,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTeal.main,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      badge > 99 ? '99+' : '$badge',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+
+                if (selected) ...[
+                  const SizedBox(width: 5),
+                  Icon(
+                    Icons.chevron_left_rounded,
+                    size: 20,
+                    color: primaryColor,
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
-      onTap: onTap,
     );
   }
+
+
+
+
 
   void _showContactDialog(BuildContext context) {
     showModalBottomSheet(
@@ -761,196 +1021,956 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
   }
 }
 
+
+
 class _ThemeModeSheet extends StatelessWidget {
   final _UniSpaceAppState app;
-  const _ThemeModeSheet({required this.app});
+
+  const _ThemeModeSheet({
+    required this.app,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
     return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(title: Text(S.of(context).chooseTheme)),
-            RadioListTile<ThemeMode>(
-              value: ThemeMode.light,
-              groupValue: app._themeMode,
-              title: Text(S.of(context).light),
-              onChanged: (v) => _apply(context, v!),
-            ),
-            RadioListTile<ThemeMode>(
-              value: ThemeMode.dark,
-              groupValue: app._themeMode,
-              title: Text(S.of(context).dark),
-              onChanged: (v) => _apply(context, v!),
-            ),
-            RadioListTile<ThemeMode>(
-              value: ThemeMode.system,
-              groupValue: app._themeMode,
-              title: Text(S.of(context).system),
-              onChanged: (v) => _apply(context, v!),
-            ),
-            const Divider(height: 8),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: app.tealColor,
-                child: const Icon(Icons.palette_outlined,
-                    color: Colors.white, size: 20),
+      child: Material(
+        color: colors.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(28),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SheetDragHandle(color: colors.outlineVariant),
+
+              const SizedBox(height: 18),
+
+              Row(
+                children: [
+                  _SheetIcon(
+                    icon: Icons.palette_outlined,
+                    color: colors.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'المظهر والألوان',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'خصص شكل التطبيق بما يناسبك',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              title: const Text('لون التيل'),
-              subtitle: const Text('يُطبَّق على المواضع الخضراء/التيل فقط'),
-              trailing: Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  color: app.tealColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black12),
+
+              const SizedBox(height: 24),
+
+              Text(
+                'السمة',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: colors.primary,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              onTap: () {
-                Navigator.pop(context);
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  showDragHandle: true,
-                  builder: (_) => _AppColorWheelSheet(
-                    title: 'لون التيل',
-                    initial: app.tealColor,
-                    onApply: app.setTealColor,
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: app.primaryColor,
-                child: const Icon(Icons.brush_outlined,
-                    color: Colors.white, size: 20),
+
+              const SizedBox(height: 10),
+
+              _ThemeOptionTile(
+                icon: Icons.light_mode_outlined,
+                title: S.of(context).light,
+                subtitle: 'استخدام المظهر الفاتح دائمًا',
+                value: ThemeMode.light,
+                groupValue: app._themeMode,
+                color: Colors.orange,
+                onChanged: (value) => _apply(context, value),
               ),
-              title: const Text('اللون الأساسي'),
-              subtitle: const Text('أزرار، تبويبات، وحقول الإدخال'),
-              trailing: Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  color: app.primaryColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black12),
+
+              const SizedBox(height: 10),
+
+              _ThemeOptionTile(
+                icon: Icons.dark_mode_outlined,
+                title: S.of(context).dark,
+                subtitle: 'استخدام المظهر الداكن دائمًا',
+                value: ThemeMode.dark,
+                groupValue: app._themeMode,
+                color: Colors.indigo,
+                onChanged: (value) => _apply(context, value),
+              ),
+
+              const SizedBox(height: 10),
+
+              _ThemeOptionTile(
+                icon: Icons.brightness_auto_outlined,
+                title: S.of(context).system,
+                subtitle: 'اتباع إعدادات الجهاز تلقائيًا',
+                value: ThemeMode.system,
+                groupValue: app._themeMode,
+                color: colors.primary,
+                onChanged: (value) => _apply(context, value),
+              ),
+
+              const SizedBox(height: 26),
+
+              Text(
+                'ألوان التطبيق',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: colors.primary,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              onTap: () {
-                Navigator.pop(context);
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  showDragHandle: true,
-                  builder: (_) => _AppColorWheelSheet(
-                    title: 'اللون الأساسي',
-                    initial: app.primaryColor,
-                    onApply: app.setPrimaryColor,
+
+              const SizedBox(height: 10),
+
+              _ColorSettingTile(
+                icon: Icons.palette_outlined,
+                title: 'Main color',
+                subtitle: 'The app main color',
+                color: app.tealColor,
+                onTap: () {
+                  Navigator.pop(context);
+
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: false,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => _AppColorWheelSheet(
+                      title: 'Main color',
+                      subtitle: 'Chose the app main color as you like',
+                      initial: app.tealColor,
+                      onApply: app.setTealColor,
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 10),
+
+              _ColorSettingTile(
+                icon: Icons.brush_outlined,
+                title: 'Sub color',
+                subtitle: 'the app sub color',
+                color: app.primaryColor,
+                onTap: () {
+                  Navigator.pop(context);
+
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: false,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => _AppColorWheelSheet(
+                      title: 'Sub color',
+                      subtitle: 'Chose the app sub color as you like',
+                      initial: app.primaryColor,
+                      onApply: app.setPrimaryColor,
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await app.resetAccentColors();
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
+                },
+                icon: const Icon(Icons.restart_alt_rounded),
+                label: const Text('العودة للألوان الأصلية'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            const Divider(height: 8),
-            ListTile(
-              leading: const Icon(Icons.restart_alt_rounded),
-              title: const Text('العودة للشكل الأصلي'),
-              subtitle: const Text('استعادة لون التيل واللون الأساسي'),
-              onTap: () async {
-                await app.resetAccentColors();
-                if (context.mounted) Navigator.pop(context);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  void _apply(BuildContext context, ThemeMode m) {
-    app.setThemeMode(m);
+  void _apply(BuildContext context, ThemeMode mode) {
+    app.setThemeMode(mode);
     Navigator.pop(context);
   }
 }
-class _TealColorSheet extends StatefulWidget {
-  const _TealColorSheet({required this.app});
-  final _UniSpaceAppState app;
+
+
+class _SheetIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+
+  const _SheetIcon({
+    required this.icon,
+    required this.color,
+  });
 
   @override
-  State<_TealColorSheet> createState() => _TealColorSheetState();
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: color.withOpacity(.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Icon(
+        icon,
+        color: color,
+        size: 24,
+      ),
+    );
+  }
 }
 
-class _TealColorSheetState extends State<_TealColorSheet> {
+class _ThemeOptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final ThemeMode value;
+  final ThemeMode groupValue;
+  final Color color;
+  final ValueChanged<ThemeMode> onChanged;
+
+  const _ThemeOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.groupValue,
+    required this.color,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isSelected = value == groupValue;
+
+    return Material(
+      color: isSelected
+          ? colors.primaryContainer.withOpacity(.55)
+          : colors.surfaceContainerHighest.withOpacity(.38),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => onChanged(value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(.13),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 22,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: isSelected
+                            ? colors.primary
+                            : colors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              Radio<ThemeMode>(
+                value: value,
+                groupValue: groupValue,
+                onChanged: (newValue) {
+                  if (newValue != null) {
+                    onChanged(newValue);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorSettingTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ColorSettingTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Material(
+      color: colors.surfaceContainerHighest.withOpacity(.38),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 22,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: colors.outline.withOpacity(.25),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withOpacity(.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 6),
+
+              Icon(
+                Icons.chevron_left_rounded,
+                color: colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+
+
+/// ===============================================================
+/// Color Wheel Bottom Sheet
+/// ===============================================================
+
+class _AppColorWheelSheet extends StatefulWidget {
+  const _AppColorWheelSheet({
+    required this.title,
+    required this.subtitle,
+    required this.initial,
+    required this.onApply,
+  });
+
+  final String title;
+  final String subtitle;
+  final Color initial;
+  final Future<void> Function(Color color) onApply;
+
+  @override
+  State<_AppColorWheelSheet> createState() => _AppColorWheelSheetState();
+}
+
+class _AppColorWheelSheetState extends State<_AppColorWheelSheet> {
   late HSVColor _hsv;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _hsv = HSVColor.fromColor(widget.app.tealColor);
+    _hsv = HSVColor.fromColor(widget.initial);
   }
 
-  void _apply() {
-    widget.app.setTealColor(_hsv.toColor());
-    Navigator.pop(context);
+  Future<void> _apply() async {
+    if (_isSaving) return;
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await widget.onApply(_hsv.toColor());
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  void _updateColor(HSVColor value) {
+    setState(() {
+      _hsv = value;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = _hsv.toColor();
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final selectedColor = _hsv.toColor();
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'اختر اللون',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        top: false,
+        child: Material(
+          color: colors.surface,
+          elevation: 12,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(32),
+          ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              20 + bottomInset,
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 180,
-              child: _ColorWheel(
-                hsv: _hsv,
-                onChanged: (v) => setState(() => _hsv = v),
-              ),
-            ),
-            Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('السطوع'),
-                Expanded(
-                  child: Slider(
-                    value: _hsv.value,
-                    onChanged: (v) =>
-                        setState(() => _hsv = _hsv.withValue(v)),
-                    activeColor: color,
-                  ),
+                _SheetDragHandle(
+                  color: colors.outlineVariant,
+                ),
+
+                const SizedBox(height: 22),
+
+                _ColorSheetHeader(
+                  title: widget.title,
+                  subtitle: widget.subtitle,
+                  color: selectedColor,
+                ),
+
+                const SizedBox(height: 24),
+
+                _ColorPickerCard(
+                  hsv: _hsv,
+                  selectedColor: selectedColor,
+                  onChanged: _updateColor,
+                ),
+
+                const SizedBox(height: 18),
+
+                _ColorPreview(
+                  color: selectedColor,
+                  colors: colors,
+                ),
+
+                const SizedBox(height: 20),
+
+                _ApplyColorButton(
+                  color: selectedColor,
+                  isSaving: _isSaving,
+                  onPressed: _apply,
                 ),
               ],
             ),
-            Container(
-              height: 36,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Header
+class _ColorSheetHeader extends StatelessWidget {
+  const _ColorSheetHeader({
+    required this.title,
+    required this.subtitle,
+    required this.color,
+  });
+
+  final String title;
+  final String subtitle;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Row(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(.30),
+                blurRadius: 16,
+                offset: const Offset(0, 7),
               ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _apply,
-                child: const Text('اعتماد اللون'),
+            ],
+          ),
+          child: Icon(
+            Icons.palette_rounded,
+            color: _onColor(color),
+            size: 28,
+          ),
+        ),
+
+        const SizedBox(width: 14),
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -.2,
+                ),
               ),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  height: 1.4,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
+/// Color picker container
+class _ColorPickerCard extends StatelessWidget {
+  const _ColorPickerCard({
+    required this.hsv,
+    required this.selectedColor,
+    required this.onChanged,
+  });
+
+  final HSVColor hsv;
+  final Color selectedColor;
+  final ValueChanged<HSVColor> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withOpacity(.42),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(
+          color: colors.outlineVariant.withOpacity(.35),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.colorize_rounded,
+                color: colors.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'اختر اللون',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              _ColorValueBadge(
+                color: selectedColor,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          SizedBox(
+            height: 270,
+            width: double.infinity,
+            child: _ColorWheel(
+              hsv: hsv,
+              onChanged: onChanged,
             ),
+          ),
+
+          const SizedBox(height: 10),
+
+          _BrightnessSlider(
+            hsv: hsv,
+            color: selectedColor,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Small color badge
+class _ColorValueBadge extends StatelessWidget {
+  const _ColorValueBadge({
+    required this.color,
+  });
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final hex = '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.14),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Text(
+        hex,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w800,
+          fontFeatures: const [
+            FontFeature.tabularFigures(),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BrightnessSlider extends StatelessWidget {
+  const _BrightnessSlider({
+    required this.hsv,
+    required this.color,
+    required this.onChanged,
+  });
+
+  final HSVColor hsv;
+  final Color color;
+  final ValueChanged<HSVColor> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: colors.surface,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.brightness_5_outlined,
+            size: 20,
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+
+        const SizedBox(width: 10),
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'السطوع',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 7,
+                  activeTrackColor: color,
+                  inactiveTrackColor: colors.outlineVariant.withOpacity(.35),
+                  thumbColor: color,
+                  overlayColor: color.withOpacity(.15),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 9,
+                  ),
+                ),
+                child: Slider(
+                  value: hsv.value.clamp(0.0, 1.0),
+                  min: 0,
+                  max: 1,
+                  onChanged: (value) {
+                    onChanged(hsv.withValue(value));
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        Text(
+          '${(hsv.value * 100).round()}%',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: colors.onSurfaceVariant,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ColorPreview extends StatelessWidget {
+  const _ColorPreview({
+    required this.color,
+    required this.colors,
+  });
+
+  final Color color;
+  final ColorScheme colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            height: 58,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(.28),
+                  blurRadius: 14,
+                  offset: const Offset(0, 7),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                'المعاينة',
+                style: TextStyle(
+                  color: _onColor(color),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(width: 12),
+
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: colors.outline.withOpacity(.28),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(.22),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ApplyColorButton extends StatelessWidget {
+  const _ApplyColorButton({
+    required this.color,
+    required this.isSaving,
+    required this.onPressed,
+  });
+
+  final Color color;
+  final bool isSaving;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: FilledButton.icon(
+        onPressed: isSaving ? null : onPressed,
+        // style: FilledButton.styleFrom(
+        //   backgroundColor: color,
+        //   foregroundColor: _onColor(color),
+        //   disabledBackgroundColor: color.withOpacity(.55),
+        //   disabledForegroundColor: _onColor(color).withOpacity(.75),
+        //   elevation: 0,
+        //   shape: RoundedRectangleBorder(
+        //     borderRadius: BorderRadius.circular(18),
+        //   ),
+        // ),
+        icon: isSaving
+            ? SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.3,
+            color: _onColor(color),
+          ),
+        )
+            : const Icon(Icons.check_rounded),
+
+        label: Text(
+          isSaving ? 'جارٍ الحفظ...' : 'اعتماد اللون',
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 15,
+          ),
         ),
       ),
     );
@@ -958,7 +1978,10 @@ class _TealColorSheetState extends State<_TealColorSheet> {
 }
 
 class _ColorWheel extends StatelessWidget {
-  const _ColorWheel({required this.hsv, required this.onChanged});
+  const _ColorWheel({
+    required this.hsv,
+    required this.onChanged,
+  });
 
   final HSVColor hsv;
   final ValueChanged<HSVColor> onChanged;
@@ -967,211 +1990,581 @@ class _ColorWheel extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = min(constraints.maxWidth, constraints.maxHeight);
-        final center = Offset(constraints.maxWidth / 2, size / 2);
-        final radius = size / 2 - 8;
+        final size = math.min(
+          constraints.maxWidth,
+          constraints.maxHeight,
+        );
 
-        return GestureDetector(
-          onPanDown: (d) => _update(d.localPosition, center, radius),
-          onPanUpdate: (d) => _update(d.localPosition, center, radius),
-          child: CustomPaint(
-            size: Size(constraints.maxWidth, size),
-            painter: _WheelPainter(hsv: hsv, radius: radius),
+        return Center(
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+
+              onPanDown: (details) {
+                _handlePosition(
+                  details.localPosition,
+                  size,
+                );
+              },
+
+              onPanUpdate: (details) {
+                _handlePosition(
+                  details.localPosition,
+                  size,
+                );
+              },
+
+              child: CustomPaint(
+                painter: _ColorWheelPainter(hsv),
+                size: Size.square(size),
+              ),
+            ),
           ),
         );
       },
     );
   }
 
-  void _update(Offset pos, Offset center, double radius) {
-    final offset = pos - center;
-    final dist = offset.distance.clamp(0.0, radius);
-    final angle = (atan2(offset.dy, offset.dx) * 180 / pi + 360) % 360;
+  void _handlePosition(
+      Offset position,
+      double size,
+      ) {
+    final center = Offset(
+      size / 2,
+      size / 2,
+    );
+
+    final offset = position - center;
+    final radius = size / 2;
+    final distance = offset.distance;
+
+    // حصر المؤشر داخل حدود الدائرة
+    final saturation = (distance / radius).clamp(0.0, 1.0);
+
+    // atan2 في إحداثيات الشاشة يبدأ من الجهة اليمنى
+    // ويزداد مع اتجاه عقارب الساعة، وهو نفس اتجاه SweepGradient
+    var hue = math.atan2(
+      offset.dy,
+      offset.dx,
+    ) *
+        180 /
+        math.pi;
+
+    if (hue < 0) {
+      hue += 360;
+    }
+
     onChanged(
-      hsv.withHue(angle).withSaturation((dist / radius).clamp(0.0, 1.0)),
+      HSVColor.fromAHSV(
+        1.0,
+        hue,
+        saturation,
+        hsv.value,
+      ),
     );
   }
 }
 
-class _WheelPainter extends CustomPainter {
-  _WheelPainter({required this.hsv, required this.radius});
+class _ColorWheelPainter extends CustomPainter {
+  _ColorWheelPainter(this.hsv);
 
   final HSVColor hsv;
-  final double radius;
+
+  static const List<Color> _wheelColors = [
+    Color(0xFFFF0000), // Red
+    Color(0xFFFFFF00), // Yellow
+    Color(0xFF00FF00), // Green
+    Color(0xFF00FFFF), // Cyan
+    Color(0xFF0000FF), // Blue
+    Color(0xFFFF00FF), // Magenta
+    Color(0xFFFF0000), // Red
+  ];
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    const steps = 360;
+  void paint(
+      Canvas canvas,
+      Size size,
+      ) {
+    final center = Offset(
+      size.width / 2,
+      size.height / 2,
+    );
 
-    for (int i = 0; i < steps; i++) {
-      final paint = Paint()
-        ..shader = SweepGradient(
-          colors: List.generate(
-            7,
-                (j) => HSVColor.fromAHSV(1, (j * 60) % 360, 1, hsv.value).toColor(),
-          ),
-        ).createShader(Rect.fromCircle(center: center, radius: radius));
-      canvas.drawCircle(center, radius, paint);
-      break;
-    }
+    final radius = math.min(
+      size.width,
+      size.height,
+    ) /
+        2;
+
+    final wheelRect = Rect.fromCircle(
+      center: center,
+      radius: radius,
+    );
+
+    // ------------------------------------------------------------
+    // 1. رسم ألوان Hue
+    //
+    // لا نستخدم GradientRotation هنا.
+    // يبدأ اللون الأحمر من الجهة اليمنى، وهي نفس نقطة حساب atan2.
+    // ------------------------------------------------------------
+
+    final huePaint = Paint()
+      ..shader = const SweepGradient(
+        colors: _wheelColors,
+        stops: [
+          0.0,
+          1 / 6,
+          2 / 6,
+          3 / 6,
+          4 / 6,
+          5 / 6,
+          1.0,
+        ],
+      ).createShader(wheelRect);
 
     canvas.drawCircle(
       center,
       radius,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [
-            HSVColor.fromAHSV(1, 0, 0, hsv.value).toColor(),
-            Colors.transparent,
-          ],
-        ).createShader(Rect.fromCircle(center: center, radius: radius)),
+      huePaint,
     );
 
-    final thumbAngle = hsv.hue * pi / 180;
-    final thumbDist = hsv.saturation * radius;
-    final thumb = Offset(
-      center.dx + cos(thumbAngle) * thumbDist,
-      center.dy + sin(thumbAngle) * thumbDist,
+    // ------------------------------------------------------------
+    // 2. إضافة التشبع Saturation
+    //
+    // المركز أبيض = تشبع 0
+    // الحافة = تشبع 1
+    // ------------------------------------------------------------
+
+    final saturationPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          Colors.white,
+          Colors.white.withOpacity(0.0),
+        ],
+        stops: const [
+          0.0,
+          1.0,
+        ],
+      ).createShader(wheelRect);
+
+    canvas.drawCircle(
+      center,
+      radius,
+      saturationPaint,
     );
 
-    canvas.drawCircle(thumb, 12, Paint()..color = Colors.white);
-    canvas.drawCircle(thumb, 9, Paint()..color = hsv.toColor());
+    // ------------------------------------------------------------
+    // 3. تطبيق قيمة السطوع Value على كامل الدائرة
+    //
+    // عند value = 1 لا يوجد تعتيم.
+    // عند value = 0 تصبح الدائرة سوداء.
+    // ------------------------------------------------------------
+
+    final brightness = hsv.value.clamp(0.0, 1.0);
+    final darkness = 1.0 - brightness;
+
+    if (darkness > 0) {
+      final brightnessPaint = Paint()
+        ..color = Colors.black.withOpacity(darkness);
+
+      canvas.drawCircle(
+        center,
+        radius,
+        brightnessPaint,
+      );
+    }
+
+    // ------------------------------------------------------------
+    // 4. رسم مؤشر اللون المختار
+    // ------------------------------------------------------------
+
+    final angle = hsv.hue * math.pi / 180;
+    final selectedRadius = radius * hsv.saturation;
+
+    final selectedPosition = Offset(
+      center.dx + math.cos(angle) * selectedRadius,
+      center.dy + math.sin(angle) * selectedRadius,
+    );
+
+    // ظل خلف المؤشر حتى يكون واضحًا على جميع الألوان
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(.28)
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        4,
+      );
+
+    canvas.drawCircle(
+      selectedPosition,
+      16,
+      shadowPaint,
+    );
+
+    // الحلقة الخارجية
+    final outerPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4;
+
+    canvas.drawCircle(
+      selectedPosition,
+      14,
+      outerPaint,
+    );
+
+    // لون المؤشر الداخلي
+    final innerPaint = Paint()
+      ..color = hsv.toColor()
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(
+      selectedPosition,
+      10,
+      innerPaint,
+    );
+
+    // نقطة صغيرة داخل المؤشر لتحسين الوضوح
+    final centerPaint = Paint()
+      ..color = _getContrastColor(hsv.toColor());
+
+    canvas.drawCircle(
+      selectedPosition,
+      3,
+      centerPaint,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _WheelPainter old) => old.hsv != hsv;
+  bool shouldRepaint(
+      covariant _ColorWheelPainter oldDelegate,
+      ) {
+    return oldDelegate.hsv != hsv;
+  }
+
+  Color _getContrastColor(Color color) {
+    final brightness = ThemeData.estimateBrightnessForColor(color);
+
+    return brightness == Brightness.dark
+        ? Colors.white
+        : Colors.black.withOpacity(.75);
+  }
 }
-class _AppColorWheelSheet extends StatefulWidget {
-  const _AppColorWheelSheet({
-    required this.title,
-    required this.initial,
-    required this.onApply,
+
+
+/// ===============================================================
+/// Language Bottom Sheet
+/// ===============================================================
+
+class _LanguageSheet extends StatelessWidget {
+  const _LanguageSheet({
+    super.key,
   });
-
-  final String title;
-  final Color initial;
-  final Future<void> Function(Color) onApply;
-
-  @override
-  State<_AppColorWheelSheet> createState() => _AppColorWheelSheetState();
-}
-
-class _AppColorWheelSheetState extends State<_AppColorWheelSheet> {
-  late HSVColor _hsv;
-
-  @override
-  void initState() {
-    super.initState();
-    _hsv = HSVColor.fromColor(widget.initial);
-  }
 
   @override
   Widget build(BuildContext context) {
-    final color = _hsv.toColor();
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final app = UniSpaceApp.of(context);
+    final currentLanguage = app._locale.languageCode;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+    final languages = [
+      _LanguageOption(
+        code: 'ar',
+        title: S.of(context).arabic,
+        subtitle: 'العربية',
+        flag: '🇸🇦',
+        direction: TextDirection.rtl,
+      ),
+      _LanguageOption(
+        code: 'fr',
+        title: 'Français',
+        subtitle: 'French',
+        flag: '🇫🇷',
+        direction: TextDirection.ltr,
+      ),
+      _LanguageOption(
+        code: 'en',
+        title: 'English',
+        subtitle: 'English',
+        flag: '🇬🇧',
+        direction: TextDirection.ltr,
+      ),
+    ];
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        top: false,
+        child: Material(
+          color: colors.surface,
+          elevation: 12,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(32),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              22,
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 180,
-              child: _ColorWheel(
-                hsv: _hsv,
-                onChanged: (v) => setState(() => _hsv = v),
-              ),
-            ),
-            Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('السطوع'),
-                Expanded(
-                  child: Slider(
-                    value: _hsv.value,
-                    onChanged: (v) =>
-                        setState(() => _hsv = _hsv.withValue(v)),
-                    activeColor: color,
+                _SheetDragHandle(
+                  color: colors.outlineVariant,
+                ),
+
+                const SizedBox(height: 22),
+
+                Row(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: colors.primaryContainer,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Icon(
+                        Icons.translate_rounded,
+                        color: colors.onPrimaryContainer,
+                        size: 28,
+                      ),
+                    ),
+
+                    const SizedBox(width: 14),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            S.of(context).chooseLanguage,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            'اختر اللغة المناسبة لتجربتك',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 22),
+
+                ...languages.map(
+                      (language) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _LanguageTile(
+                      option: language,
+                      selected: language.code == currentLanguage,
+                      onTap: () {
+                        app.setLocale(
+                          Locale(language.code),
+                        );
+
+                        Navigator.of(context).pop();
+                      },
+                    ),
                   ),
                 ),
               ],
             ),
-            Container(
-              height: 36,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () async {
-                  await widget.onApply(_hsv.toColor());
-                  if (context.mounted) Navigator.pop(context);
-                },
-                child: const Text('اعتماد اللون'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
-class _LanguageSheet extends StatelessWidget {
-  const _LanguageSheet({super.key});
+
+
+class _LanguageOption {
+  const _LanguageOption({
+    required this.code,
+    required this.title,
+    required this.subtitle,
+    required this.flag,
+    required this.direction,
+  });
+
+  final String code;
+  final String title;
+  final String subtitle;
+  final String flag;
+  final TextDirection direction;
+}
+
+
+class _LanguageTile extends StatelessWidget {
+  const _LanguageTile({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _LanguageOption option;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final app = UniSpaceApp.of(context);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            title: Text(S.of(context).chooseLanguage),
+    final backgroundColor = selected
+        ? colors.primaryContainer.withOpacity(.72)
+        : colors.surfaceContainerHighest.withOpacity(.40);
+
+    final borderColor = selected
+        ? colors.primary.withOpacity(.72)
+        : colors.outlineVariant.withOpacity(.30);
+
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: option.title,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: borderColor,
+            width: selected ? 1.5 : 1,
           ),
-          RadioListTile<String>(
-            value: 'ar',
-            groupValue: app._locale.languageCode,
-            title: Text(S.of(context).arabic),
-            onChanged: (_) {
-              app.setLocale(const Locale('ar'));
-              Navigator.pop(context);
-            },
+        ),
+        child: Material(
+          // مهم: يجب أن يكون Material داخل الـ Container
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            onTap: onTap,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 7,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+
+            leading: Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected
+                    ? colors.surface
+                    : colors.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                option.flag,
+                style: const TextStyle(
+                  fontSize: 25,
+                ),
+              ),
+            ),
+
+            title: Directionality(
+              textDirection: option.direction,
+              child: Text(
+                option.title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: selected
+                      ? colors.onPrimaryContainer
+                      : colors.onSurface,
+                ),
+              ),
+            ),
+
+            subtitle: Directionality(
+              textDirection: option.direction,
+              child: Text(
+                option.subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: selected
+                      ? colors.onPrimaryContainer.withOpacity(.72)
+                      : colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+
+            trailing: AnimatedScale(
+              duration: const Duration(milliseconds: 180),
+              scale: selected ? 1 : .8,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: selected ? 1 : 0,
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: colors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_rounded,
+                    size: 19,
+                    color: colors.onPrimary,
+                  ),
+                ),
+              ),
+            ),
           ),
-          RadioListTile<String>(
-            value: 'fr',
-            groupValue: app._locale.languageCode,
-            title: const Text("Français"),
-            onChanged: (_) {
-              app.setLocale(const Locale('fr'));
-              Navigator.pop(context);
-            },
-          ),
-          RadioListTile<String>(
-            value: 'en',
-            groupValue: app._locale.languageCode,
-            title: const Text("English"),
-            onChanged: (_) {
-              app.setLocale(const Locale('en'));
-              Navigator.pop(context);
-            },
-          ),
-        ],
+        ),
       ),
     );
   }
 }
+
+
+
+/// ===============================================================
+/// Shared UI Helpers
+/// ===============================================================
+
+class _SheetDragHandle extends StatelessWidget {
+  const _SheetDragHandle({
+    required this.color,
+  });
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 5,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+    );
+  }
+}
+
+
+/// Returns a readable foreground color.
+Color _onColor(Color color) {
+  final brightness = ThemeData.estimateBrightnessForColor(color);
+
+  return brightness == Brightness.dark
+      ? Colors.white
+      : Colors.black87;
+}
+
 
 Future<String> translateSubject(BuildContext context, String subject) async {
   try {
@@ -1335,16 +2728,20 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
       ],
       supportedLocales: S.delegate.supportedLocales,
       builder: (context, child) {
-        return ValueListenableBuilder<SettingsData>(
-          valueListenable: AppSettings.instance.notifier,
-          builder: (context, settings, _) {
-            return MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                textScaler: TextScaler.linear(settings.fontScale.scale),
-              ),
-              child: child ?? const SizedBox.shrink(),
-            );
-          },
+        return SecurityLockGate(
+            child: LoginAlertWatcher(
+          child: ValueListenableBuilder<SettingsData>(
+            valueListenable: AppSettings.instance.notifier,
+            builder: (context, settings, _) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(settings.fontScale.scale),
+                ),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
+          ),
+        )
         );
       },
       home: const AuthGate(),
@@ -1394,18 +2791,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
     return false; // لا تمنع التمرير
   }
+  late final Widget _home;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeCurrentSession();
-
-    // Each page now receives the drawer opener
-    _tabPages = [
-      CommunityScreen(onOpenDrawer: _openEndDrawer),
-      ChatPage(onOpenDrawer: _openEndDrawer),
-      UnispaceScreen(onOpenDrawer: _openEndDrawer),
-    ];
+    setUserPresence(online: true);
+    _home = CommunityScreen(onOpenDrawer: _openEndDrawer);
     _initDeepLinks();
   }
   Future<void> _initDeepLinks() async {
@@ -1455,7 +2849,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       if (!mounted) return;
 
       // انتقل لتبويب المجتمع ثم افتح المنشور
-      setState(() => _selectedIndex = 0);
+
 
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -1486,13 +2880,25 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _touchCurrentSession();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _touchCurrentSession();
+        setUserPresence(online: true);
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        setUserPresence(online: false);
+        break;
+    }
   }
 
   @override
   void dispose() {
     _linkSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    setUserPresence(online: false);
     super.dispose();
   }
 
@@ -1533,46 +2939,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true,
-      body: NotificationListener<ScrollNotification>(
-        onNotification: _onScroll,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: UniSpaceSlidingViewSwitcher(
-                index: _selectedIndex,
-                children: _tabPages,
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 280),
-                curve: Curves.easeOutCubic,
-                offset: _barVisible ? Offset.zero : const Offset(0, 1.15),
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 220),
-                  opacity: _barVisible ? 1 : 0,
-                  child: ModernUniSpaceBottomBar(
-                    selectedIndex: _selectedIndex,
-                    onTabSelected: (index) {
-                      if (index == _selectedIndex) return;
-                      setState(() {
-                        _selectedIndex = index;
-                        _barVisible = true; // أظهر الشريط عند تغيير التبويب
-                      });
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: _home,
     );
-  }}
+  }
+}
 
 
 
@@ -1589,24 +2959,59 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   User? _lastAuthUser;
   bool _blockingSignOut = false;
-  int _statusTick = 0; // ← لإعادة فحص accountStatus
+  bool? _twoFactorRequired;
+  String? _twoFactorUid;
+
+  void _ensureTwoFactorCheck(User user) {
+    if (_twoFactorUid == user.uid && _twoFactorRequired != null) return;
+    if (_twoFactorUid == user.uid && _twoFactorRequired == null) return;
+    _twoFactorUid = user.uid;
+    _twoFactorRequired = null;
+    _isTwoFactorRequired(user).timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => false,
+    ).then((value) {
+      if (!mounted) return;
+      setState(() => _twoFactorRequired = value);
+    }).catchError((_) {
+      if (!mounted) return;
+      setState(() => _twoFactorRequired = false);
+    });
+  }
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _userDocStream;
+  String? _userDocStreamUid;
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>> _statusStreamFor(String uid) {
+    if (_userDocStream == null || _userDocStreamUid != uid) {
+      _userDocStreamUid = uid;
+      _userDocStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .snapshots();
+    }
+    return _userDocStream!;
+  }
 
   Future<bool> _isTwoFactorRequired(User user) async {
+    final prefs = await SharedPreferences.getInstance();
+    final sid = prefs.getString('security_session_id');
+    if (sid != null && sid.isNotEmpty) {
+      try {
+        final session = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('sessions')
+            .doc(sid)
+            .get();
+        if (session.data()?['trusted'] == true) return false;
+      } catch (_) {}
+    }
+
     final profile =
     await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     final enabled = profile.data()?['twoFactorEnabled'] as bool? ?? false;
     if (!enabled) return false;
     return !(await TwoFactorService.instance.isCurrentSessionVerified(user));
-  }
-
-  Future<String?> _accountStatus(String uid) async {
-    try {
-      final doc =
-      await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      return doc.data()?['accountStatus']?.toString();
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<void> _blockAndSignOut(String reason) async {
@@ -1626,36 +3031,23 @@ class _AuthGateState extends State<AuthGate> {
 
   void _refreshStatus() {
     if (!mounted) return;
-    setState(() => _statusTick++);
+    setState(() {});
   }
 
   Widget _routeAuthenticated(User user, bool isPasswordUser) {
     if (!isPasswordUser) {
-      if (kDebugMode) {
-        debugPrint('[AuthGate] routing -> HomeShell (social provider)');
-      }
       return const HomeShell();
     }
-    return FutureBuilder<bool>(
-      future: _isTwoFactorRequired(user),
-      builder: (context, twoFactorSnap) {
-        if (twoFactorSnap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (twoFactorSnap.data == true) {
-          if (kDebugMode) {
-            debugPrint('[AuthGate] routing -> TwoFactorOtpScreen');
-          }
-          return TwoFactorOtpScreen(email: user.email ?? '');
-        }
-        if (kDebugMode) {
-          debugPrint('[AuthGate] routing -> HomeShell (authenticated)');
-        }
-        return const HomeShell();
-      },
-    );
+    _ensureTwoFactorCheck(user);
+    if (_twoFactorRequired == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_twoFactorRequired == true) {
+      return TwoFactorOtpScreen(email: user.email ?? '');
+    }
+    return const HomeShell();
   }
 
   @override
@@ -1666,6 +3058,13 @@ class _AuthGateState extends State<AuthGate> {
         return StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (ctx, snap) {
+            if (Firebase.apps.isEmpty) {
+              return const Scaffold(
+                body: Center(
+                  child: Text('تعذر تشغيل Firebase. أعد فتح التطبيق.'),
+                ),
+              );
+            }
             if (snap.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
@@ -1682,35 +3081,34 @@ class _AuthGateState extends State<AuthGate> {
             }
 
             if (!snap.hasData) {
+              _userDocStream = null;
+              _userDocStreamUid = null;
+              _twoFactorRequired = null;
+              _twoFactorUid = null;
               return const SignInScreen();
             }
 
             final user = snap.data!;
             final isPasswordUser = user.providerData
                 .any((info) => info.providerId == 'password');
-
-            if (isPasswordUser && !user.emailVerified) {
-              unawaited(
-                AuthSessionService.signOutFully(
-                  beforeSignOut: () =>
-                      SessionService.instance.revokeCurrentSession(user.uid),
-                ),
-              );
-              return const SignInScreen();
-            }
-
-            return FutureBuilder<String?>(
-              // المفتاح يغيّر الـ FutureBuilder بعد إعادة التفعيل
-              key: ValueKey('account_status_${user.uid}_$_statusTick'),
-              future: _accountStatus(user.uid),
+// if (isPasswordUser && !user.emailVerified) {
+            //   return VerifyEmailScreen(
+            //     key: ValueKey('verify_${user.uid}'),
+            //     email: user.email ?? '',
+            //     password: '',
+            //   );
+            // }
+            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: _statusStreamFor(user.uid),
               builder: (context, statusSnap) {
-                if (statusSnap.connectionState == ConnectionState.waiting) {
-                  return const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  );
+                if (statusSnap.hasError) {
+                  debugPrint('AuthGate user doc: ${statusSnap.error}');
+                  return _routeAuthenticated(user, isPasswordUser);
                 }
 
-                final status = statusSnap.data;
+                final doc = statusSnap.data;
+                final data = doc?.data();
+                final status = data?['accountStatus']?.toString();
 
                 if (status == 'deleted') {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1721,12 +3119,34 @@ class _AuthGateState extends State<AuthGate> {
 
                 if (status == 'disabled') {
                   if (kDebugMode) {
-                    debugPrint(
-                      '[AuthGate] routing -> ReactivateAccountScreen',
-                    );
+                    debugPrint('[AuthGate] routing -> ReactivateAccountScreen');
                   }
-                  return ReactivateAccountScreen(
-                    onReactivated: _refreshStatus, // ← مهم
+                  return ReactivateAccountScreen(onReactivated: _refreshStatus);
+                }
+
+                if (!statusSnap.hasData) {
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final completed = data?['onboardingCompleted'] == true;
+                final hasProfile =
+                    (data?['username'] ?? '').toString().trim().isNotEmpty ||
+                        (data?['name'] ?? '').toString().trim().isNotEmpty;
+                final needsOnboarding =
+                    doc == null || !doc.exists || (!completed && !hasProfile);
+
+                if (needsOnboarding) {
+                  final isGoogle =
+                  user.providerData.any((p) => p.providerId == 'google.com');
+                  final parts = (user.displayName ?? '').trim().split(RegExp(r'\s+'));
+                  final first = parts.isNotEmpty ? parts.first : '';
+                  final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+                  return SignUpFlowScreen(
+                    skipAccountCreation: isGoogle,
+                    initialFirstName: first,
+                    initialLastName: last,
                   );
                 }
 
@@ -1751,6 +3171,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final GoogleSignIn _googleSignIn = AuthSessionService.googleSignIn;
   bool loading = false;
   bool googleLoading = false;
+  bool _obscure = true;
 
   String _mapAuthError(FirebaseAuthException error) {
     final localizations = S.of(context);
@@ -1840,11 +3261,25 @@ class _SignInScreenState extends State<SignInScreen> {
       debugPrint('[Auth] email login started: $trimmedEmail');
     }
     try {
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: trimmedEmail,
-        password: trimmedPassword,
-      );
-      final user = credential.user;
+      User? user;
+      try {
+        final credential =
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: trimmedEmail,
+          password: trimmedPassword,
+        );
+        user = credential.user;
+      } on FirebaseAuthMultiFactorException catch (e) {
+        if (!mounted) return;
+        final ok = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => MfaSignInPage(resolver: e.resolver),
+          ),
+        );
+        if (ok != true) return;
+        user = FirebaseAuth.instance.currentUser;
+      }
+
       if (user != null) {
         final isPasswordUser =
         user.providerData.any((info) => info.providerId == 'password');
@@ -1860,10 +3295,14 @@ class _SignInScreenState extends State<SignInScreen> {
         if (kDebugMode) {
           debugPrint('[Auth] email login success uid=${user.uid}');
         }
-        final profile = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        final twoFactorEnabled = profile.data()?['twoFactorEnabled'] as bool? ?? false;
+        final profile = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        final twoFactorEnabled =
+            profile.data()?['twoFactorEnabled'] as bool? ?? false;
         if (!twoFactorEnabled) {
-          await SessionService.instance.initSession(user.uid);
+          await SessionService.instance.initSession(user.uid, forceNew: true);
         }
       }
     } on FirebaseAuthException catch (e, stackTrace) {
@@ -1905,20 +3344,20 @@ class _SignInScreenState extends State<SignInScreen> {
               },
               child: Text(localizations.resendVerificationEmail),
             ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => VerifyEmailScreen(
-                      email: email,
-                      password: password,
-                    ),
-                  ),
-                );
-              },
-              child: Text(localizations.checkNow),
-            ),
+            // FilledButton(
+            //   onPressed: () {
+            //     Navigator.of(dialogContext).pop();
+            //     Navigator.of(context).push(
+            //       MaterialPageRoute(
+            //         builder: (_) => VerifyEmailScreen(
+            //           email: email,
+            //           password: password,
+            //         ),
+            //       ),
+            //     );
+            //   },
+            //   child: Text(localizations.checkNow),
+            // ),
           ],
         );
       },
@@ -1992,10 +3431,10 @@ class _SignInScreenState extends State<SignInScreen> {
         debugPrint('[Auth] google login FirebaseAuth.currentUser=${FirebaseAuth.instance.currentUser?.uid ?? 'null'}');
       }
       if (user != null) {
+        await SessionService.instance.initSession(user.uid, forceNew: true);
         if (kDebugMode) {
           debugPrint('[Auth] google login success uid=${user.uid}');
         }
-        await SessionService.instance.initSession(user.uid);
       }
     } on FirebaseAuthException catch (e, stackTrace) {
       debugPrint(
@@ -2058,121 +3497,343 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
+  bool get _dark => Theme.of(context).brightness == Brightness.dark;
+
+  Color get _bg => _dark ? const Color(0xFF061016) : const Color(0xFFF3F7F6);
+  Color get _sheet => _dark ? const Color(0xFF0A1216) : Colors.white;
+  Color get _ink => _dark ? Colors.white : const Color(0xFF102027);
+  Color get _muted => _dark ? const Color(0xFF9BB0B8) : const Color(0xFF5B6E75);
+  Color get _field => _dark ? const Color(0xFF0E171C) : const Color(0xFFF4F7F8);
+  Color get _stroke => _dark ? const Color(0xFF1E2C33) : const Color(0xFFD7E3E6);
+
+  InputDecoration _deco({
+    required String label,
+    required IconData icon,
+    Widget? suffix,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, size: 20, color: _muted),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: _field,
+      labelStyle: TextStyle(color: _muted),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: _stroke),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: _stroke),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: AppTeal.main, width: 1.4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final busy = loading || googleLoading;
+
     return Scaffold(
-      backgroundColor: Colors.blueGrey[700],
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            elevation: 3,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.school_rounded,
-                    color: kUniSpaceBlue, size: 64),
-                const SizedBox(height: 12),
-                Text(S.of(context).welcomeUniSpace,
-                    style:
-                    TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    prefixIcon: Icon(Icons.email_outlined),
-                    labelText: S.of(context).email,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: password,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    prefixIcon: Icon(Icons.lock_outline),
-                    labelText: S.of(context).password,
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: loading || googleLoading
-                        ? null
-                        : _showForgotPasswordSheet,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(S.of(context).forgotPassword),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: loading || googleLoading ? null : _login,
-                        icon: const Icon(Icons.login),
-                        label: Text(S.of(context).login),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: loading || googleLoading ? null : _register,
-                        icon: const Icon(Icons.person_add_alt),
-                        label: Text(S.of(context).register),
-                      ),
-                    ]),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed:
-                    loading || googleLoading ? null : _signInWithGoogle,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black87,
-                      elevation: 3,
-                      shadowColor: Colors.black26,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (googleLoading)
-                            const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
+      backgroundColor: _bg,
+      resizeToAvoidBottomInset: true,
+      body: Stack(
+        children: [
+          Positioned(
+            top: -90,
+            right: -70,
+            child: _GlowOrb(size: 280, opacity: _dark ? 0.55 : 0.28),
+          ),
+          Positioned(
+            top: 180,
+            left: -90,
+            child: _GlowOrb(size: 180, opacity: _dark ? 0.28 : 0.16),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final sheetHeight = c.maxHeight < 560
+                    ? c.maxHeight
+                    : c.maxHeight * 0.6;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(35, 28, 28, 0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'UNISPACE',
+                              style: TextStyle(
+                                color: AppTeal.main,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                letterSpacing: 3.2,
                               ),
-                            )
-                          else
-                            const FaIcon(
-                              FontAwesomeIcons.google,
-                              color: Color(0xFFDB4437),
-                              size: 18,
                             ),
-                          const SizedBox(width: 10),
-                          const Text('تسجيل الدخول عبر Google'),
-                        ],
+                            const SizedBox(height: 50),
+                            Container(
+                              width: 58,
+                              height: 58,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    AppTeal.main,
+                                    Color.lerp(AppTeal.main, Colors.black, 0.22)!,
+                                  ],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTeal.main.withValues(
+                                      alpha: _dark ? 0.45 : 0.28,
+                                    ),
+                                    blurRadius: 22,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.school_rounded,
+                                color: Colors.white,
+                                size: 30,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              'مساحتك الجامعية',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _ink,
+                                fontSize: 42,
+                                height: 1.05,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Welcome to UniSpace where we all meet',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _muted,
+                                fontSize: 15,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              ]),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: sheetHeight,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                        decoration: BoxDecoration(
+                          color: _sheet,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(32),
+                          ),
+                          border: Border(top: BorderSide(color: _stroke)),
+                          boxShadow: _dark
+                              ? null
+                              : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 24,
+                              offset: const Offset(0, -8),
+                            ),
+                          ],
+                        ),
+                        child: SingleChildScrollView(
+                          keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const SizedBox(height:5),
+                              TextField(
+                                controller: email,
+                                keyboardType: TextInputType.emailAddress,
+                                style: TextStyle(color: _ink),
+                                decoration: _deco(
+                                  label: S.of(context).email,
+                                  icon: Icons.mail_outline_rounded,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: password,
+                                obscureText: _obscure,
+                                style: TextStyle(color: _ink),
+                                decoration: _deco(
+                                  label: S.of(context).password,
+                                  icon: Icons.lock_outline_rounded,
+                                  suffix: IconButton(
+                                    onPressed: () =>
+                                        setState(() => _obscure = !_obscure),
+                                    icon: Icon(
+                                      _obscure
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      color: _muted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton(
+                                  onPressed:
+                                  busy ? null : _showForgotPasswordSheet,
+                                  child: Text(
+                                    S.of(context).forgotPassword,
+                                    style: TextStyle(color: AppTeal.main),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                height: 54,
+                                child: FilledButton(
+                                  onPressed: busy ? null : _login,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppTeal.main,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                  ),
+                                  child: loading
+                                      ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                      : Text(
+                                    S.of(context).login,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              GestureDetector(
+                                onTap: busy ? null : _register,
+                                child: Text.rich(
+                                  TextSpan(
+                                    text: 'ليس لديك حساب؟  ',
+                                    style: TextStyle(color: _muted),
+                                    children: [
+                                      TextSpan(
+                                        text: S.of(context).register,
+                                        style: TextStyle(
+                                          color: AppTeal.main,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              SizedBox(
+                                height: 50,
+                                child: OutlinedButton(
+                                  onPressed: busy ? null : _signInWithGoogle,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: _ink,
+                                    backgroundColor: _dark
+                                        ? Colors.transparent
+                                        : const Color(0xFFF7FAFA),
+                                    side: BorderSide(color: _stroke),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: googleLoading
+                                      ? SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: _ink,
+                                    ),
+                                  )
+                                      : const Row(
+                                    mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                    children: [
+                                      FaIcon(
+                                        FontAwesomeIcons.google,
+                                        size: 16,
+                                        color: Color(0xFFDB4437),
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text(
+                                        'متابعة عبر Google',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GlowOrb extends StatelessWidget {
+  const _GlowOrb({required this.size, required this.opacity});
+  final double size;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              AppTeal.main.withValues(alpha: opacity),
+              AppTeal.main.withValues(alpha: 0),
+            ],
           ),
         ),
       ),
@@ -2374,6 +4035,10 @@ class _ReactivateAccountScreenState extends State<ReactivateAccountScreen> {
         'accountStatus': 'active',
         'reactivatedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        'security': {
+          'frozen': false,
+          'frozenAt': null,
+        },
       }, SetOptions(merge: true));
 
       if (!mounted) return;
@@ -2463,882 +4128,6 @@ class _ReactivateAccountScreenState extends State<ReactivateAccountScreen> {
 // ============================================================================
 // Home Landing — كروت كليات احترافية + دخول إلى Navigator الدراسة
 // ============================================================================
-
-class HomeLandingScreen extends StatefulWidget {
-  const HomeLandingScreen({
-    super.key,
-    this.showAppBar = false,
-    this.bottomPadding = 0,
-    this.onOpenDrawer,
-  });
-
-  final bool showAppBar;
-  final double bottomPadding;
-  final VoidCallback? onOpenDrawer;   // ← added
-
-  @override
-  State<HomeLandingScreen> createState() => _HomeLandingScreenState();
-}
-
-class _HomeLandingScreenState extends State<HomeLandingScreen> {
-  final TextEditingController _searchController = TextEditingController();
-  bool _isSearchOpen = false;
-
-  Future<void> _openSearch(BuildContext context, String initialQuery) async {
-    if (_isSearchOpen) {
-      return;
-    }
-    _isSearchOpen = true;
-    FocusScope.of(context).unfocus();
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => FacultySearchPage(
-          faculties: getDemoFaculties(context),
-          initialQuery: initialQuery,
-          onFacultySelected: _openFaculty,
-        ),
-      ),
-    );
-    if (!mounted) {
-      return;
-    }
-    _searchController.clear();
-    _isSearchOpen = false;
-  }
-
-  void _openFaculty(BuildContext context, ProgramFaculty faculty) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => FacultyMajorsScreen(faculty: faculty)),
-    );
-  }
-
-  // void _openAcademicShortcut(BuildContext context, SettingsData settings) {
-  //   final faculties = getDemoFaculties(context);
-  //   final targetFaculty = settings.academicFacultyName.isNotEmpty
-  //       ? settings.academicFacultyName
-  //       : settings.academicFacultyId;
-  //   final targetDepartment = settings.academicDepartmentName.isNotEmpty
-  //       ? settings.academicDepartmentName
-  //       : settings.academicDepartmentId;
-  //   final targetSpecialty = settings.academicSpecialtyName.isNotEmpty
-  //       ? settings.academicSpecialtyName
-  //       : settings.academicSpecialtyId;
-  //   final targetLevel = settings.academicLevel;
-  //
-  //   ProgramFaculty? matchedFaculty;
-  //   ProgramMajor? matchedMajor;
-  //   ProgramTrack? matchedTrack;
-  //
-  //   for (final faculty in faculties) {
-  //     if (targetFaculty.isNotEmpty && faculty.name != targetFaculty) {
-  //       continue;
-  //     }
-  //     matchedFaculty = faculty;
-  //     for (final major in faculty.majors) {
-  //       if (targetDepartment.isNotEmpty && major.name != targetDepartment) {
-  //         continue;
-  //       }
-  //       matchedMajor = major;
-  //       for (final track in major.tracks) {
-  //         final matchesSpecialty = track.name == targetSpecialty ||
-  //             (settings.academicSpecialtyId.isNotEmpty &&
-  //                 track.name == settings.academicSpecialtyId);
-  //         final matchesLevel =
-  //             targetLevel.isEmpty || track.level == targetLevel;
-  //         if (matchesSpecialty && matchesLevel) {
-  //           matchedTrack = track;
-  //           break;
-  //         }
-  //       }
-  //       if (matchedTrack != null) {
-  //         break;
-  //       }
-  //     }
-  //     if (matchedTrack != null) {
-  //       break;
-  //     }
-  //   }
-  //
-  //   if (matchedTrack != null &&
-  //       matchedMajor != null &&
-  //       matchedFaculty != null) {
-  //     final selectedFaculty = matchedFaculty;
-  //     final selectedMajor = matchedMajor;
-  //     final selectedTrack = matchedTrack;
-  //     if (selectedFaculty == null ||
-  //         selectedMajor == null ||
-  //         selectedTrack == null) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
-  //       );
-  //       Navigator.push(
-  //         context,
-  //         MaterialPageRoute(
-  //           builder: (_) => const AcademicSettingsScreen(),
-  //         ),
-  //       );
-  //       return;
-  //     }
-  //     final specs = createSemesterSpecsForTrack(selectedTrack);
-  //     final sem1 = _pickSemester(specs, 'S1');
-  //     final sem2 = _pickSemester(specs, 'S2');
-  //     Navigator.push(
-  //       context,
-  //       MaterialPageRoute(
-  //         builder: (_) => StudiesTableScreen(
-  //           facultyName: selectedFaculty.name,
-  //           programName: '${selectedMajor.name} • ${selectedTrack.name}',
-  //           collegeId: selectedFaculty.name,
-  //           departmentId: selectedMajor.name,
-  //           specialtyId: selectedTrack.name,
-  //           level: selectedTrack.level,
-  //           academicScopeId: buildAcademicStorageSignature(
-  //             semester1: sem1,
-  //             semester2: sem2,
-  //             level: selectedTrack.level,
-  //           ),
-  //           semester1Modules: sem1,
-  //           semester2Modules: sem2,
-  //         ),
-  //       ),
-  //     );
-  //     return;
-  //   }
-  //
-  //   if (matchedMajor != null && matchedFaculty != null) {
-  //     final selectedMajor = matchedMajor;
-  //     final selectedFaculty = matchedFaculty;
-  //     if (selectedMajor == null || selectedFaculty == null) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
-  //       );
-  //       Navigator.push(
-  //         context,
-  //         MaterialPageRoute(
-  //           builder: (_) => const AcademicSettingsScreen(),
-  //         ),
-  //       );
-  //       return;
-  //     }
-  //     Navigator.push(
-  //       context,
-  //       MaterialPageRoute(
-  //         builder: (_) => MajorTracksScreen(
-  //           major: selectedMajor,
-  //           faculty: selectedFaculty,
-  //         ),
-  //       ),
-  //     );
-  //     return;
-  //   }
-  //
-  //   if (matchedFaculty != null) {
-  //     final selectedFaculty = matchedFaculty;
-  //     if (selectedFaculty == null) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
-  //       );
-  //       Navigator.push(
-  //         context,
-  //         MaterialPageRoute(
-  //           builder: (_) => const AcademicSettingsScreen(),
-  //         ),
-  //       );
-  //       return;
-  //     }
-  //     Navigator.push(
-  //       context,
-  //       MaterialPageRoute(
-  //         builder: (_) => FacultyMajorsScreen(faculty: selectedFaculty),
-  //       ),
-  //     );
-  //     return;
-  //   }
-  //
-  //   ScaffoldMessenger.of(context).showSnackBar(
-  //     SnackBar(content: Text(S.of(context).academicShortcutNotFound)),
-  //   );
-  //   Navigator.push(
-  //     context,
-  //     MaterialPageRoute(
-  //       builder: (_) => const AcademicSettingsScreen(),
-  //     ),
-  //   );
-  // }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final faculties = getDemoFaculties(context).take(6).toList();
-
-    final quickFaculty = faculties.isNotEmpty ? faculties.first : null;
-
-    return AppScaffold(
-      // endDrawer:  AppEndDrawer(),
-        appBar: widget.showAppBar
-            ? AppBar(
-          automaticallyImplyLeading: true,
-          title: Row(
-            children: [
-              const SizedBox(width: 4),
-              Align(
-                alignment: Alignment.center,
-                child: Text(
-                  S.of(context).gpu,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        )
-            : null,
-        padding: EdgeInsets.zero,
-        body:
-        CustomScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          slivers: [
-
-            // SliverPadding(
-            //   padding: const EdgeInsets.fromLTRB(1, 20, 10, 30),
-            //   sliver: SliverToBoxAdapter(
-            //     child: Container(
-            //
-            //       height: 50,
-            //       padding: const EdgeInsets.symmetric(horizontal: 16),
-            //       decoration: BoxDecoration(
-            //         color: Colors.transparent,
-            //         borderRadius: BorderRadius.circular(12),
-            //         boxShadow: [
-            //           BoxShadow(
-            //             color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
-            //             blurRadius: 20,
-            //             offset: const Offset(4, 8),
-            //           ),
-            //         ],
-            //       ),
-            //       child: TextField(
-            //         controller: _searchController,
-            //         onChanged: (value) {
-            //           if (value.trim().isNotEmpty) {
-            //             _openSearch(context, value);
-            //           }
-            //         },
-            //         onTap: () {
-            //           _openSearch(context, _searchController.text);
-            //         },
-            //         decoration: InputDecoration(
-            //           hintText: S.of(context).searchFaculty,
-            //           hintStyle: TextStyle(
-            //               color: Theme.of(context)
-            //                   .colorScheme
-            //                   .onSurface
-            //                   .withValues(alpha: 0.6)),
-            //           border: InputBorder.none,
-            //           prefixIcon: Icon(Icons.search,
-            //               color: Theme.of(context).colorScheme.onSurface),
-            //         ),
-            //       ),
-            //     ),
-            //   ),
-            // ),
-            // SliverToBoxAdapter(
-            //   child: ValueListenableBuilder<SettingsData>(
-            //     valueListenable: AppSettings.instance.notifier,
-            //     builder: (context, settings, _) {
-            //       final theme = Theme.of(context);
-            //       final specialtyId =
-            //       settings.academicSpecialtyId.trim();
-            //       if (!settings.hasAcademicShortcut) {
-            //         return Padding(
-            //           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            //           child: _AcademicShortcutCard(
-            //             child: Column(
-            //               crossAxisAlignment: CrossAxisAlignment.start,
-            //               children: [
-            //                 const _AcademicShortcutHeader(),
-            //                 const SizedBox(height: 16),
-            //                 Text(
-            //                   S.of(context).academicShortcutEmptyTitle,
-            //                   style: theme.textTheme.bodyMedium?.copyWith(
-            //                     color: theme.colorScheme.onSurfaceVariant,
-            //                     fontWeight: FontWeight.w600,
-            //                   ),
-            //                 ),
-            //                 const SizedBox(height: 6),
-            //                 Text(
-            //                   'اختر كليتك وتخصصك للوصول السريع إلى حساب المعدل والمواد.',
-            //                   style: theme.textTheme.bodySmall?.copyWith(
-            //                     color: theme.colorScheme.onSurfaceVariant
-            //                         .withValues(alpha: 0.78),
-            //                     height: 1.45,
-            //                   ),
-            //                 ),
-            //                 const SizedBox(height: 18),
-            //                 _AcademicShortcutActions(
-            //                   primaryLabel:
-            //                   S.of(context).academicShortcutEmptyAction,
-            //                   primaryIcon: Icons.add_circle_outline_rounded,
-            //                   onPrimaryPressed: () {
-            //                     Navigator.push(
-            //                       context,
-            //                       MaterialPageRoute(
-            //                         builder: (_) =>
-            //                         const AcademicSettingsScreen(),
-            //                       ),
-            //                     );
-            //                   },
-            //                   secondaryLabel: S.of(context).quickCalc2,
-            //                   secondaryIcon: Icons.calculate_rounded,
-            //                   onSecondaryPressed: () {
-            //                     Navigator.push(
-            //                       context,
-            //                       MaterialPageRoute(
-            //                         builder: (_) => const QuickAverageScreen(),
-            //                       ),
-            //                     );
-            //                   },
-            //                 ),
-            //               ],
-            //             ),
-            //           ),
-            //         );
-            //       }
-            //       final facultyName = (settings.academicFacultyName.isNotEmpty
-            //           ? settings.academicFacultyName
-            //           : settings.academicFacultyId)
-            //           .trim();
-            //       final specialtyName =
-            //       (settings.academicSpecialtyName.isNotEmpty
-            //           ? settings.academicSpecialtyName
-            //           : specialtyId)
-            //           .trim();
-            //       final displaySpecialty =
-            //       specialtyName.isNotEmpty ? specialtyName : '—';
-            //       final level = settings.academicLevel.trim();
-            //       final displayLevel = level.isNotEmpty ? level : '—';
-            //       return Padding(
-            //         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            //         child: Dismissible(
-            //           key: ValueKey<String>(
-            //             'academic-shortcut-${settings.academicSpecialtyId}-${settings.academicLevel}',
-            //           ),
-            //           direction: DismissDirection.startToEnd,
-            //           background: Container(
-            //             decoration: BoxDecoration(
-            //               color: theme.colorScheme.error,
-            //               borderRadius: BorderRadius.circular(16),
-            //             ),
-            //             alignment: AlignmentDirectional.centerStart,
-            //             padding: const EdgeInsets.symmetric(horizontal: 20),
-            //             child: Row(
-            //               mainAxisSize: MainAxisSize.min,
-            //               children: [
-            //                 Icon(
-            //                   Icons.delete,
-            //                   color: theme.colorScheme.onError,
-            //                 ),
-            //                 const SizedBox(width: 8),
-            //                 Text(
-            //                   S.of(context).academicShortcutDeleteTitle,
-            //                   style:
-            //                   theme.textTheme.bodyMedium?.copyWith(
-            //                     color: theme.colorScheme.onError,
-            //                     fontWeight: FontWeight.w600,
-            //                   ),
-            //                 ),
-            //               ],
-            //             ),
-            //           ),
-            //           confirmDismiss: (_) async {
-            //             return await showDialog<bool>(
-            //               context: context,
-            //               builder: (dialogContext) {
-            //                 return AlertDialog(
-            //                   title: Text(
-            //                     S.of(dialogContext)
-            //                         .academicShortcutDeleteConfirmTitle,
-            //                   ),
-            //                   content: Text(
-            //                     S.of(dialogContext)
-            //                         .academicShortcutDeleteConfirmBody,
-            //                   ),
-            //                   actions: [
-            //                     TextButton(
-            //                       onPressed: () =>
-            //                           Navigator.pop(dialogContext, false),
-            //                       child: Text(
-            //                         S.of(dialogContext)
-            //                             .academicShortcutDeleteCancel,
-            //                       ),
-            //                     ),
-            //                     TextButton(
-            //                       onPressed: () =>
-            //                           Navigator.pop(dialogContext, true),
-            //                       child: Text(
-            //                         S.of(dialogContext)
-            //                             .academicShortcutDeleteConfirm,
-            //                       ),
-            //                     ),
-            //                   ],
-            //                 );
-            //               },
-            //             ) ??
-            //                 false;
-            //           },
-            //           onDismissed: (_) async {
-            //             await AppSettings.instance.clearAcademicShortcut();
-            //             if (!context.mounted) {
-            //               return;
-            //             }
-            //             ScaffoldMessenger.of(context).showSnackBar(
-            //               SnackBar(
-            //                 content: Text(
-            //                   S.of(context)
-            //                       .academicShortcutDeleteSuccess,
-            //                 ),
-            //               ),
-            //             );
-            //           },
-            //           child: _AcademicShortcutCard(
-            //             child: Column(
-            //               crossAxisAlignment: CrossAxisAlignment.start,
-            //               children: [
-            //                 const _AcademicShortcutHeader(),
-            //                 const SizedBox(height: 16),
-            //                 if (facultyName.isNotEmpty)
-            //                   Text(
-            //                     facultyName,
-            //                     style: theme.textTheme.titleSmall?.copyWith(
-            //                       color: theme.colorScheme.onSurface,
-            //                       fontWeight: FontWeight.w800,
-            //                     ),
-            //                   ),
-            //                 const SizedBox(height: 6),
-            //                 Text(
-            //                   S.of(context).academicShortcutDetails(
-            //                     displaySpecialty,
-            //                     displayLevel,
-            //                   ),
-            //                   style: theme.textTheme.bodySmall?.copyWith(
-            //                     color: theme.colorScheme.onSurfaceVariant
-            //                         .withValues(alpha: 0.82),
-            //                     height: 1.45,
-            //                   ),
-            //                 ),
-            //                 const SizedBox(height: 18),
-            //                 _AcademicShortcutActions(
-            //                   primaryLabel: S.of(context).academicShortcutGo,
-            //                   primaryIcon: Icons.auto_stories_rounded,
-            //                   onPrimaryPressed: () => _openAcademicShortcut(
-            //                     context,
-            //                     settings,
-            //                   ),
-            //                   secondaryLabel: S.of(context).quickCalc2,
-            //                   secondaryIcon: Icons.calculate_rounded,
-            //                   onSecondaryPressed: () {
-            //                     Navigator.push(
-            //                       context,
-            //                       MaterialPageRoute(
-            //                         builder: (_) => const QuickAverageScreen(),
-            //                       ),
-            //                     );
-            //                   },
-            //                 ),
-            //                 const SizedBox(height: 10),
-            //                 Align(
-            //                   alignment: AlignmentDirectional.centerEnd,
-            //                   child: TextButton.icon(
-            //                     onPressed: () {
-            //                       Navigator.push(
-            //                         context,
-            //                         MaterialPageRoute(
-            //                           builder: (_) =>
-            //                           const AcademicSettingsScreen(),
-            //                         ),
-            //                       );
-            //                     },
-            //                     icon: const Icon(Icons.tune_rounded, size: 18),
-            //                     label: Text(
-            //                       S.of(context).academicShortcutEdit,
-            //                     ),
-            //                   ),
-            //                 ),
-            //               ],
-            //             ),
-            //           ),
-            //         ),
-            //       );
-            //     },
-            //   ),
-            // ),
-            //
-            // if (quickFaculty != null) ...[
-            //   SliverPadding(
-            //     padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            //     sliver: SliverList(
-            //       delegate: SliverChildBuilderDelegate(
-            //             (context, index) {
-            //           final faculty = getDemoFaculties(context)[index];
-            //           return Padding(
-            //             padding: const EdgeInsets.symmetric(vertical: 9),
-            //             child: _FacultyQuickCard(
-            //               faculty: faculty,
-            //               onTap: () => _openFaculty(context, faculty),
-            //             ),
-            //           );
-            //         },
-            //         childCount: getDemoFaculties(context).length,
-            //       ),
-            //     ),
-            //   ),
-            // ],
-            // SliverToBoxAdapter(child: SizedBox(height: widget.bottomPadding)),
-          ],
-        )
-    );
-  }
-}
-
-class _AcademicShortcutCard extends StatelessWidget {
-  const _AcademicShortcutCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: LinearGradient(
-          colors: isDark
-              ? [
-            theme.colorScheme.surfaceContainerHighest,
-            theme.colorScheme.surface,
-          ]
-              : const [
-            Color(0xFFFFFFFF),
-            Color(0xFFEFFBFF),
-          ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTeal.main.withValues(alpha: isDark ? 0.18 : 0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: isDark ? 0.20 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _AcademicShortcutHeader extends StatelessWidget {
-  const _AcademicShortcutHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient:  LinearGradient(
-              colors: [AppTeal.accent, Color(0xFF2563EB)],
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color:  AppTeal.accent.withValues(alpha: 0.24),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.school_rounded,
-            color: Colors.white,
-            size: 24,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            S.of(context).academicShortcutTitle,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.1,
-            ),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color:  AppTeal.accent.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: AppTeal.accent.withValues(alpha: 0.18),
-            ),
-          ),
-          child: Text(
-            'جامعي',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: const Color(0xFF0F766E),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AcademicShortcutActions extends StatelessWidget {
-  const _AcademicShortcutActions({
-    required this.primaryLabel,
-    required this.primaryIcon,
-    required this.onPrimaryPressed,
-    required this.secondaryLabel,
-    required this.secondaryIcon,
-    required this.onSecondaryPressed,
-  });
-
-  final String primaryLabel;
-  final IconData primaryIcon;
-  final VoidCallback onPrimaryPressed;
-  final String secondaryLabel;
-  final IconData secondaryIcon;
-  final VoidCallback onSecondaryPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stackButtons = constraints.maxWidth < 330;
-        final primaryButton = _AcademicShortcutButton(
-          label: primaryLabel,
-          icon: primaryIcon,
-          onPressed: onPrimaryPressed,
-          primary: true,
-        );
-        final secondaryButton = _AcademicShortcutButton(
-          label: secondaryLabel,
-          icon: secondaryIcon,
-          onPressed: onSecondaryPressed,
-          primary: false,
-        );
-
-        if (stackButtons) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              primaryButton,
-              const SizedBox(height: 10),
-              secondaryButton,
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(child: primaryButton),
-            const SizedBox(width: 10),
-            Expanded(child: secondaryButton),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _AcademicShortcutButton extends StatelessWidget {
-  const _AcademicShortcutButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    required this.primary,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool primary;
-
-  @override
-  Widget build(BuildContext context) {
-    final gradientColors = primary
-        ?  [AppTeal.accent, Color(0xFF2563EB)]
-        : const [Color(0xFF38BDF8), Color(0xFF10B981)];
-
-    return SizedBox(
-      height: 50,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(17),
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(17),
-          child: Ink(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(17),
-              gradient: LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.centerRight,
-                end: Alignment.centerLeft,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: gradientColors.last.withValues(alpha: 0.24),
-                  blurRadius: 14,
-                  offset: const Offset(0, 7),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, color: Colors.white, size: 20),
-                    const SizedBox(width: 7),
-                    Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FacultyQuickCard extends StatelessWidget {
-  const _FacultyQuickCard({required this.faculty, required this.onTap});
-
-  final ProgramFaculty faculty;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final majorsCount = faculty.majors.length;
-    final tracksCount =
-    faculty.majors.fold<int>(0, (sum, major) => sum + major.tracks.length);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.onSecondary,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.onSurface.withValues(alpha: .08),
-                blurRadius: 18,
-                offset: const Offset(0, 20),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 15,
-                    backgroundColor: theme.colorScheme.primary.withValues(alpha: .2),
-                    foregroundColor: theme.colorScheme.primary,
-                    child: const Icon(Icons.apartment_outlined),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      faculty.name,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: MetricTile(
-                      label: S.of(context).sections,
-                      value: majorsCount.toString(),
-                      icon: Icons.auto_awesome,
-                      onTap: null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: MetricTile(
-                      label: S.of(context).majors,
-                      value: tracksCount.toString(),
-                      icon: Icons.track_changes,
-                      onTap: null,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 
 
@@ -3728,24 +4517,194 @@ class NotificationItem {
     required this.sender,
     required this.message,
     this.time,
+    this.createdAt,
     this.type = 'comment',
     this.actorId,
     this.actorPhotoUrl,
+    this.actorIds = const [],
+    this.count = 1,
     this.postId,
     this.commentId,
     this.read = false,
+    this.chatId,
   });
 
   final String id;
   final String sender;
   final String message;
   final String? time;
-  final String type; // follow | comment | reply
+  final DateTime? createdAt;
+  final String type;
   final String? actorId;
   final String? actorPhotoUrl;
+  final List<String> actorIds;
+  final int count;
   final String? postId;
   final String? commentId;
   final bool read;
+  final String? chatId;
+}
+
+String _notifDayLabel(DateTime? dt) {
+  if (dt == null) return 'سابقاً';
+  final now = DateTime.now();
+  final day = DateTime(dt.year, dt.month, dt.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return 'اليوم';
+  if (diff == 1) return 'أمس';
+  if (diff < 7) return 'هذا الأسبوع';
+  return 'سابقاً';
+}
+
+class _StackedNotifAvatars extends StatelessWidget {
+  const _StackedNotifAvatars({required this.item, this.size = 44});
+  final NotificationItem item;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = item;
+    final typeColor = _notificationColor(n.type);
+
+    final t = _ProfileTheme.of(context);
+    final ids = (item.actorIds.isNotEmpty
+        ? item.actorIds
+        : [
+      if ((item.actorId ?? '').isNotEmpty) item.actorId!,
+    ])
+        .take(3)
+        .toList();
+    if (ids.isEmpty) {
+      return _NotificationAvatar(item: item, radius: size / 2);
+    }
+    const overlap = 12.0;
+    final width = size + (ids.length - 1) * (size - overlap) + 4;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+
+    return SizedBox(
+      width: width,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = ids.length - 1; i >= 0; i--)
+            Positioned(
+              right: rtl ? i * (size - overlap) : null,
+              left: rtl ? null : i * (size - overlap),
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: t.pageBg, width: 2),
+                ),
+                child: LiveAuthorPhoto(
+                  userId: ids[i],
+                  fallbackUrl: i == 0 ? item.actorPhotoUrl : null,
+                  size: size - 4,
+                  radius: (size - 4) / 2,
+                  iconSize: size * 0.4,
+                ),
+              ),
+            ),
+          Positioned(
+            right: rtl ? 0 : null,
+            left: rtl ? null : 0,
+            bottom: -1,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: typeColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: t.pageBg, width: 1.5),
+              ),
+              child: Icon(
+                _notificationIcon(item.type),
+                size: 10,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SocialNotificationTile extends StatelessWidget {
+  const _SocialNotificationTile({required this.item, required this.onTap});
+  final NotificationItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _ProfileTheme.of(context);
+    return Material(
+      color: item.read ? Colors.transparent : AppTeal.main.withValues(alpha: 0.08),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _StackedNotifAvatars(item: item),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: item.sender,
+                        style: TextStyle(
+                          color: t.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14.5,
+                          height: 1.35,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' ${item.message}',
+                        style: TextStyle(
+                          color: t.textPrimary,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14.5,
+                          height: 1.35,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '  ${item.time ?? ''}',
+                        style: TextStyle(
+                          color: t.textFaint,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (!item.read) ...[
+                const SizedBox(width: 8),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppTeal.main,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 String _notifTimeAgo(DateTime? dt) {
@@ -3765,17 +4724,27 @@ NotificationItem _notificationFromDoc(
   final created = d['createdAt'];
   DateTime? at;
   if (created is Timestamp) at = created.toDate();
+  final rawIds = d['actorIds'];
+  final actorIds = rawIds is List
+      ? rawIds.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+      : <String>[
+    if ((d['actorId'] ?? '').toString().isNotEmpty) d['actorId'].toString(),
+  ];
   return NotificationItem(
     id: doc.id,
     sender: (d['actorName'] ?? 'طالب').toString(),
     message: (d['message'] ?? '').toString(),
     time: _notifTimeAgo(at),
+    createdAt: at,
     type: (d['type'] ?? 'comment').toString(),
     actorId: d['actorId']?.toString(),
     actorPhotoUrl: d['actorPhotoUrl']?.toString(),
+    actorIds: actorIds,
+    count: (d['count'] as num?)?.toInt() ?? actorIds.length.clamp(1, 99),
     postId: d['postId']?.toString(),
     commentId: d['commentId']?.toString(),
     read: d['read'] == true,
+    chatId: d['chatId']?.toString(),
   );
 }
 
@@ -3786,6 +4755,7 @@ Future<void> pushNotification({
   String? actorPhotoUrl,
   required String message,
   String? postId,
+  String? chatId,
   String? commentId,
   String? docId,
 }) async {
@@ -3815,10 +4785,212 @@ Future<void> pushNotification({
       if (commentId != null) 'commentId': commentId,
       'read': false,
       'createdAt': FieldValue.serverTimestamp(),
+      if (chatId != null) 'chatId': chatId,
     });
     debugPrint('notif OK → $toUid type=$type id=${ref.id}');
   } catch (e) {
     debugPrint('notif FAIL → $toUid type=$type $e');
+  }
+}
+
+String composeLikeNotificationMessage({
+  required bool isComment,
+  required List<String> ids,
+  required Map<String, String> names,
+}) {
+  final count = ids.length;
+  if (count <= 1) {
+    return isComment ? 'أعجب بتعليقك' : 'أعجب بمنشورك';
+  }
+  if (count == 2) {
+    final other = (names[ids[1]] ?? '').trim();
+    if (other.isNotEmpty) {
+      return isComment ? 'و$other أعجبا بتعليقك' : 'و$other أعجبا بمنشورك';
+    }
+    return isComment ? 'وآخر أعجبا بتعليقك' : 'وآخر أعجبا بمنشورك';
+  }
+  return isComment
+      ? 'و${count - 1} آخرين أعجبوا بتعليقك'
+      : 'و${count - 1} آخرين أعجبوا بمنشورك';
+}
+
+Future<void> retractAggregatedLikeFromMe({
+  required String toUid,
+  required String postId,
+  String? commentId,
+}) async {
+  final me = FirebaseAuth.instance.currentUser?.uid;
+  if (me == null || toUid.isEmpty || toUid == me) return;
+  if (postId.trim().isEmpty) return;
+
+  final isComment = commentId != null && commentId.trim().isNotEmpty;
+  final cid = commentId?.trim() ?? '';
+  final docId = isComment ? 'like_c_$cid' : 'like_post_${postId.trim()}';
+  final ref = FirebaseFirestore.instance
+      .collection('users')
+      .doc(toUid)
+      .collection('notifications')
+      .doc(docId);
+
+  try {
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final data = snap.data() ?? {};
+      final ids = <String>[];
+      final rawIds = data['actorIds'];
+      if (rawIds is List) {
+        for (final e in rawIds) {
+          final id = e.toString();
+          if (id.isNotEmpty && !ids.contains(id)) ids.add(id);
+        }
+      } else {
+        final one = data['actorId']?.toString();
+        if (one != null && one.isNotEmpty) ids.add(one);
+      }
+      if (!ids.contains(me)) return;
+
+      ids.remove(me);
+      if (ids.isEmpty) {
+        tx.delete(ref);
+        return;
+      }
+
+      final names = <String, String>{};
+      final rawNames = data['actorNames'];
+      if (rawNames is Map) {
+        rawNames.forEach((k, v) => names[k.toString()] = v.toString());
+      }
+      names.remove(me);
+
+      final leadId = ids.first;
+      tx.update(ref, {
+        'actorId': leadId,
+        'actorName': names[leadId] ?? (data['actorName'] ?? 'طالب'),
+        'actorPhotoUrl': leadId == data['actorId']
+            ? data['actorPhotoUrl']
+            : null,
+        'actorIds': ids,
+        'actorNames': names,
+        'count': ids.length,
+        'message': composeLikeNotificationMessage(
+          isComment: isComment,
+          ids: ids,
+          names: names,
+        ),
+      });
+    });
+  } catch (e) {
+    debugPrint('retract like notif failed: $e');
+  }
+}
+
+Future<void> pushAggregatedLikeFromMe({
+  required String toUid,
+  required String postId,
+  String? commentId,
+}) async {
+  final me = FirebaseAuth.instance.currentUser;
+  if (me == null || toUid.isEmpty || toUid == me.uid) return;
+  if (postId.trim().isEmpty) return;
+
+  try {
+    if (await isAccountBlocked(toUid)) return;
+    if (await isBlockedByAccount(toUid)) return;
+  } catch (_) {}
+
+  var name = (me.displayName ?? '').trim();
+  String? photo = me.photoURL;
+  try {
+    final d = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(me.uid)
+        .get();
+    final fn = (d.data()?['firstName'] ?? '').toString().trim();
+    final ln = (d.data()?['lastName'] ?? '').toString().trim();
+    final fromNames = [fn, ln].where((e) => e.isNotEmpty).join(' ');
+    if (fromNames.isNotEmpty) name = fromNames;
+    final p = d.data()?['profileImageUrl']?.toString();
+    if (p != null && p.isNotEmpty) photo = p;
+  } catch (_) {}
+  if (name.isEmpty) name = 'طالب UniSpace';
+
+  final isComment = commentId != null && commentId.trim().isNotEmpty;
+  final cid = commentId?.trim() ?? '';
+  final docId = isComment ? 'like_c_$cid' : 'like_post_${postId.trim()}';
+  final type = isComment ? 'like_comment' : 'like';
+  final ref = FirebaseFirestore.instance
+      .collection('users')
+      .doc(toUid)
+      .collection('notifications')
+      .doc(docId);
+
+  try {
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final ids = <String>[];
+      final names = <String, String>{};
+
+      if (snap.exists) {
+        final data = snap.data() ?? {};
+        final rawIds = data['actorIds'];
+        if (rawIds is List) {
+          for (final e in rawIds) {
+            final id = e.toString();
+            if (id.isNotEmpty && !ids.contains(id)) ids.add(id);
+          }
+        }
+        final rawNames = data['actorNames'];
+        if (rawNames is Map) {
+          rawNames.forEach((k, v) {
+            names[k.toString()] = v.toString();
+          });
+        }
+      }
+
+      ids.remove(me.uid);
+      ids.insert(0, me.uid);
+      names[me.uid] = name;
+      while (ids.length > 30) {
+        names.remove(ids.removeLast());
+      }
+
+      final count = ids.length;
+      late final String message;
+      if (count <= 1) {
+        message = isComment ? 'أعجب بتعليقك' : 'أعجب بمنشورك';
+      } else if (count == 2) {
+        final other = (names[ids[1]] ?? '').trim();
+        if (other.isNotEmpty) {
+          message = isComment
+              ? 'و$other أعجبا بتعليقك'
+              : 'و$other أعجبا بمنشورك';
+        } else {
+          message = isComment ? 'وآخر أعجبا بتعليقك' : 'وآخر أعجبا بمنشورك';
+        }
+      } else {
+        message = isComment
+            ? 'و${count - 1} آخرين أعجبوا بتعليقك'
+            : 'و${count - 1} آخرين أعجبوا بمنشورك';
+      }
+
+      tx.set(ref, {
+        'type': type,
+        'actorId': me.uid,
+        'actorName': name,
+        'actorPhotoUrl': photo,
+        'actorIds': ids,
+        'actorNames': names,
+        'count': count,
+        'message': message,
+        'postId': postId.trim(),
+        if (isComment) 'commentId': cid,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (e) {
+    debugPrint('agg like notif failed: $e');
   }
 }
 
@@ -3828,8 +5000,7 @@ Future<void> pushNotificationFromMe({
   required String message,
   String? postId,
   String? commentId,
-  String? docId,
-}) async {
+  String? docId,}) async {
   final me = FirebaseAuth.instance.currentUser;
   if (me == null) return;
   var name = (me.displayName ?? '').trim();
@@ -3855,10 +5026,7 @@ Future<void> pushNotificationFromMe({
     docId: docId,
   );
 }
-Future<void> notifyFollowersOfNewPost({
-  required String postId,
-  required String title,
-}) async {
+Future<void> notifyFollowersOfNewPost({required String postId, required String title,}) async {
   final me = FirebaseAuth.instance.currentUser?.uid;
   if (me == null) return;
 
@@ -3954,217 +5122,16 @@ IconData _notificationIcon(String type) {
       return Icons.reply_rounded;
     case 'new_post':
       return Icons.article_outlined;
+    case 'repost':
+      return Icons.repeat_rounded;
     default:
       return Icons.chat_bubble_outline_rounded;
   }
 }
 
-class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    final t = _ProfileTheme.of(context);
-    final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    return Scaffold(
-      backgroundColor: t.pageBg,
-      appBar: AppBar(
-        title: const Text('الإشعارات'),
-        backgroundColor: t.pageBg,
-        surfaceTintColor: Colors.transparent,
-        actions: [
-          if (uid != null)
-            TextButton(
-              onPressed: () => _markAllNotificationsRead(uid),
-              child: Text(
-                'قراءة الكل',
-                style: TextStyle(
-                  color: AppTeal.main,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-        ],
-      ),
-      body: uid == null
-          ? Center(
-        child: Text('سجّل الدخول أولاً',
-            style: TextStyle(color: t.textFaint)),
-      )
-          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('notifications')
-            .orderBy('createdAt', descending: true)
-            .limit(80)
-            .snapshots(),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return Center(
-              child: Text('تعذر تحميل الإشعارات',
-                  style: TextStyle(color: t.textFaint)),
-            );
-          }
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return FutureBuilder<Set<String>>(
-            future: loadBlockedUserIds(),
-            builder: (context, blockedSnap) {
-              final blocked = blockedSnap.data ?? {};
-              final items = snap.data!.docs
-                  .map(_notificationFromDoc)
-                  .where((n) =>
-              n.actorId == null || !blocked.contains(n.actorId))
-                  .toList();
-
-              if (items.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.notifications_none_rounded,
-                          size: 48, color: t.textFaint),
-                      const SizedBox(height: 10),
-                      Text('لا توجد إشعارات',
-                          style: TextStyle(
-                              color: t.textPrimary,
-                              fontWeight: FontWeight.w800)),
-                    ],
-                  ),
-                );
-              }
-
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 6),
-                itemBuilder: (context, i) {
-                  final n = items[i];
-                  return Dismissible(
-                    key: ValueKey(n.id),
-                    direction: DismissDirection.endToStart,
-                    onDismissed: (_) =>
-                        _dismissNotification(uid, n.id),
-                    background: Container(
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDC2626).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.delete_outline,
-                          color: Color(0xFFDC2626)),
-                    ),
-                    child: Material(
-                      color: n.read
-                          ? t.cardBg
-                          : AppTeal.main.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(14),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () => _openNotification(context, n),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                          child: Row(
-                            children: [
-                              Stack(
-                                children: [
-                                  _NotificationAvatar(item: n, radius: 22),
-                                  Positioned(
-                                    right: 0,
-                                    bottom: 0,
-                                    child: Container(
-                                      width: 18,
-                                      height: 18,
-                                      decoration: BoxDecoration(
-                                        color: AppTeal.main,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: t.cardBg, width: 1.5),
-                                      ),
-                                      child: Icon(
-                                        _notificationIcon(n.type),
-                                        size: 11,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      n.sender,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: t.textPrimary,
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      n.message,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: t.textMuted,
-                                        fontSize: 13,
-                                        height: 1.3,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Column(
-                                children: [
-                                  Text(
-                                    n.time ?? '',
-                                    style: TextStyle(
-                                        color: t.textFaint, fontSize: 11),
-                                  ),
-                                  if (!n.read) ...[
-                                    const SizedBox(height: 6),
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration:  BoxDecoration(
-                                        color: AppTeal.main,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-Future<void> _openNotification(
-    BuildContext context,
-    NotificationItem n,
-    ) async {
+Future<void> _openNotification(BuildContext context, NotificationItem n,) async {
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid != null) unawaited(_markNotificationRead(uid, n.id));
   final actorId = (n.actorId ?? '').trim();
@@ -4220,6 +5187,34 @@ Future<void> _openNotification(
       ),
     );
   }
+
+  if (n.type == 'message') {
+    final peer = (n.actorId ?? '').trim();
+    if (peer.isEmpty) return;
+    if (await isPeerUnavailable(peer)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يمكن مراسلة هذا الحساب')),
+      );
+      return;
+    }
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatThreadScreen(
+          chatId: (n.chatId ?? '').isNotEmpty
+              ? n.chatId!
+              : directChatId(uid, peer),
+          peerId: peer,
+          peerName: n.sender,
+          peerPhotoUrl: n.actorPhotoUrl,
+        ),
+      ),
+    );
+    return;
+  }
+
+
 }
 
 class NotificationsShowcase extends StatelessWidget {
@@ -4452,7 +5447,7 @@ class _ActiveCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _NotificationAvatar(item: item, radius: 17),
+          _StackedNotifAvatars(item: item, size: 36),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -4678,13 +5673,11 @@ class _NotificationsOverlayState extends State<_NotificationsOverlay> {
                         const SizedBox(height: 8),
                         IconButton(
                           tooltip: 'توسيع',
-                          icon: const Icon(Icons.open_in_full_rounded),
+                          icon: const Icon(Icons.zoom_out_map),
                           onPressed: _expandToScreen,
+                          iconSize: 15,
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
+
                       ],
                     ),
                     const Divider(height: 1),
@@ -4815,7 +5808,7 @@ class _OverlayTile extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           child: Row(
             children: [
-              _NotificationAvatar(item: item, radius: 18),
+              _StackedNotifAvatars(item: item, size: 36),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -4880,7 +5873,372 @@ class _OverlayTile extends StatelessWidget {
 }
 
 
+enum _NotifFilter { all, follows, activity }
 
+Color _notificationColor(String type) {
+  switch (type) {
+    case 'follow':
+    case 'follow_accepted':
+    case 'follow_request':
+      return const Color(0xFF2563EB); // أزرق - متابعة
+    case 'like':
+    case 'like_comment':
+      return const Color(0xFFE0245E); // وردي - إعجاب
+    case 'reply':
+    case 'comment':
+      return AppTeal.main; // تيل - تعليق/رد
+    case 'new_post':
+      return const Color(0xFF8B5CF6); // بنفسجي - منشور جديد
+    case 'repost':
+      return const Color(0xFF10B981); // أخضر - إعادة نشر
+    default:
+      return AppTeal.main;
+  }
+}
+
+bool _isFollowType(String type) =>
+    type == 'follow' || type == 'follow_accepted' || type == 'follow_request';
+
+/// يُرجع عنوان القسم الزمني المناسب لتاريخ الإنشاء (اليوم/أمس/إلخ)
+String _sectionLabelFor(DateTime? dt) {
+  if (dt == null) return 'سابقًا';
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(dt.year, dt.month, dt.day);
+  final diff = today.difference(day).inDays;
+
+  if (diff <= 0) return 'اليوم';
+  if (diff == 1) return 'أمس';
+  if (diff <= 7) return 'هذا الأسبوع';
+  return 'سابقًا';
+}
+
+class NotificationsScreen extends StatefulWidget {
+  const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  _NotifFilter _filter = _NotifFilter.all;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _ProfileTheme.of(context);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    return Scaffold(
+      backgroundColor: t.pageBg,
+      appBar: AppBar(
+        title: const Text('الإشعارات'),
+        backgroundColor: t.pageBg,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          if (uid != null)
+            TextButton(
+              onPressed: () => _markAllNotificationsRead(uid),
+              child: Text(
+                'قراءة الكل',
+                style: TextStyle(color: AppTeal.main, fontWeight: FontWeight.w800),
+              ),
+            ),
+        ],
+      ),
+      body: uid == null
+          ? Center(child: Text('سجّل الدخول أولاً', style: TextStyle(color: t.textFaint)))
+          : Column(
+        children: [
+          // ===== تبويبات تصنيف بأسلوب X =====
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: _NotifFilterTabs(
+              t: t,
+              value: _filter,
+              onChanged: (v) => setState(() => _filter = v),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .collection('notifications')
+                  .orderBy('createdAt', descending: true)
+                  .limit(80)
+                  .snapshots(),
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return Center(
+                    child: Text('تعذر تحميل الإشعارات', style: TextStyle(color: t.textFaint)),
+                  );
+                }
+                if (!snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return FutureBuilder<Set<String>>(
+                  future: loadBlockedUserIds(),
+                  builder: (context, blockedSnap) {
+                    final blocked = blockedSnap.data ?? {};
+                    var items = snap.data!.docs
+                        .map(_notificationFromDoc)
+                        .where((n) => n.actorId == null || !blocked.contains(n.actorId))
+                        .toList();
+
+                    // ===== الفلترة حسب التبويب المختار =====
+                    items = items.where((n) {
+                      switch (_filter) {
+                        case _NotifFilter.follows:
+                          return _isFollowType(n.type);
+                        case _NotifFilter.activity:
+                          return !_isFollowType(n.type);
+                        case _NotifFilter.all:
+                          return true;
+                      }
+                    }).toList();
+
+                    if (items.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.notifications_none_rounded, size: 48, color: t.textFaint),
+                            const SizedBox(height: 10),
+                            Text(
+                              _filter == _NotifFilter.all ? 'لا توجد إشعارات' : 'لا توجد إشعارات في هذا التصنيف',
+                              style: TextStyle(color: t.textPrimary, fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    // ===== تجميع زمني: اليوم / أمس / هذا الأسبوع / سابقًا =====
+                    final grouped = <String, List<NotificationItem>>{};
+                    final order = <String>[];
+                    for (final n in items) {
+                      // نحتاج التاريخ الفعلي؛ نعيد استخراجه من time المُنسّق
+                      // غير كافٍ، لذا نمرر DateTime عبر دالة مساعدة مصغّرة هنا:
+                      final label = n.sectionLabel;
+                      if (!grouped.containsKey(label)) {
+                        grouped[label] = [];
+                        order.add(label);
+                      }
+                      grouped[label]!.add(n);
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
+                      itemCount: order.fold<int>(0, (sum, k) => sum + 1 + grouped[k]!.length),
+                      itemBuilder: (context, index) {
+                        var cursor = 0;
+                        for (final label in order) {
+                          if (index == cursor) {
+                            return Padding(
+                              padding: EdgeInsets.fromLTRB(4, cursor == 0 ? 4 : 18, 4, 8),
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  color: t.textFaint,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            );
+                          }
+                          cursor += 1;
+                          final list = grouped[label]!;
+                          if (index < cursor + list.length) {
+                            final n = list[index - cursor];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: _NotificationTile(uid: uid, item: n),
+                            );
+                          }
+                          cursor += list.length;
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+extension _NotifSection on NotificationItem {
+  String get sectionLabel => _notifDayLabel(createdAt);
+}
+
+/// تبويبات تصنيف الإشعارات - أسلوب X (كبسولة مقسّمة بثلاث خيارات)
+class _NotifFilterTabs extends StatelessWidget {
+  const _NotifFilterTabs({required this.t, required this.value, required this.onChanged});
+
+  final _ProfileTheme t;
+  final _NotifFilter value;
+  final ValueChanged<_NotifFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(_NotifFilter f, String label) {
+      final active = value == f;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => onChanged(f),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: active ? AppTeal.main.withValues(alpha: t.isDark ? 0.22 : 0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                color: active ? AppTeal.main : t.textFaint,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: t.isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          tab(_NotifFilter.all, 'الكل'),
+          tab(_NotifFilter.follows, 'المتابعة'),
+          tab(_NotifFilter.activity, 'التفاعل'),
+        ],
+      ),
+    );
+  }
+}
+
+/// بطاقة إشعار واحدة - مؤشر غير مقروء كشريط جانبي رفيع بدل خلفية
+/// كاملة، ولون شارة النوع يتغيّر حسب نوع الإشعار.
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({required this.uid, required this.item});
+
+  final String uid;
+  final NotificationItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _ProfileTheme.of(context);
+    final n = item;
+    final typeColor = _notificationColor(n.type);
+
+    return Dismissible(
+      key: ValueKey(n.id),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => _dismissNotification(uid, n.id),
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFDC2626).withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Icon(Icons.delete_outline, color: Color(0xFFDC2626)),
+      ),
+      child: Material(
+        color: t.cardBg,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _openNotification(context, n),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: t.isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+              ),
+              // ===== مؤشر غير مقروء: شريط جانبي بدل خلفية كاملة =====
+              gradient: !n.read
+                  ? LinearGradient(
+                colors: [typeColor.withValues(alpha: 0.06), Colors.transparent],
+                begin: Alignment.centerRight,
+                end: Alignment.centerLeft,
+                stops: const [0, 0.35],
+              )
+                  : null,
+            ),
+            child: Row(
+              children: [
+                if (!n.read)
+                  Container(
+                    width: 3,
+                    height: 44,
+                    margin: const EdgeInsets.only(right: 2),
+                    decoration: BoxDecoration(
+                      color: typeColor,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  )
+                else
+                  const SizedBox(width: 5),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+                    child: Row(
+                      children: [
+                        Stack(
+                          children: [
+                            _StackedNotifAvatars(item: n, size: 44),
+
+                          ],
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                n.sender,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: t.textPrimary, fontWeight: FontWeight.w800, fontSize: 14),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                n.message,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: t.textMuted, fontSize: 13, height: 1.3),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(n.time ?? '', style: TextStyle(color: t.textFaint, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 
 
@@ -4995,6 +6353,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
   String? _error;
   static const int _pageSize = 25;
   Set<String> _blockedIds = {};
+  String? _pinPostId;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _newPostsSub;
   final GlobalKey _searchButtonKey = GlobalKey();
@@ -5030,12 +6389,16 @@ class _CommunityScreenState extends State<CommunityScreen> {
     super.initState();
     _loadInitial();
     _scrollController.addListener(_onScroll);
-
+    hiddenListRevision.addListener(_onHiddenListChanged);
+    moderationRevision.addListener(_onHiddenListChanged);
     blockedListRevision.addListener(_onBlockedListChanged);
     authorProfileRevision.addListener(_onAuthorProfileChanged);
   }
   void _onAuthorProfileChanged() {
     if (mounted) _loadInitial();
+  }
+  void _onHiddenListChanged() {
+    if (mounted) _loadInitial(showFullLoader: false);
   }
 // في CommunityScreen
   void _onBlockedListChanged() {
@@ -5045,6 +6408,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
   void dispose() {
     authorProfileRevision.removeListener(_onAuthorProfileChanged);
     blockedListRevision.removeListener(_onBlockedListChanged);
+    hiddenListRevision.removeListener(_onHiddenListChanged);
+    moderationRevision.removeListener(_onHiddenListChanged);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _newPostsSub?.cancel();
@@ -5068,33 +6433,49 @@ class _CommunityScreenState extends State<CommunityScreen> {
       final me = FirebaseAuth.instance.currentUser?.uid;
       _blockedIds = blocked;
 
-      final list = _docsToPosts(snap.docs).where((p) {
 
-        final id = p.id?.trim();
-        if (id == null || id.isEmpty) return false;
-        if (hidden.contains(id)) return false;
-        if (isBlockedPost(p, blocked)) return false;
-        if (p.authorPrivate) {
-          final a = (p.authorId ?? '').trim();
-          if (a.isNotEmpty && a != me && !followingIds.contains(a)) {
+
+        final raw = _docsToPosts(snap.docs);
+        final unavailable = await loadUnavailableUserIds([
+          ...raw.map((p) => p.authorId ?? ''),
+          ...raw.map((p) => (p.repostOf?['authorId'] ?? '').toString()),
+        ]);
+
+        final list = raw.where((p) {
+          final id = p.id?.trim();
+          if (id == null || id.isEmpty) return false;
+          if (hidden.contains(id)) return false;
+          if (isBlockedPost(p, blocked)) return false;
+          if (unavailable.contains((p.authorId ?? '').trim())) return false;
+          if (p.isRepost &&
+              unavailable.contains(
+                (p.repostOf?['authorId'] ?? '').toString().trim(),
+              )) {
             return false;
           }
-        }
-        return true;
-      }).toList();
+          if (p.authorPrivate) {
+            final a = (p.authorId ?? '').trim();
+            if (a.isNotEmpty && a != me && !followingIds.contains(a)) {
+              return false;
+            }
+          }
+          return true;
+        }).toList();
+
+      final ordered = _ordered(list);
 
       setState(() {
         _posts
           ..clear()
-          ..addAll(list);
+          ..addAll(ordered);
         _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
         _hasMore = snap.docs.length >= _pageSize;
         _initialLoading = false;
       });
       _newPostsSub?.cancel();
       _listenForNewPosts();
-      _precacheImages(list);
-      _prefetchFirstVideos(list);
+      _precacheImages(ordered);
+      _prefetchFirstVideos(ordered);
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -5136,8 +6517,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
         return true;
       }).toList();
 
+      final extra = List<_Post>.from(list)..shuffle();
+
       setState(() {
-        _posts.addAll(list);
+        _posts.addAll(extra);
         _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
         _hasMore = snap.docs.length >= _pageSize;
         _loadingMore = false;
@@ -5178,6 +6561,22 @@ class _CommunityScreenState extends State<CommunityScreen> {
     }
   }
 
+  List<_Post> _ordered(List<_Post> input) {
+    _Post? pinned;
+    final rest = <_Post>[];
+    for (final p in input) {
+      if (_pinPostId != null && p.id == _pinPostId) {
+        pinned = p;
+      } else {
+        rest.add(p);
+      }
+    }
+    rest.shuffle();
+    return [
+      if (pinned != null) pinned,
+      ...rest,
+    ];
+  }
   List<_Post> _docsToPosts(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       ) {
@@ -5186,6 +6585,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
       final data = doc.data();
       final status = data['status']?.toString().trim().toLowerCase();
       if (status == 'uploading') continue;
+      if (isCommunityPostRemoved(data)) continue;
       try {
         out.add(_Post.fromFirestore(doc));
       } catch (e, st) {
@@ -5218,11 +6618,21 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   /// منشورات جديدة تُضاف في الأعلى بدون إعادة تحميل الكل
   void _listenForNewPosts() {
-    _newPostsSub = _baseQuery.limit(5).snapshots().listen((snap) {
+    _newPostsSub = _baseQuery.limit(5).snapshots().listen((snap) async {
       if (!mounted || snap.docs.isEmpty) return;
-      final newest = _docsToPosts(snap.docs)
+      final hidden = await loadHiddenPostIds();
+      if (!mounted) return;
+      final newestRaw = _docsToPosts(snap.docs);
+      final unavailable = await loadUnavailableUserIds(
+        newestRaw.map((p) => p.authorId ?? ''),
+      );
+      final newest = newestRaw
           .where((p) => !isBlockedPost(p, _blockedIds))
-          .toList();
+          .where((p) => !unavailable.contains((p.authorId ?? '').trim()))
+          .where((p) {
+        final id = p.id?.trim();
+        return id != null && id.isNotEmpty && !hidden.contains(id);
+      }).toList();
       if (newest.isEmpty) return;
 
       final toAdd = <_Post>[];
@@ -5233,9 +6643,17 @@ class _CommunityScreenState extends State<CommunityScreen> {
       }
       if (toAdd.isEmpty) return;
 
+      final me = FirebaseAuth.instance.currentUser?.uid;
       setState(() {
         for (final p in toAdd) {
-          _posts.insert(0, p);
+          if (p.authorId == me || p.id == _pinPostId) {
+            _posts.insert(0, p);
+          } else {
+            final i = _posts.isEmpty
+                ? 0
+                : 1 + (DateTime.now().microsecondsSinceEpoch % _posts.length);
+            _posts.insert(i.clamp(0, _posts.length), p);
+          }
         }
       });
       _precacheImages(toAdd);
@@ -5480,7 +6898,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
         debugPrintStack(stackTrace: st);
         rethrow;
       }
-      await _loadInitial(); // أو الاعتماد على _listenForNewPosts
+
       await postRef.update({
         'imageUrls': imageUrls,
         'videoUrls': videoUrls,
@@ -5499,10 +6917,14 @@ class _CommunityScreenState extends State<CommunityScreen> {
           author: user.displayName,
         ),
       });
+
       unawaited(notifyFollowersOfNewPost(
         postId: postRef.id,
         title: title,
       ));
+
+      _pinPostId = postRef.id;
+      await _loadInitial(showFullLoader: false);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5649,7 +7071,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
           child:RefreshIndicator(
               color: AppTeal.main,
               notificationPredicate: (n) => n.depth == 1,
-              onRefresh: () => _loadInitial(showFullLoader: false),
+              onRefresh: () {
+                _pinPostId = null;
+                return _loadInitial(showFullLoader: false);
+              },
               child: NestedScrollView(
             controller: _scrollController,
             floatHeaderSlivers: true,
@@ -5955,842 +7380,23 @@ class _SkeletonPostCardState extends State<_SkeletonPostCard>
   }
 }
 
-class RedditStyleAiSearchScreen extends StatefulWidget {
-  const RedditStyleAiSearchScreen({super.key});
-
-  @override
-  State<RedditStyleAiSearchScreen> createState() =>
-      _RedditStyleAiSearchScreenState();
-}
-
-class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
-    with SingleTickerProviderStateMixin {
-  final _controller = TextEditingController();
-  final _focusNode = FocusNode();
-  final _scrollController = ScrollController();
-
-  late final AnimationController _aiPulseController;
-  List<_SearchPerson> _people = [];
-  bool _isAiMode = false;
-  bool _isLoading = false;
-  String? _error;
-
-  List<_Post> _results = [];
-  String? _aiAnswer;
-  String? _lastQuery;
-
-  final List<String> _recentSearches = [
-    'نصائح المذاكرة',
-    'امتحانات نهائية',
-    'منح دراسية',
-  ];
-
-  // فئات الاستكشاف - بأسلوب Trends على X: فئة + عنوان + مؤشر نشاط
-  static const List<_ExploreItem> _exploreItems = [
-    _ExploreItem(category: 'دراسة', label: 'امتحانات', activity: '٢٤٠+ منشور', icon: Icons.edit_note_rounded, color: Color(0xFFEF6C57)),
-    _ExploreItem(category: 'فرص', label: 'منح دراسية', activity: '١٨٠+ منشور', icon: Icons.school_rounded, color: Color(0xFF4FA6D9)),
-    _ExploreItem(category: 'دراسة', label: 'مذاكرة', activity: '٣١٠+ منشور', icon: Icons.menu_book_rounded, color: Color(0xFF57B894)),
-    _ExploreItem(category: 'حياة جامعية', label: 'سكن جامعي', activity: '٩٠+ منشور', icon: Icons.apartment_rounded, color: Color(0xFFE0A340)),
-    _ExploreItem(category: 'توجيه', label: 'تخصصات', activity: '١٤٠+ منشور', icon: Icons.workspace_premium_rounded, color: Color(0xFF9B7BE0)),
-    _ExploreItem(category: 'مجتمع', label: 'أنشطة طلابية', activity: '٧٥+ منشور', icon: Icons.groups_rounded, color: Color(0xFFE06BA6)),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _aiPulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
-    _scrollController.dispose();
-    _aiPulseController.dispose();
-    super.dispose();
-  }
-  Future<List<_Post>> queryCommunityPosts(String query) async {
-    final blocked = await loadBlockedUserIds();
-    final hidden = await loadHiddenPostIds();
-    final lowerQ = query.toLowerCase();
-    final filtered = <_Post>[];
-    QueryDocumentSnapshot<Map<String, dynamic>>? last;
-
-    for (var page = 0; page < 5; page++) {
-      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-          .collection('community_posts')
-          .orderBy('createdAt', descending: true)
-          .limit(80);
-      if (last != null) q = q.startAfterDocument(last);
-      final snap = await q.get();
-      if (snap.docs.isEmpty) break;
-
-      for (final doc in snap.docs) {
-        final status = doc.data()['status']?.toString().toLowerCase();
-        if (status == 'uploading' || status == 'failed') continue;
-        try {
-          final post = _Post.fromFirestore(doc);
-          final id = post.id?.trim();
-          if (id == null || id.isEmpty || hidden.contains(id)) continue;
-          if (isBlockedPost(post, blocked)) continue;
-          final live = AuthorProfiles.nameOf(post.authorId) ?? post.author;
-          final match = post.title.toLowerCase().contains(lowerQ) ||
-              post.body.toLowerCase().contains(lowerQ) ||
-              post.tags.any((t) => t.toLowerCase().contains(lowerQ)) ||
-              post.author.toLowerCase().contains(lowerQ) ||
-              live.toLowerCase().contains(lowerQ);
-          if (match) filtered.add(post);
-        } catch (_) {}
-      }
-      last = snap.docs.last;
-      if (snap.docs.length < 80) break;
-    }
-    return filtered;
-  }
-  Future<void> _performSearch() async {
-    final q = _controller.text.trim();
-    if (q.isEmpty) return;
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-      _aiAnswer = null;
-      _results = [];
-      _people = [];
-      _lastQuery = q;
-    });
-
-    FocusScope.of(context).unfocus();
-
-    if (!_recentSearches.contains(q)) {
-      _recentSearches.insert(0, q);
-      if (_recentSearches.length > 10) _recentSearches.removeLast();
-    }
-
-    try {
-      final blocked = await loadBlockedUserIds();
-      final hidden = await loadHiddenPostIds();
-      final followingIds = await loadFollowingIds();
-      final me = FirebaseAuth.instance.currentUser?.uid;
-      final lowerQ = q.toLowerCase();
-      final looksEmail = q.contains('@');
-
-      final people = <_SearchPerson>[];
-      try {
-        final usersSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .limit(80)
-            .get();
-        for (final doc in usersSnap.docs) {
-          if (doc.id == me) continue;
-          if (blocked.contains(doc.id)) continue;
-          final data = doc.data();
-          final priv = data['privacy'];
-          final privacy = priv is Map ? Map<String, dynamic>.from(priv) : null;
-          if (privacy?['appearInSearch'] == false) continue;
-
-          final fn = (data['firstName'] ?? '').toString().trim();
-          final ln = (data['lastName'] ?? '').toString().trim();
-          final display = (data['displayName'] ?? data['userName'] ?? '')
-              .toString()
-              .trim();
-          final name = [fn, ln].where((e) => e.isNotEmpty).join(' ');
-          final shown = name.isNotEmpty
-              ? name
-              : (display.isNotEmpty ? display : 'طالب UniSpace');
-          final uname = (data['username'] ?? '').toString().trim();
-          final email = (data['email'] ?? '').toString().toLowerCase();
-          final phone = (data['phone'] ?? '').toString();
-
-          final nameHit = shown.toLowerCase().contains(lowerQ) ||
-              uname.toLowerCase().contains(lowerQ);
-          final emailHit = looksEmail &&
-              privacy?['findByEmail'] == true &&
-              email.contains(lowerQ);
-          final phoneHit = privacy?['findByPhone'] == true &&
-              phone.isNotEmpty &&
-              phone.contains(q);
-          if (!nameHit && !emailHit && !phoneHit) continue;
-
-          people.add(_SearchPerson(
-            id: doc.id,
-            name: shown,
-            username: uname.isEmpty ? null : uname,
-            photoUrl: data['profileImageUrl']?.toString(),
-          ));
-          if (people.length >= 8) break;
-        }
-      } catch (e) {
-        debugPrint('people search failed: $e');
-      }
-
-      bool accept(_Post post) {
-        if (hidden.contains(post.id)) return false;
-        if (isBlockedPost(post, blocked)) return false;
-        if (post.authorPrivate) {
-          final a = (post.authorId ?? '').trim();
-          if (a.isNotEmpty && a != me && !followingIds.contains(a)) {
-            return false;
-          }
-        }
-        final live = AuthorProfiles.nameOf(post.authorId) ?? post.author;
-        final authorHit = post.authorAppearInSearch &&
-            (post.author.toLowerCase().contains(lowerQ) ||
-                live.toLowerCase().contains(lowerQ));
-        return post.title.toLowerCase().contains(lowerQ) ||
-            post.body.toLowerCase().contains(lowerQ) ||
-            post.tags.any((t) => t.toLowerCase().contains(lowerQ)) ||
-            authorHit;
-      }
-
-      final seen = <String>{};
-      final filtered = <_Post>[];
-
-      void addDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-        if (seen.contains(doc.id)) return;
-        final status = doc.data()['status']?.toString().toLowerCase();
-        if (status == 'uploading' || status == 'failed') return;
-        try {
-          final post = _Post.fromFirestore(doc);
-          if (!accept(post)) return;
-          seen.add(doc.id);
-          filtered.add(post);
-        } catch (_) {}
-      }
-
-      final tokens = buildSearchKeywords(title: q, body: q);
-      if (tokens.isNotEmpty) {
-        try {
-          final indexed = await FirebaseFirestore.instance
-              .collection('community_posts')
-              .where('searchKeywords', arrayContains: tokens.first)
-              .limit(60)
-              .get();
-          for (final doc in indexed.docs) {
-            addDoc(doc);
-          }
-        } catch (e) {
-          debugPrint('keyword search failed: $e');
-        }
-      }
-
-      if (filtered.length < 8) {
-        QueryDocumentSnapshot<Map<String, dynamic>>? last;
-        for (var page = 0; page < 5; page++) {
-          Query<Map<String, dynamic>> pq = FirebaseFirestore.instance
-              .collection('community_posts')
-              .orderBy('createdAt', descending: true)
-              .limit(80);
-          if (last != null) pq = pq.startAfterDocument(last);
-          final snap = await pq.get();
-          if (snap.docs.isEmpty) break;
-          for (final doc in snap.docs) {
-            addDoc(doc);
-          }
-          last = snap.docs.last;
-          if (snap.docs.length < 80) break;
-        }
-      }
-
-      if (!mounted) return;
-
-      if (_isAiMode) {
-        final buf = StringBuffer();
-        if (filtered.isEmpty) {
-          buf.write('لم أجد منشورات في المجتمع حول "$q".');
-        } else {
-          buf.writeln('ملخص من منشورات المجتمع حول "$q":\n');
-          for (final p in filtered.take(6)) {
-            final t = p.title.trim();
-            final b = p.body.trim();
-            if (t.isNotEmpty) buf.writeln('• $t');
-            if (b.isNotEmpty) {
-              buf.writeln(t.isEmpty ? '• $b' : '  $b');
-            }
-            buf.writeln();
-          }
-        }
-        setState(() {
-          _people = people;
-          _results = filtered;
-          _aiAnswer = buf.toString().trim();
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _people = people;
-          _results = filtered;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _clearSearch() {
-    _controller.clear();
-    List<_SearchPerson> _people = [];
-    setState(() {
-      _results = [];
-      _aiAnswer = null;
-      _lastQuery = null;
-      _error = null;
-    });
-    _focusNode.requestFocus();
-  }
-
-  // الألوان: تييل للبحث العادي، بنفسجي لوضع AI
-  static final  _normalColor = AppTeal.main;
-  static const _aiColor = Color(0xFF7C5CFF);
-
-  Color get _accent => _isAiMode ? _aiColor : _normalColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF000000) : Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildSearchBar(theme, isDark),
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: _buildBody(theme, isDark),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // حيز بحث واحد فقط: زر رجوع + حقل بحث، وزر AI مدمج كـ toggle
-  // داخل نفس الحقل (suffix)، بدون أي حيز إضافي تحته
-  // ============================================================
-  Widget _buildSearchBar(ThemeData theme, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.black : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_rounded),
-            splashRadius: 20,
-          ),
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _performSearch(),
-              onChanged: (_) => setState(() {}),
-              onTap: () => setState(() {}),
-              style: theme.textTheme.bodyMedium?.copyWith(fontSize: 15),
-              decoration: InputDecoration(
-                hintText: _isAiMode ? 'اسأل الذكاء الاصطناعي...' : 'ابحث',
-                hintStyle: TextStyle(color: theme.hintColor, fontSize: 15),
-                filled: true,
-                fillColor: isDark ? const Color(0xFF16181C) : const Color(0xFFEFF3F4),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(21),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(21),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(21),
-                  borderSide: BorderSide(color: _accent, width: 1.5),
-                ),
-                prefixIcon: Icon(
-                  Icons.search_rounded,
-                  size: 19,
-                  color: _focusNode.hasFocus ? _accent : theme.hintColor,
-                ),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_controller.text.isNotEmpty)
-                      GestureDetector(
-                        onTap: _clearSearch,
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 4),
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            color: theme.hintColor.withValues(alpha: 0.25),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.close_rounded, size: 13, color: Colors.white),
-                        ),
-                      ),
-                    // فاصل رفيع
-                    Container(
-                      height: 20,
-                      width: 1,
-                      color: theme.hintColor.withValues(alpha: 0.2),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                    ),
-                    // زر AI
-                    _AiToggleButton(
-                      isActive: _isAiMode,
-                      accent: _aiColor,
-                      pulse: _aiPulseController,
-                      onTap: () {
-                        setState(() {
-                          _isAiMode = !_isAiMode;
-                          _results = [];
-                          _aiAnswer = null;
-                        });
-                      },
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBody(ThemeData theme, bool isDark) {
-    if (_isLoading) {
-      return Center(
-        key: const ValueKey('loading'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 3, color: _accent)),
-            const SizedBox(height: 12),
-            Text(
-              _isAiMode ? 'الذكاء الاصطناعي يفكر...' : 'جاري البحث...',
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_error != null) {
-      return Center(
-        key: const ValueKey('error'),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline_rounded, size: 44, color: theme.colorScheme.error),
-              const SizedBox(height: 10),
-              Text('حدث خطأ أثناء البحث\n$_error', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_isAiMode && _aiAnswer != null) {
-      return ListView(
-        key: const ValueKey('ai-answer'),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: _aiColor,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(4),
-                  topRight: Radius.circular(16),
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-              ),
-              child: Text(_lastQuery ?? '', style: const TextStyle(color: Colors.white, fontSize: 14.5)),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF16181C) : const Color(0xFFF7F8F9),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(4),
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.auto_awesome_rounded, size: 14, color: _aiColor),
-                      const SizedBox(width: 6),
-                      Text('AI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _aiColor)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(_aiAnswer!, style: theme.textTheme.bodyMedium?.copyWith(height: 1.55)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    if (_lastQuery != null && !_isAiMode) {
-      if (_results.isEmpty && _people.isEmpty) {
-        return Center(
-          key: const ValueKey('empty-results'),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.search_off_rounded,
-                  size: 42, color: theme.hintColor.withValues(alpha: 0.5)),
-              const SizedBox(height: 14),
-              Text('لا توجد نتائج لـ "$_lastQuery"',
-                  style: theme.textTheme.titleSmall),
-            ],
-          ),
-        );
-      }
-
-      return ListView(
-        key: const ValueKey('results'),
-        controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
-        children: [
-          if (_people.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-              child: Text(
-                'حسابات',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            ..._people.map((p) {
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                leading: LiveAuthorPhoto(
-                  userId: p.id,
-                  fallbackUrl: p.photoUrl,
-                  size: 44,
-                  radius: 22,
-                  iconSize: 22,
-                ),
-                title: Text(
-                  p.name,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: (p.username == null || p.username!.isEmpty)
-                    ? null
-                    : Text('@${p.username}'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => UserProfileScreen(
-                        userId: p.id,
-                        initialName: p.name,
-                        initialPhotoUrl: p.photoUrl,
-                      ),
-                    ),
-                  );
-                },
-              );
-            }),
-            const SizedBox(height: 10),
-          ],
-          if (_results.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-              child: Text(
-                'منشورات',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            ..._results.map(
-                  (post) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _RedditStylePostCard(
-                  post: post,
-                  accent: _normalColor,
-                ),
-              ),
-            ),
-          ],
-        ],
-      );
-    }
-
-    // ============================================================
-    // الحالة الفارغة: "الأخيرة" + "استكشف"
-    // مستوحاة من X (Twitter): قوائم عمودية بسيطة بدل بطاقات/شبكة
-    // ============================================================
-    return ListView(
-      key: const ValueKey('idle'),
-      padding: EdgeInsets.zero,
-      children: [
-        if (_recentSearches.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-            child: Row(
-              children: [
-                Text('الأخيرة', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => setState(() => _recentSearches.clear()),
-                  child: Text('مسح الكل', style: TextStyle(fontSize: 13, color: _accent, fontWeight: FontWeight.w600)),
-                ),
-              ],
-            ),
-          ),
-          ..._recentSearches.map((s) => _RecentSearchRow(
-            label: s,
-            onTap: () {
-              _controller.text = s;
-              _performSearch();
-            },
-            onDelete: () => setState(() => _recentSearches.remove(s)),
-          )),
-          Divider(height: 24, thickness: 6, color: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5)),
-        ],
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-          child: Text('استكشف', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-        ),
-        ..._exploreItems.map((item) => _ExploreRow(
-          item: item,
-          onTap: () {
-            _controller.text = item.label;
-            _performSearch();
-          },
-        )),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-}
-final blockedListRevision = ValueNotifier<int>(0);
-List<String> buildSearchKeywords({
-  required String title,
-  required String body,
-  List<String> tags = const [],
-  String? author,
-}) {
-  final parts = <String>[
-    ...title.split(RegExp(r'\s+')),
-    ...body.split(RegExp(r'\s+')),
-    ...tags,
-    if (author != null) ...author.split(RegExp(r'\s+')),
-  ];
-  final out = <String>{};
-  for (final w in parts) {
-    final t = w
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^\w\u0600-\u06FF]+'), '');
-    if (t.length >= 2) out.add(t);
-    if (out.length >= 40) break;
-  }
-  return out.toList();
-}
-class _SearchPerson {
-  const _SearchPerson({
-    required this.id,
-    required this.name,
-    this.username,
-    this.photoUrl,
-  });
-  final String id;
-  final String name;
-  final String? username;
-  final String? photoUrl;
-}
-
-class _ExploreItem {
-  final String category;
-  final String label;
-  final String activity;
-  final IconData icon;
-  final Color color;
-  const _ExploreItem({
-    required this.category,
-    required this.label,
-    required this.activity,
-    required this.icon,
-    required this.color,
-  });
-}
-
-class _AiToggleButton extends StatelessWidget {
-  final bool isActive;
-  final Color accent;
-  final AnimationController pulse;
-  final VoidCallback onTap;
-
-  const _AiToggleButton({
-    required this.isActive,
-    required this.accent,
-    required this.pulse,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedBuilder(
-        animation: pulse,
-        builder: (context, child) {
-          final glow = isActive ? (0.15 + pulse.value * 0.15) : 0.0;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-            decoration: BoxDecoration(
-              color: isActive ? accent : Colors.transparent,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: isActive ? [BoxShadow(color: accent.withValues(alpha: glow), blurRadius: 10)] : [],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.auto_awesome_rounded, size: 15, color: isActive ? Colors.white : Colors.grey),
-                if (isActive) ...[
-                  const SizedBox(width: 4),
-                  const Text('AI', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Colors.white)),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
 
 
-class _RecentSearchRow extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
 
-  const _RecentSearchRow({required this.label, required this.onTap, required this.onDelete});
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Icon(Icons.history_rounded, size: 18, color: theme.hintColor),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(label, style: theme.textTheme.bodyMedium),
-            ),
-            GestureDetector(
-              onTap: onDelete,
-              child: Icon(Icons.close_rounded, size: 17, color: theme.hintColor),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
-class _ExploreRow extends StatelessWidget {
-  final _ExploreItem item;
-  final VoidCallback onTap;
 
-  const _ExploreRow({required this.item, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(color: item.color.withValues(alpha: 0.14), shape: BoxShape.circle),
-              child: Icon(item.icon, size: 18, color: item.color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.category, style: theme.textTheme.labelSmall?.copyWith(color: theme.hintColor)),
-                  const SizedBox(height: 2),
-                  Text(item.label, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
-                  Text(item.activity, style: theme.textTheme.labelSmall?.copyWith(color: theme.hintColor)),
-                ],
-              ),
-            ),
-            Icon(Icons.trending_up_rounded, size: 18, color: item.color.withValues(alpha: 0.7)),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _RedditStylePostCard extends StatefulWidget {
-  const _RedditStylePostCard({required this.post, required this.accent});
+  const _RedditStylePostCard({
+    required this.post,
+    required this.accent,
+    this.onUnsave,
+  });
 
   final _Post post;
   final Color accent;
-
+  final VoidCallback? onUnsave;
   @override
   State<_RedditStylePostCard> createState() => _RedditStylePostCardState();
 }
@@ -6878,31 +7484,52 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
   Future<void> _likePost() async {
     final post = widget.post;
     final uid = FirebaseAuth.instance.currentUser?.uid;
-
     if (uid == null || post.id == null || post.id!.isEmpty) return;
 
     final ref =
     FirebaseFirestore.instance.collection('community_posts').doc(post.id);
 
+    final prevLiked = _isLiked;
+    final prevDisliked = _isDisliked;
+    final prevScore = _score;
+
+    // تحديث فوري حتى يظهر الزر يعمل حتى لو الشبكة بطيئة
+    setState(() {
+      if (_isLiked) {
+        _isLiked = false;
+        _score -= 1;
+      } else {
+        if (_isDisliked) {
+          _isDisliked = false;
+          _score += 1;
+        }
+        _isLiked = true;
+        _score += 1;
+      }
+      post.upvoted = _isLiked;
+      post.downvoted = _isDisliked;
+      post.votes = _score;
+    });
+    HapticFeedback.lightImpact();
+
     try {
-      final newVotes = await FirebaseFirestore.instance.runTransaction((tx) async {
+      final newVotes =
+      await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(ref);
         if (!snap.exists) throw Exception('Post does not exist');
 
         final data = snap.data() ?? <String, dynamic>{};
-        final upvotedBy = _stringList(data['upvotedBy']);
-        final downvotedBy = _stringList(data['downvotedBy']);
+        final upvotedBy = List<String>.from(_stringList(data['upvotedBy']));
+        final downvotedBy = List<String>.from(_stringList(data['downvotedBy']));
         int votes = (data['votes'] as num?)?.toInt() ?? 0;
 
         final wasLiked = upvotedBy.contains(uid);
         final wasDisliked = downvotedBy.contains(uid);
 
         if (wasLiked) {
-          // liked → neutral
           upvotedBy.remove(uid);
           votes -= 1;
         } else {
-          // neutral / disliked → liked
           if (wasDisliked) {
             downvotedBy.remove(uid);
             votes += 1;
@@ -6915,65 +7542,89 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
           'upvotedBy': upvotedBy,
           'downvotedBy': downvotedBy,
           'votes': votes,
+          'updatedAt': FieldValue.serverTimestamp(),
         });
         return votes;
       });
 
       if (!mounted) return;
-      final likedNow = !post.upvoted;
       setState(() {
-        if (post.upvoted) {
-          post.upvoted = false;
-        } else {
-          if (post.downvoted) post.downvoted = false;
-          post.upvoted = true;
-        }
+        _score = newVotes;
         post.votes = newVotes;
+        post.upvoted = _isLiked;
+        post.downvoted = _isDisliked;
       });
-      HapticFeedback.lightImpact();
-      if (likedNow) {
-        unawaited(pushNotificationFromMe(
-          toUid: post.authorId ?? '',
-          type: 'like',
-          message: 'أعجب بمنشورك',
-          postId: post.id,
-          docId: 'like_post_${post.id}_$uid',
-        ));
+
+      final owner = post.authorId ?? '';
+      final pid = post.id ?? '';
+      if (_isLiked && !prevLiked) {
+        unawaited(pushAggregatedLikeFromMe(toUid: owner, postId: pid));
+      } else if (!_isLiked && prevLiked) {
+        unawaited(retractAggregatedLikeFromMe(toUid: owner, postId: pid));
       }
     } catch (e, stack) {
       debugPrint('Like failed: $e');
       debugPrintStack(stackTrace: stack);
+      if (!mounted) return;
+      setState(() {
+        _isLiked = prevLiked;
+        _isDisliked = prevDisliked;
+        _score = prevScore;
+        post.upvoted = prevLiked;
+        post.downvoted = prevDisliked;
+        post.votes = prevScore;
+      });
     }
   }
 
   Future<void> _dislikePost() async {
     final post = widget.post;
     final uid = FirebaseAuth.instance.currentUser?.uid;
-
     if (uid == null || post.id == null || post.id!.isEmpty) return;
 
     final ref =
     FirebaseFirestore.instance.collection('community_posts').doc(post.id);
 
+    final prevLiked = _isLiked;
+    final prevDisliked = _isDisliked;
+    final prevScore = _score;
+
+    setState(() {
+      if (_isDisliked) {
+        _isDisliked = false;
+        _score += 1;
+      } else {
+        if (_isLiked) {
+          _isLiked = false;
+          _score -= 1;
+        }
+        _isDisliked = true;
+        _score -= 1;
+      }
+      post.upvoted = _isLiked;
+      post.downvoted = _isDisliked;
+      post.votes = _score;
+    });
+    HapticFeedback.mediumImpact();
+
     try {
-      final newVotes = await FirebaseFirestore.instance.runTransaction((tx) async {
+      final newVotes =
+      await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(ref);
         if (!snap.exists) throw Exception('Post does not exist');
 
         final data = snap.data() ?? <String, dynamic>{};
-        final upvotedBy = _stringList(data['upvotedBy']);
-        final downvotedBy = _stringList(data['downvotedBy']);
+        final upvotedBy = List<String>.from(_stringList(data['upvotedBy']));
+        final downvotedBy = List<String>.from(_stringList(data['downvotedBy']));
         int votes = (data['votes'] as num?)?.toInt() ?? 0;
 
         final wasLiked = upvotedBy.contains(uid);
         final wasDisliked = downvotedBy.contains(uid);
 
         if (wasDisliked) {
-          // disliked → neutral
           downvotedBy.remove(uid);
           votes += 1;
         } else {
-          // neutral / liked → disliked
           if (wasLiked) {
             upvotedBy.remove(uid);
             votes -= 1;
@@ -6986,25 +7637,37 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
           'upvotedBy': upvotedBy,
           'downvotedBy': downvotedBy,
           'votes': votes,
+          'updatedAt': FieldValue.serverTimestamp(),
         });
         return votes;
       });
 
       if (!mounted) return;
       setState(() {
-        if (post.downvoted) {
-          post.downvoted = false;
-        } else {
-          if (post.upvoted) post.upvoted = false;
-          post.downvoted = true;
-        }
+        _score = newVotes;
         post.votes = newVotes;
+        post.upvoted = _isLiked;
+        post.downvoted = _isDisliked;
       });
 
-      HapticFeedback.mediumImpact();
+      if (prevLiked && !_isLiked) {
+        unawaited(retractAggregatedLikeFromMe(
+          toUid: post.authorId ?? '',
+          postId: post.id ?? '',
+        ));
+      }
     } catch (e, stack) {
       debugPrint('Dislike failed: $e');
       debugPrintStack(stackTrace: stack);
+      if (!mounted) return;
+      setState(() {
+        _isLiked = prevLiked;
+        _isDisliked = prevDisliked;
+        _score = prevScore;
+        post.upvoted = prevLiked;
+        post.downvoted = prevDisliked;
+        post.votes = prevScore;
+      });
     }
   }
 
@@ -7052,26 +7715,34 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
     final accent = widget.accent;
     final community = post.tags.isNotEmpty ? post.tags.first : 'عام';
     final commentsCount = post.commentsCount;
+    final isRepost = post.isRepost && post.repostOf != null;
+    final repostData = post.repostOf;
+    final isCommentRepost = isRepost &&
+        (repostData!['kind']?.toString() == 'comment' ||
+            (repostData['commentId']?.toString().trim().isNotEmpty ?? false));
 
     return Material(
       color: isDark ? const Color(0xFF16181C) : Colors.white,
       borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: _openComments,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08),
-            ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.08),
           ),
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: Column(
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+        InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: _openComments,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
               // ===== رأس البطاقة =====
               Row(
                 children: [
@@ -7107,6 +7778,15 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: theme.hintColor),
                   ),
+                  if (isRepost) ...[
+                    Text(
+                      ' • إعادة نشر',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 10),
@@ -7141,6 +7821,15 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
+                        if (isRepost) ...[
+                          const SizedBox(height: 8),
+                          _SearchRepostQuote(
+                            data: repostData!,
+                            isComment: isCommentRepost,
+                            isDark: isDark,
+                            accent: accent,
+                          ),
+                        ],
                         if (post.tags.length > 1) ...[
                           const SizedBox(height: 8),
                           Wrap(
@@ -7168,7 +7857,7 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
                       ],
                     ),
                   ),
-                  if (_hasMedia) ...[
+                  if (_hasMedia && !isRepost) ...[
                     const SizedBox(width: 12),
                     _MediaThumbnail(
                       imageUrl: _firstImageUrl,
@@ -7184,36 +7873,175 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
               const SizedBox(height: 10),
 
               // ===== شريط التفاعل =====
-              Row(
-                children: [
-                  _LikeActionPill(
-                    label: '$_score',
-                    isLiked: _isLiked,
-                    isDisliked: _isDisliked,
-                    onLike: _likePost,
-                    onDislike: _dislikePost,
-                  ),
-                  const SizedBox(width: 8),
+            Row(
+              children: [
+                _LikeActionPill(
+                  label: '$_score',
+                  isLiked: _isLiked,
+                  isDisliked: _isDisliked,
+                  onLike: _likePost,
+                  onDislike: _dislikePost,
+                ),
+                const SizedBox(width: 8),
+                _PillAction(
+                  icon: Icons.mode_comment_outlined,
+                  label: '$commentsCount',
+                  isDark: isDark,
+                  onTap: _openComments,
+                ),
+                if (widget.onUnsave != null) ...[
+                  const Spacer(),
                   _PillAction(
-                    icon: Icons.mode_comment_outlined,
-                    label: '$commentsCount',
+                    icon: Icons.bookmark_rounded,
+                    label: 'محفوظ',
                     isDark: isDark,
-                    onTap: _openComments,
+                    onTap: widget.onUnsave!,
                   ),
                 ],
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
+      )
+      ],
+    )
+      )
+      );
+  }
+}
+class _SearchRepostQuote extends StatelessWidget {
+  const _SearchRepostQuote({
+    required this.data,
+    required this.isComment,
+    required this.isDark,
+    required this.accent,
+  });
+
+  final Map<String, dynamic> data;
+  final bool isComment;
+  final bool isDark;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final author = isComment
+        ? (data['commentAuthor'] ?? data['authorName'] ?? 'طالب UniSpace')
+        .toString()
+        : (data['authorName'] ?? 'طالب UniSpace').toString();
+    final text = isComment
+        ? (data['commentText'] ?? data['body'] ?? '').toString().trim()
+        : () {
+      final t = (data['title'] ?? '').toString().trim();
+      final b = (data['body'] ?? '').toString().trim();
+      if (t.isNotEmpty) return t;
+      return b;
+    }();
+    final postTitle = (data['title'] ?? '').toString().trim();
+    String? image;
+    final one = (data['imageUrl'] ?? '').toString().trim();
+    if (one.startsWith('http')) image = one;
+    if (image == null) {
+      final urls = data['imageUrls'];
+      if (urls is List) {
+        for (final u in urls) {
+          final s = u.toString().trim();
+          if (s.startsWith('http')) {
+            image = s;
+            break;
+          }
+        }
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : const Color(0xFFF4F5F7),
+        borderRadius: BorderRadius.circular(10),
+        border: Border(
+          right: BorderSide(color: accent.withValues(alpha: 0.55), width: 3),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      isComment
+                          ? Icons.mode_comment_outlined
+                          : Icons.repeat_rounded,
+                      size: 13,
+                      color: accent,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        isComment ? 'تعليق لـ $author' : author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (text.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+                  ),
+                ],
+                if (isComment && postTitle.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'على: $postTitle',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.hintColor,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (image != null && !isComment) ...[
+            const SizedBox(width: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                image,
+                width: 44,
+                height: 44,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
-
 class _MediaThumbnail extends StatelessWidget {
   final String? imageUrl;
   final bool hasVideo;
   final bool hasPoll;
+  final bool hasGif;
   final bool isDark;
   final Color accent;
 
@@ -7223,6 +8051,7 @@ class _MediaThumbnail extends StatelessWidget {
     required this.hasPoll,
     required this.isDark,
     required this.accent,
+    this.hasGif = false,
   });
 
   @override
@@ -7235,7 +8064,6 @@ class _MediaThumbnail extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // الصورة أو خلفية
             if (imageUrl != null)
               Image.network(
                 imageUrl!,
@@ -7244,8 +8072,6 @@ class _MediaThumbnail extends StatelessWidget {
               )
             else
               _placeholder(),
-
-            // أيقونة فيديو
             if (hasVideo)
               Center(
                 child: Container(
@@ -7254,12 +8080,13 @@ class _MediaThumbnail extends StatelessWidget {
                     color: Colors.black.withValues(alpha: 0.55),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 22),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                 ),
               ),
-
-            // أيقونة بول
             if (hasPoll && !hasVideo)
               Center(
                 child: Container(
@@ -7268,8 +8095,32 @@ class _MediaThumbnail extends StatelessWidget {
                     color: Colors.black.withValues(alpha: 0.55),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.poll_rounded,
-                      color: Colors.white, size: 20),
+                  child: const Icon(
+                    Icons.poll_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            if (hasGif && !hasVideo)
+              Positioned(
+                left: 6,
+                bottom: 6,
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'GIF',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -7280,12 +8131,16 @@ class _MediaThumbnail extends StatelessWidget {
 
   Widget _placeholder() {
     return Container(
-      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade200,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.grey.shade200,
       child: Icon(
         hasPoll
             ? Icons.poll_rounded
             : hasVideo
             ? Icons.videocam_rounded
+            : hasGif
+            ? Icons.gif_rounded
             : Icons.image_rounded,
         color: accent.withValues(alpha: 0.6),
         size: 28,
@@ -7424,7 +8279,1364 @@ class _CircleRevealClipper extends CustomClipper<Path> {
   }
 }
 
-//=========================================================
+class _CommentSearchHit {
+  const _CommentSearchHit({required this.post, required this.comment});
+  final _Post post;
+  final _Comment comment;
+}
+
+class _RedditStyleCommentTile extends StatelessWidget {
+  const _RedditStyleCommentTile({
+    required this.hit,
+    required this.accent,
+    this.onUnsave,
+  });
+
+  final _CommentSearchHit hit;
+  final Color accent;
+  final VoidCallback? onUnsave;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final c = hit.comment;
+    final isReply = (c.replyToId != null && c.replyToId!.trim().isNotEmpty) ||
+        (c.replyToAuthor != null && c.replyToAuthor!.trim().isNotEmpty);
+    final replyTo = (c.replyToAuthor ?? '').trim();
+    final title = hit.post.title.trim();
+    final body = hit.post.body.trim();
+    final postLine = title.isNotEmpty ? title : body;
+    final mediaUrl = (c.mediaUrl ?? '').trim();
+    final mediaType = (c.mediaType ?? '').toLowerCase().trim();
+    final hasMedia = mediaUrl.startsWith('http');
+
+
+    return Material(
+      color: isDark ? const Color(0xFF16181C) : Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CommentsScreen(
+                post: hit.post,
+                initialCommentId: c.id,
+              ),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              const SizedBox(height: 0),
+              Row(
+                children: [
+                  LiveAuthorPhoto(
+                    userId: c.authorId,
+                    fallbackUrl: c.authorPhotoUrl,
+                    size: 28,
+                    radius: 14,
+                    iconSize: 15,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: AuthorProfiles.revision,
+                      builder: (context, _, __) {
+                        if ((c.authorId ?? '').isNotEmpty) {
+                          AuthorProfiles.ensure(c.authorId!);
+                        }
+                        final live = AuthorProfiles.nameOf(c.authorId)?.trim();
+                        final name = (live != null && live.isNotEmpty)
+                            ? live
+                            : c.author;
+                        return Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      const SizedBox(width: 8),
+                      Text(
+                        c.timeAgo,
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: theme.hintColor),
+                      ),
+                      if (onUnsave != null)
+                        IconButton(
+                          tooltip: 'إلغاء الحفظ',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onUnsave,
+                          icon: Icon(
+                            Icons.bookmark_rounded,
+                            color: accent,
+                            size: 20,
+                          ),
+                        ),
+
+                    ],
+                  ),
+                ],
+              ),
+              if (isReply) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.subdirectory_arrow_right_outlined,
+                        size: 15,
+                        color:Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        replyTo.isEmpty
+                            ? 'رد على تعليق'
+                            : 'رد على $replyTo',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color:Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      c.text.trim(),
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.45,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  if (hasMedia) ...[
+                    const SizedBox(width: 12),
+                    _MediaThumbnail(
+                      imageUrl: mediaUrl,
+                      hasVideo: mediaType == 'video',
+                      hasPoll: false,
+                      isDark: isDark,
+                      accent: accent,
+                    ),
+                  ],
+                ],
+              ),
+              if (postLine.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : const Color(0xFFF4F5F7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border(
+                      right: BorderSide(color: accent.withValues(alpha: 0.5), width: 3),
+                    ),
+                  ),
+                  child: Text(
+                    ' المنشور: $postLine',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.hintColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+class RedditStyleAiSearchScreen extends StatefulWidget {
+  const RedditStyleAiSearchScreen({super.key});
+
+  @override
+  State<RedditStyleAiSearchScreen> createState() =>
+      _RedditStyleAiSearchScreenState();
+}
+
+enum _ResultTab { all, people, posts, comments }
+
+class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
+    with SingleTickerProviderStateMixin {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  final _scrollController = ScrollController();
+
+  late final AnimationController _aiPulseController;
+  List<_SearchPerson> _people = [];
+  List<_CommentSearchHit> _commentHits = [];
+  bool _isAiMode = false;
+  bool _isLoading = false;
+  String? _error;
+
+  List<_Post> _results = [];
+  String? _aiAnswer;
+  String? _lastQuery;
+
+  // NEW: التبويب النشط لعرض النتائج
+  _ResultTab _tab = _ResultTab.all;
+
+  List<String> _recentSearches = [];
+  static const _recentSearchesKey = 'community_recent_searches';
+
+  static const List<_ExploreItem> _exploreItems = [
+    _ExploreItem(category: 'دراسة', label: 'امتحانات', activity: '٢٤٠+ منشور', icon: Icons.edit_note_rounded, color: Color(0xFFEF6C57)),
+    _ExploreItem(category: 'فرص', label: 'منح دراسية', activity: '١٨٠+ منشور', icon: Icons.school_rounded, color: Color(0xFF4FA6D9)),
+    _ExploreItem(category: 'دراسة', label: 'مذاكرة', activity: '٣١٠+ منشور', icon: Icons.menu_book_rounded, color: Color(0xFF57B894)),
+    _ExploreItem(category: 'حياة جامعية', label: 'سكن جامعي', activity: '٩٠+ منشور', icon: Icons.apartment_rounded, color: Color(0xFFE0A340)),
+    _ExploreItem(category: 'توجيه', label: 'تخصصات', activity: '١٤٠+ منشور', icon: Icons.workspace_premium_rounded, color: Color(0xFF9B7BE0)),
+    _ExploreItem(category: 'مجتمع', label: 'أنشطة طلابية', activity: '٧٥+ منشور', icon: Icons.groups_rounded, color: Color(0xFFE06BA6)),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _aiPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+    _loadRecentSearches();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    _scrollController.dispose();
+    _aiPulseController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadRecentSearches() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getStringList(_recentSearchesKey) ?? [];
+      if (!mounted) return;
+      setState(() => _recentSearches = saved);
+    } catch (e) {
+      debugPrint('load recent searches failed: $e');
+    }
+  }
+
+  Future<void> _saveRecentSearches() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_recentSearchesKey, _recentSearches);
+    } catch (e) {
+      debugPrint('save recent searches failed: $e');
+    }
+  }
+
+  // ===== FIX #1: بحث حسابات حقيقي يتصفح كل المستخدمين على دفعات =====
+  // بدل جلب 80 مستخدمًا عشوائيًا وحيدًا؛ نفس نمط تصفح المنشورات
+  // بالضبط (صفحات متتالية حتى نجد عددًا كافيًا أو ينفد المستخدمون)
+  Future<List<_SearchPerson>> _searchPeople({
+    required String lowerQ,
+    required bool looksEmail,
+    required String rawQuery,
+    required Set<String> blocked,
+    required String? me,
+  }) async {
+    final people = <_SearchPerson>[];
+    DocumentSnapshot<Map<String, dynamic>>? last;
+
+    for (var page = 0; page < 8 && people.length < 8; page++) {
+      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+          .collection('users')
+          .orderBy(FieldPath.documentId)
+          .limit(120);
+      if (last != null) q = q.startAfterDocument(last);
+
+      final snap = await q.get();
+      if (snap.docs.isEmpty) break;
+
+      for (final doc in snap.docs) {
+        if (doc.id == me) continue;
+        if (blocked.contains(doc.id)) continue;
+
+        final data = doc.data();
+        final priv = data['privacy'];
+        final privacy = priv is Map ? Map<String, dynamic>.from(priv) : null;
+        if (privacy?['appearInSearch'] == false) continue;
+        if (blocked.contains(doc.id)) continue;
+        if (isUserDocUnavailable(data)) continue;
+        AuthorProfiles.ensure(doc.id);
+        final live = AuthorProfiles.nameOf(doc.id)?.trim() ?? '';
+        final fn = (data['firstName'] ?? '').toString().trim();
+        final ln = (data['lastName'] ?? '').toString().trim();
+        final display = (data['displayName'] ??
+            data['userName'] ??
+            data['name'] ??
+            '')
+            .toString()
+            .trim();
+        final composed = [fn, ln].where((e) => e.isNotEmpty).join(' ');
+        final uname = (data['username'] ?? data['userName'] ?? '')
+            .toString()
+            .trim();
+        final shown = composed.isNotEmpty
+            ? composed
+            : (live.isNotEmpty
+            ? live
+            : (display.isNotEmpty
+            ? display
+            : (uname.isNotEmpty ? uname : '')));
+        if (shown.isEmpty) continue;
+
+        final email = (data['email'] ?? '').toString().toLowerCase();
+        final phone = (data['phone'] ?? '').toString();
+        final tokens = _queryTokens(rawQuery);
+        final nameHit = tokens.isNotEmpty
+            ? _allTokensIn('$shown $live $uname $fn $ln $display', tokens)
+            : _searchNorm('$shown $uname').contains(_searchNorm(rawQuery));
+        final emailHit = looksEmail &&
+            privacy?['findByEmail'] == true &&
+            email.contains(lowerQ);
+        final phoneHit = privacy?['findByPhone'] == true &&
+            phone.isNotEmpty &&
+            phone.contains(rawQuery);
+        if (!nameHit && !emailHit && !phoneHit) continue;
+
+        people.add(_SearchPerson(
+          id: doc.id,
+          name: shown,
+          username: uname.isEmpty ? null : uname,
+          photoUrl: data['profileImageUrl']?.toString(),
+        ));
+        if (people.length >= 8) break;
+      }
+      last = snap.docs.last;
+      if (snap.docs.length < 120) break;
+    }
+    return people;
+  }
+
+  Future<void> _performSearch() async {
+    final q = _controller.text.trim();
+    if (q.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _aiAnswer = null;
+      _results = [];
+      _people = [];
+      _commentHits = [];
+      _lastQuery = q;
+      _tab = _ResultTab.all;
+    });
+
+    FocusScope.of(context).unfocus();
+
+    if (!_recentSearches.contains(q)) {
+      setState(() {
+        _recentSearches.insert(0, q);
+        if (_recentSearches.length > 10) _recentSearches.removeLast();
+      });
+      unawaited(_saveRecentSearches());
+    }
+
+    try {
+      final blocked = await loadBlockedUserIds();
+      final hidden = await loadHiddenPostIds();
+      final followingIds = await loadFollowingIds();
+      final me = FirebaseAuth.instance.currentUser?.uid;
+      final lowerQ = q.toLowerCase();
+      final tokens = _queryTokens(q);
+      final looksEmail = q.contains('@');
+
+      // ===== FIX #1 مطبَّق هنا: بحث حسابات شامل بدل دفعة عشوائية =====
+      var people = <_SearchPerson>[];
+      try {
+        people = await _searchPeople(
+          lowerQ: lowerQ,
+          looksEmail: looksEmail,
+          rawQuery: q,
+          blocked: blocked,
+          me: me,
+        );
+      } catch (e) {
+        debugPrint('people search failed: $e');
+      }
+
+
+      bool accept(_Post post) {
+        if (hidden.contains(post.id)) return false;
+        if (isBlockedPost(post, blocked)) return false;
+        if (post.authorPrivate) {
+          final a = (post.authorId ?? '').trim();
+          if (a.isNotEmpty && a != me && !followingIds.contains(a)) {
+            return false;
+          }
+        }
+        if (tokens.isEmpty) return false;
+
+        final live = AuthorProfiles.nameOf(post.authorId) ?? post.author;
+        final authorHit = post.authorAppearInSearch && _allTokensIn('$live ${post.author}', tokens);
+
+        final r = post.repostOf;
+        final repostHit = r != null &&
+            _allTokensIn(
+              '${r['title'] ?? ''} ${r['body'] ?? ''} ${r['commentText'] ?? ''}',
+              tokens,
+            );
+        final contentHit = _allTokensIn(
+          '${post.title} ${post.body} ${post.tags.join(' ')}',
+          tokens,
+        );
+        return contentHit || repostHit;
+
+      }
+
+      void walkComments(_Post post, List<_Comment> list, List<_CommentSearchHit> out) {
+        for (final c in list) {
+          if (blocked.contains(c.authorId ?? '')) continue;
+          if (_allTokensIn(c.text, tokens)) {
+            out.add(_CommentSearchHit(post: post, comment: c));
+          }
+          if (c.replies.isNotEmpty) walkComments(post, c.replies, out);
+        }
+      }
+
+      final seen = <String>{};
+      final filtered = <_Post>[];
+      final commentHits = <_CommentSearchHit>[];
+
+
+      void addDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+        if (seen.contains(doc.id)) return;
+        final status = doc.data()['status']?.toString().toLowerCase();
+        if (status == 'uploading' || status == 'failed') return;
+        if (isCommunityPostRemoved(doc.data())) return;
+        try {
+          final post = _Post.fromFirestore(doc);
+          if (!hidden.contains(post.id) && !isBlockedPost(post, blocked)) {
+            walkComments(post, post.comments, commentHits);
+          }
+          if (!accept(post)) return;
+          seen.add(doc.id);
+          filtered.add(post);
+        } catch (_) {}
+      }
+
+      // ===== FIX #3 مطبَّق: indexToken الآن متوافق فعليًا مع الفهرس =====
+      final indexToken = tokens.isNotEmpty ? tokens.first : null;
+      if (indexToken != null && indexToken.isNotEmpty) {
+        try {
+          final indexed = await FirebaseFirestore.instance
+              .collection('community_posts')
+              .where('searchKeywords', arrayContains: indexToken)
+              .limit(60)
+              .get();
+          for (final doc in indexed.docs) {
+            addDoc(doc);
+          }
+        } catch (e) {
+          debugPrint('keyword search failed: $e');
+        }
+      }
+
+      if (filtered.length < 8 || commentHits.length < 8) {
+        QueryDocumentSnapshot<Map<String, dynamic>>? last;
+        for (var page = 0; page < 5; page++) {
+          Query<Map<String, dynamic>> pq = FirebaseFirestore.instance
+              .collection('community_posts')
+              .orderBy('createdAt', descending: true)
+              .limit(80);
+          if (last != null) pq = pq.startAfterDocument(last);
+          final snap = await pq.get();
+          if (snap.docs.isEmpty) break;
+          for (final doc in snap.docs) {
+            addDoc(doc);
+          }
+          last = snap.docs.last;
+          if (snap.docs.length < 80) break;
+        }
+
+      }
+      final unavailableAuthors = await loadUnavailableUserIds([
+        ...filtered.map((p) => p.authorId ?? ''),
+        ...commentHits.map((h) => h.comment.authorId ?? ''),
+      ]);
+      filtered.removeWhere(
+            (p) => unavailableAuthors.contains((p.authorId ?? '').trim()),
+      );
+      commentHits.removeWhere(
+            (h) => unavailableAuthors.contains((h.comment.authorId ?? '').trim()),
+      );
+      commentHits.sort((a, b) => b.comment.createdAt.compareTo(a.comment.createdAt));
+      filtered.sort((a, b) {
+        int score(_Post p) {
+          var s = 0;
+          if (_allTokensIn(p.title, tokens)) s += 100;
+          if (_allTokensIn(p.body, tokens)) s += 40;
+          if (_allTokensIn(p.tags.join(' '), tokens)) s += 30;
+          if (p.repostOf != null &&
+              _allTokensIn(
+                '${p.repostOf!['title'] ?? ''} ${p.repostOf!['body'] ?? ''} ${p.repostOf!['commentText'] ?? ''}',
+                tokens,
+              )) s += 50;
+          return s;
+        }
+        final c = score(b).compareTo(score(a));
+        if (c != 0) return c;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+      final limitedCommentHits = commentHits.take(20).toList();
+
+      if (!mounted) return;
+
+      if (_isAiMode) {
+        final buf = StringBuffer();
+        if (filtered.isEmpty) {
+          buf.write('لم أجد منشورات في المجتمع حول "$q".');
+        } else {
+          buf.writeln('ملخص من منشورات المجتمع حول "$q":\n');
+          for (final p in filtered.take(6)) {
+            final t = p.title.trim();
+            final b = p.body.trim();
+            if (t.isNotEmpty) buf.writeln('• $t');
+            if (b.isNotEmpty) buf.writeln(t.isEmpty ? '• $b' : '  $b');
+            buf.writeln();
+          }
+        }
+        setState(() {
+          _people = people;
+          _results = filtered;
+          _commentHits = limitedCommentHits;
+          _aiAnswer = buf.toString().trim();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _people = people;
+          _results = filtered;
+          _commentHits = limitedCommentHits;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _clearSearch() {
+    _controller.clear();
+    setState(() {
+      _results = [];
+      _people = [];
+      _commentHits = [];
+      _aiAnswer = null;
+      _lastQuery = null;
+      _error = null;
+    });
+    _focusNode.requestFocus();
+  }
+
+  static final _normalColor = AppTeal.main;
+  static const _aiColor = Color(0xFF7C5CFF);
+
+  Color get _accent => _isAiMode ? _aiColor : _normalColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF000000) : Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildSearchBar(theme, isDark),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: _buildBody(theme, isDark),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(ThemeData theme, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.black : Colors.white,
+        border: Border(
+          bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06)),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back_rounded),
+            splashRadius: 20,
+          ),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _performSearch(),
+              onChanged: (_) => setState(() {}),
+              onTap: () => setState(() {}),
+              style: theme.textTheme.bodyMedium?.copyWith(fontSize: 15),
+              decoration: InputDecoration(
+                hintText: _isAiMode ? 'اسأل الذكاء الاصطناعي...' : 'ابحث',
+                hintStyle: TextStyle(color: theme.hintColor, fontSize: 15),
+                filled: true,
+                fillColor: isDark ? const Color(0xFF16181C) : const Color(0xFFEFF3F4),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(21),
+                  borderSide: BorderSide(color: _accent, width: 1.5),
+                ),
+                prefixIcon: Icon(Icons.search_rounded, size: 19, color: _focusNode.hasFocus ? _accent : theme.hintColor),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_controller.text.isNotEmpty)
+                      GestureDetector(
+                        onTap: _clearSearch,
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(color: theme.hintColor.withValues(alpha: 0.25), shape: BoxShape.circle),
+                          child: const Icon(Icons.close_rounded, size: 13, color: Colors.white),
+                        ),
+                      ),
+                    Container(height: 20, width: 1, color: theme.hintColor.withValues(alpha: 0.2), margin: const EdgeInsets.symmetric(horizontal: 4)),
+                    _AiToggleButton(
+                      isActive: _isAiMode,
+                      accent: _aiColor,
+                      pulse: _aiPulseController,
+                      onTap: () {
+                        setState(() {
+                          _isAiMode = !_isAiMode;
+                          _results = [];
+                          _aiAnswer = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(ThemeData theme, bool isDark) {
+    if (_isLoading) {
+      return Center(
+        key: const ValueKey('loading'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 3, color: _accent)),
+            const SizedBox(height: 12),
+            Text(_isAiMode ? 'الذكاء الاصطناعي يفكر...' : 'جاري البحث...', style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor)),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        key: const ValueKey('error'),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded, size: 44, color: theme.colorScheme.error),
+              const SizedBox(height: 10),
+              Text('حدث خطأ أثناء البحث\n$_error', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_isAiMode && _aiAnswer != null) {
+      return ListView(
+        key: const ValueKey('ai-answer'),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: _aiColor,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), topRight: Radius.circular(16), bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
+              ),
+              child: Text(_lastQuery ?? '', style: const TextStyle(color: Colors.white, fontSize: 14.5)),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Container(
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF16181C) : const Color(0xFFF7F8F9),
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(4), bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.auto_awesome_rounded, size: 14, color: _aiColor),
+                      const SizedBox(width: 6),
+                      Text('AI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _aiColor)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_aiAnswer!, style: theme.textTheme.bodyMedium?.copyWith(height: 1.55)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_lastQuery != null && !_isAiMode) {
+      if (_results.isEmpty && _people.isEmpty && _commentHits.isEmpty) {
+        return Center(
+          key: const ValueKey('empty-results'),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.search_off_rounded, size: 42, color: theme.hintColor.withValues(alpha: 0.5)),
+              const SizedBox(height: 14),
+              Text('لا توجد نتائج لـ "$_lastQuery"', style: theme.textTheme.titleSmall),
+            ],
+          ),
+        );
+      }
+
+      // ===== NEW: تبويبات النتائج =====
+      return Column(
+        key: const ValueKey('results'),
+        children: [
+          _ResultTabsBar(
+            tab: _tab,
+            onChanged: (v) => setState(() => _tab = v),
+            peopleCount: _people.length,
+            postsCount: _results.length,
+            commentsCount: _commentHits.length,
+            accent: _normalColor,
+          ),
+          Expanded(
+            child: ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+              children: [
+                if ((_tab == _ResultTab.all || _tab == _ResultTab.people) && _people.isNotEmpty) ...[
+                  if (_tab == _ResultTab.all)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                      child: Text('حسابات', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    ),
+                  ..._people.map((p) => ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    leading: LiveAuthorPhoto(userId: p.id, fallbackUrl: p.photoUrl, size: 44, radius: 22, iconSize: 22),
+                    title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: (p.username == null || p.username!.isEmpty) ? null : Text('@${p.username}'),
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: p.id, initialName: p.name, initialPhotoUrl: p.photoUrl)));
+                    },
+                  )),
+                  if (_tab == _ResultTab.all) const SizedBox(height: 10),
+                ],
+                if ((_tab == _ResultTab.all || _tab == _ResultTab.posts) && _results.isNotEmpty) ...[
+                  if (_tab == _ResultTab.all)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                      child: Text('منشورات', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    ),
+                  ..._results.map((post) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _RedditStylePostCard(post: post, accent: _normalColor),
+                  )),
+                ],
+                if ((_tab == _ResultTab.all || _tab == _ResultTab.comments) && _commentHits.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  if (_tab == _ResultTab.all)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                      child: Text('تعليقات', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    ),
+                  ..._commentHits.map((hit) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _RedditStyleCommentTile(hit: hit, accent: _normalColor),
+                  )),
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return ListView(
+      key: const ValueKey('idle'),
+      padding: EdgeInsets.zero,
+      children: [
+        if (_recentSearches.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Row(
+              children: [
+                Text('الأخيرة', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    setState(() => _recentSearches.clear());
+                    unawaited(_saveRecentSearches());
+                  },
+                  child: Text('مسح الكل', style: TextStyle(fontSize: 13, color: _accent, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          ),
+          ..._recentSearches.map((s) => _RecentSearchRow(
+            label: s,
+            onTap: () {
+              _controller.text = s;
+              _performSearch();
+            },
+            onDelete: () => setState(() => _recentSearches.remove(s)),
+          )),
+          Divider(height: 24, thickness: 6, color: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5)),
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+          child: Text('استكشف', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        ),
+        ..._exploreItems.map((item) => _ExploreRow(
+          item: item,
+          onTap: () {
+            _controller.text = item.label;
+            _performSearch();
+          },
+        )),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+}
+
+class _ResultTabsBar extends StatelessWidget {
+  final _ResultTab tab;
+  final ValueChanged<_ResultTab> onChanged;
+  final int peopleCount;
+  final int postsCount;
+  final int commentsCount;
+  final Color accent;
+
+  const _ResultTabsBar({
+    required this.tab,
+    required this.onChanged,
+    required this.peopleCount,
+    required this.postsCount,
+    required this.commentsCount,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor.withOpacity(.12),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+
+
+              _RedditStyleTab(
+                label: 'الكل',
+                count: peopleCount + postsCount + commentsCount,
+                selected: tab == _ResultTab.all,
+                accent: accent,
+                onTap: () => onChanged(_ResultTab.all),
+              ),
+              _RedditStyleTab(
+                label: 'الأشخاص',
+                count: peopleCount,
+                selected: tab == _ResultTab.people,
+                accent: accent,
+                onTap: () => onChanged(_ResultTab.people),
+              ),
+              _RedditStyleTab(
+                label: 'المنشورات',
+                count: postsCount,
+                selected: tab == _ResultTab.posts,
+                accent: accent,
+                onTap: () => onChanged(_ResultTab.posts),
+              ),
+              _RedditStyleTab(
+                label: 'التعليقات',
+                count: commentsCount,
+                selected: tab == _ResultTab.comments,
+                accent: accent,
+                onTap: () => onChanged(_ResultTab.comments),
+              ),
+
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RedditStyleTab extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _RedditStyleTab({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 100,
+          height: 48,
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              Center(
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                          color: selected
+                              ? theme.colorScheme.onSurface
+                              : theme.colorScheme.onSurface
+                              .withOpacity(.55),
+                        ),
+                      ),
+
+                      const SizedBox(width: 4),
+
+                      Text(
+                        '$count',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: selected
+                              ? theme.colorScheme.onSurface
+                              .withOpacity(.65)
+                              : theme.colorScheme.onSurface
+                              .withOpacity(.35),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                width: selected ? 70 : 0,
+                height: selected ? 2 : 0,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+final blockedListRevision = ValueNotifier<int>(0);
+final hiddenListRevision = ValueNotifier<int>(0);
+const kModeratorIds = <String>{
+  'QYZAB7X4JyXYgMGGwzgV8U4Mu6f2',
+};
+const kAutoHideMinReporters = 3;
+const kAutoHideScore = 8;
+const kAutoHideRatio = 0.03;
+const kAutoHideViralViews = 5000;
+const kAutoHideViralMinRatio = 0.004;
+
+int scoreForSeverity(String severity) {
+  switch (severity) {
+    case 'P1':
+      return 3;
+    case 'P2':
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+int _audienceSize(Map<String, dynamic> data) {
+  final raw = data['uniqueViewers'] ?? data['viewsCount'];
+  if (raw is num && raw.toInt() > 0) return raw.toInt();
+  return 0;
+}
+
+bool isModerationCleared(Map<String, dynamic>? data) {
+  final mod = data?['moderation'];
+  return mod is Map && mod['status']?.toString() == 'cleared';
+}
+
+bool isAutoHiddenByReports(Map<String, dynamic>? data) {
+  if (data == null || isModerationCleared(data)) return false;
+  final reporters = (data['reportCount'] as num?)?.toInt() ?? 0;
+  final score = (data['reportScore'] as num?)?.toInt() ?? 0;
+  if (reporters < kAutoHideMinReporters) return false;
+
+  final views = _audienceSize(data);
+  if (views <= 0) {
+    return score >= kAutoHideScore;
+  }
+  final ratio = reporters / views;
+  if (views > kAutoHideViralViews && ratio < kAutoHideRatio) {
+    return score >= kAutoHideScore && ratio >= kAutoHideViralMinRatio;
+  }
+  if (ratio >= kAutoHideRatio) return true;
+  return score >= kAutoHideScore && ratio >= kAutoHideViralMinRatio;
+}
+
+String autoHideReason(Map<String, dynamic>? data) {
+  if (!isAutoHiddenByReports(data)) return '';
+  final reporters = (data?['reportCount'] as num?)?.toInt() ?? 0;
+  final score = (data?['reportScore'] as num?)?.toInt() ?? 0;
+  final views = data == null ? 0 : _audienceSize(data);
+  if (views > 0) {
+    final pct = (reporters / views * 100).toStringAsFixed(1);
+    return 'تلقائي: $reporters مبلّغ · نقاط $score · $pct٪ من المشاهدين';
+  }
+  return 'تلقائي: $reporters مبلّغ · نقاط $score';
+}
+
+Map<String, dynamic> moderationHistoryEntry(String action) {
+  return {
+    'action': action,
+    'by': FirebaseAuth.instance.currentUser?.uid,
+    'at': Timestamp.now(),
+  };
+}
+bool isCommunityModerator([String? uid]) {
+  final id = uid ?? FirebaseAuth.instance.currentUser?.uid;
+  return id != null && kModeratorIds.contains(id);
+}
+
+String _searchNorm(String s) {
+  var t = s.toLowerCase();
+  t = t.replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '');
+  t = t
+      .replaceAll('أ', 'ا')
+      .replaceAll('إ', 'ا')
+      .replaceAll('آ', 'ا')
+      .replaceAll('ٱ', 'ا')
+      .replaceAll('ى', 'ي')
+      .replaceAll('ؤ', 'و')
+      .replaceAll('ئ', 'ي')
+      .replaceAll('ة', 'ه');
+  t = t.replaceAll(RegExp(r'[^\w\u0600-\u06FF]+'), ' ');
+  return t.replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+// ===== FIX #2: حد أدنى لطول الكلمة أصبح حرفين بدل 3 =====
+List<String> _queryTokens(String q) {
+  const stop = {
+    'في', 'من', 'على', 'الى', 'الي', 'عن', 'مع', 'ما', 'لا',
+    'ان', 'او', 'و', 'هذا', 'هذه', 'ذلك', 'the', 'and',
+  };
+  return _searchNorm(q)
+      .split(' ')
+      .where((t) => t.length >= 2 && !stop.contains(t))
+      .toList();
+}
+
+bool _allTokensIn(String haystack, List<String> tokens) {
+  if (tokens.isEmpty) return false;
+  final words = _searchNorm(haystack)
+      .split(' ')
+      .where((w) => w.isNotEmpty)
+      .toList();
+  if (words.isEmpty) return false;
+  for (final t in tokens) {
+    final hit = words.any((w) {
+      if (w == t) return true;
+      if (t.length >= 4 && w.startsWith(t)) return true;
+      if (w == '${t}s' || w == '${t}es') return true;
+      return false;
+    });
+    if (!hit) return false;
+  }
+  return true;
+}
+
+bool isCommunityPostRemoved(Map<String, dynamic>? data) {
+  if (data == null) return false;
+  if (data['status']?.toString().trim().toLowerCase() == 'removed') {
+    return true;
+  }
+  final mod = data['moderation'];
+  if (mod is Map && mod['status']?.toString() == 'removed') return true;
+  return isAutoHiddenByReports(data);
+}
+
+
+// بصمت لمعظم النصوص العربية.
+List<String> buildSearchKeywords({
+  required String title,
+  required String body,
+  List<String> tags = const [],
+  String? author,
+}) {
+  final parts = <String>[
+    ...title.split(RegExp(r'\s+')),
+    ...body.split(RegExp(r'\s+')),
+    ...tags,
+    if (author != null) ...author.split(RegExp(r'\s+')),
+  ];
+  final out = <String>{};
+  for (final w in parts) {
+    final t = _searchNorm(w.trim());
+    if (t.length >= 2) out.add(t);
+    if (out.length >= 40) break;
+  }
+  return out.toList();
+}
+
+class _SearchPerson {
+  const _SearchPerson({required this.id, required this.name, this.username, this.photoUrl});
+  final String id;
+  final String name;
+  final String? username;
+  final String? photoUrl;
+}
+
+class _ExploreItem {
+  final String category;
+  final String label;
+  final String activity;
+  final IconData icon;
+  final Color color;
+  const _ExploreItem({required this.category, required this.label, required this.activity, required this.icon, required this.color});
+}
+
+class _AiToggleButton extends StatelessWidget {
+  final bool isActive;
+  final Color accent;
+  final AnimationController pulse;
+  final VoidCallback onTap;
+
+  const _AiToggleButton({required this.isActive, required this.accent, required this.pulse, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedBuilder(
+        animation: pulse,
+        builder: (context, child) {
+          final glow = isActive ? (0.15 + pulse.value * 0.15) : 0.0;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            decoration: BoxDecoration(
+              color: isActive ? accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: isActive ? [BoxShadow(color: accent.withValues(alpha: glow), blurRadius: 10)] : [],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome_rounded, size: 15, color: isActive ? Colors.white : Colors.grey),
+                if (isActive) ...[
+                  const SizedBox(width: 4),
+                  const Text('AI', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Colors.white)),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RecentSearchRow extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _RecentSearchRow({required this.label, required this.onTap, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.history_rounded, size: 18, color: theme.hintColor),
+            const SizedBox(width: 14),
+            Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+            GestureDetector(onTap: onDelete, child: Icon(Icons.close_rounded, size: 17, color: theme.hintColor)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExploreRow extends StatelessWidget {
+  final _ExploreItem item;
+  final VoidCallback onTap;
+
+  const _ExploreRow({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(color: item.color.withValues(alpha: 0.14), shape: BoxShape.circle),
+              child: Icon(item.icon, size: 18, color: item.color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.category, style: theme.textTheme.labelSmall?.copyWith(color: theme.hintColor)),
+                  const SizedBox(height: 2),
+                  Text(item.label, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(item.activity, style: theme.textTheme.labelSmall?.copyWith(color: theme.hintColor)),
+                ],
+              ),
+            ),
+            Icon(Icons.trending_up_rounded, size: 18, color: item.color.withValues(alpha: 0.7)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
 class _Post {
   final String? id;
    bool isEdited;
@@ -8739,15 +10951,14 @@ class _PostCardState extends State<_PostCard> {
         }
         post.votes = newVotes;
       });
+
       HapticFeedback.lightImpact();
+      final owner = post.authorId ?? '';
+      final pid = post.id ?? '';
       if (likedNow) {
-        unawaited(pushNotificationFromMe(
-          toUid: post.authorId ?? '',
-          type: 'like',
-          message: 'أعجب بمنشورك',
-          postId: post.id,
-          docId: 'like_post_${post.id}_$uid',
-        ));
+        unawaited(pushAggregatedLikeFromMe(toUid: owner, postId: pid));
+      } else {
+        unawaited(retractAggregatedLikeFromMe(toUid: owner, postId: pid));
       }
     } catch (e, stack) {
       debugPrint('Like failed: $e');
@@ -8758,6 +10969,7 @@ class _PostCardState extends State<_PostCard> {
   Future<void> _dislikePost() async {
     final post = widget.post;
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    final wasLiked = post.upvoted;
 
     if (uid == null || post.id == null || post.id!.isEmpty) return;
 
@@ -8811,6 +11023,12 @@ class _PostCardState extends State<_PostCard> {
       });
 
       HapticFeedback.mediumImpact();
+      if (wasLiked) {
+        unawaited(retractAggregatedLikeFromMe(
+          toUid: post.authorId ?? '',
+          postId: post.id ?? '',
+        ));
+      }
     } catch (e, stack) {
       debugPrint('Dislike failed: $e');
       debugPrintStack(stackTrace: stack);
@@ -9132,6 +11350,18 @@ class _PostCardState extends State<_PostCard> {
       targetId: postId,
     );
     if (!mounted) return;
+    if (already) {
+      await showReportSubmittedSheet(
+        context,
+        type: CommunityReportType.post,
+        ownerId: ownerId,
+        ownerName: _authorLabel(target.author),
+        ownerPhotoUrl: target.authorPhotoUrl,
+        useRootNavigator: true,
+        alreadyReported: true,
+      );
+      return;
+    }
 
     if (!already) {
       final result = await showCommunityReportSheet(
@@ -9142,7 +11372,7 @@ class _PostCardState extends State<_PostCard> {
       if (result == null || !mounted) return;
 
       try {
-        await submitCommunityReport(
+        await runWithReportSpinner(context, () => submitCommunityReport(
           type: CommunityReportType.post,
           targetId: postId,
           ownerId: ownerId,
@@ -9150,7 +11380,7 @@ class _PostCardState extends State<_PostCard> {
           reason: result.reasonId,
           details: result.details,
           snapshot: communityReportSnapshotFromPost(target),
-        );
+        ));
       } catch (error) {
         debugPrint('Community report failed: $error');
         if (!mounted) return;
@@ -9172,6 +11402,7 @@ class _PostCardState extends State<_PostCard> {
         'source': 'report',
         'hiddenAt': FieldValue.serverTimestamp(),
       });
+      hiddenListRevision.value++;
     } catch (e) {
       debugPrint('hide after report failed: $e');
     }
@@ -9303,6 +11534,8 @@ class _PostCardState extends State<_PostCard> {
           'imageUrl': firstImage,
           'imageUrls': original.imagePaths,
           'videoUrls': original.videoPaths,
+          'polls': original.pollDataList.map(_pollToMap).toList(),
+          'pollSlides': original.pollSlides,
         },
         'imageUrls': <String>[],
         'videoUrls': <String>[],
@@ -9315,6 +11548,16 @@ class _PostCardState extends State<_PostCard> {
         'commentsCount': 0,
         'version': 1,
       });
+
+      final ownerId = original.authorId?.trim();
+      if (ownerId != null && ownerId.isNotEmpty) {
+        unawaited(pushNotificationFromMe(
+          toUid: ownerId,
+          type: 'repost',
+          message: 'أعاد نشر منشورك',
+          postId: originalId,
+        ));
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -9399,6 +11642,8 @@ class _PostCardState extends State<_PostCard> {
         'imageUrl': firstImage,
         'imageUrls': original.imagePaths,
         'videoUrls': original.videoPaths,
+        'polls': original.pollDataList.map(_pollToMap).toList(),
+        'pollSlides': original.pollSlides,
         if (comment != null) ...{
           'kind': 'comment',
           'commentId': comment.id,
@@ -9421,6 +11666,28 @@ class _PostCardState extends State<_PostCard> {
       'commentsCount': 0,
       'version': 1,
     });
+    if (comment != null) {
+      final cid = comment.authorId?.trim();
+      if (cid != null && cid.isNotEmpty) {
+        unawaited(pushNotificationFromMe(
+          toUid: cid,
+          type: 'repost',
+          message: 'أعاد نشر تعليقك',
+          postId: originalId,
+          commentId: comment.id,
+        ));
+      }
+    } else {
+      final ownerId = original.authorId?.trim();
+      if (ownerId != null && ownerId.isNotEmpty) {
+        unawaited(pushNotificationFromMe(
+          toUid: ownerId,
+          type: 'repost',
+          message: 'أعاد نشر منشورك',
+          postId: originalId,
+        ));
+      }
+    }
   }
 
   Future<_RepostDraft?> _askRepostDraft([
@@ -10585,19 +12852,6 @@ class _RepostDraft {
   final String title;
   final String body;
 }
-class _RepostEmbedCard extends StatefulWidget {
-  const _RepostEmbedCard({
-    required this.data,
-    this.onChanged,
-  });
-
-  final Map<String, dynamic> data;
-  final VoidCallback? onChanged;
-
-  @override
-  State<_RepostEmbedCard> createState() => _RepostEmbedCardState();
-}
-
 class _RepostComposePage extends StatefulWidget {
   const _RepostComposePage({this.comment,required this.original});
   final _Post original;
@@ -10605,7 +12859,6 @@ class _RepostComposePage extends StatefulWidget {
   @override
   State<_RepostComposePage> createState() => _RepostComposePageState();
 }
-
 class _RepostComposePageState extends State<_RepostComposePage> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _bodyCtrl;
@@ -10805,31 +13058,82 @@ class _RepostComposePageState extends State<_RepostComposePage> {
   }
 }
 
+
+class _RepostEmbedCard extends StatefulWidget {
+  const _RepostEmbedCard({
+    required this.data,
+    this.onChanged,
+  });
+
+  final Map<String, dynamic> data;
+  final VoidCallback? onChanged;
+
+  @override
+  State<_RepostEmbedCard> createState() => _RepostEmbedCardState();
+}
+
 class _RepostEmbedCardState extends State<_RepostEmbedCard> {
   _Post? _post;
   bool _loading = true;
+
   bool get _isCommentRepost {
     final kind = widget.data['kind']?.toString();
     final id = widget.data['commentId']?.toString().trim() ?? '';
     return kind == 'comment' || id.isNotEmpty;
   }
+
   @override
   void initState() {
     super.initState();
     _load();
   }
+
+  String? _http(String? s) {
+    final u = (s ?? '').trim();
+    if (u.startsWith('http://') || u.startsWith('https://')) return u;
+    return null;
+  }
+
+  Future<void> _openTarget() async {
+    if (_isCommentRepost) {
+      await _openRepostedComment();
+      return;
+    }
+    final id = (_post?.id ?? widget.data['postId']?.toString() ?? '').trim();
+    if (id.isEmpty) return;
+    try {
+      final query = await FirebaseFirestore.instance
+          .collection('community_posts')
+          .where(FieldPath.documentId, isEqualTo: id)
+          .limit(1)
+          .get();
+      if (!mounted) return;
+      if (query.docs.isEmpty) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('المنشور الأصلي غير موجود')),
+        );
+        return;
+      }
+      final post = _Post.fromFirestore(query.docs.first);
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CommentsScreen(post: post)),
+      );
+      widget.onChanged?.call();
+    } catch (e) {
+      debugPrint('open quoted post failed: $e');
+    }
+  }
+
   Future<void> _openRepostedComment() async {
     final postId = widget.data['postId']?.toString().trim() ?? '';
     final commentId = widget.data['commentId']?.toString().trim() ?? '';
     if (postId.isEmpty) return;
-
     try {
       final query = await FirebaseFirestore.instance
           .collection('community_posts')
           .where(FieldPath.documentId, isEqualTo: postId)
           .limit(1)
           .get();
-
       if (!mounted) return;
       if (query.docs.isEmpty) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -10837,7 +13141,6 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
         );
         return;
       }
-
       final post = _Post.fromFirestore(query.docs.first);
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -10859,13 +13162,11 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
 
   Future<void> _load() async {
     final id = widget.data['postId']?.toString().trim();
-
     if (_isCommentRepost) {
       if (!mounted) return;
       setState(() => _loading = false);
       return;
     }
-
     if (id == null || id.isEmpty) {
       if (!mounted) return;
       setState(() {
@@ -10874,16 +13175,13 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
       });
       return;
     }
-
     try {
       final query = await FirebaseFirestore.instance
           .collection('community_posts')
           .where(FieldPath.documentId, isEqualTo: id)
           .limit(1)
           .get();
-
       if (!mounted) return;
-
       setState(() {
         _post = query.docs.isEmpty
             ? _fromSnapshot(widget.data)
@@ -10903,10 +13201,7 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
   _Post _fromSnapshot(Map<String, dynamic> data) {
     final images = _stringList(data['imageUrls']);
     final one = data['imageUrl']?.toString().trim() ?? '';
-    if (images.isEmpty && one.startsWith('http')) {
-      images.add(one);
-    }
-
+    if (images.isEmpty && one.startsWith('http')) images.add(one);
     return _Post(
       id: data['postId']?.toString(),
       author: (data['authorName'] ?? 'طالب UniSpace').toString(),
@@ -10920,19 +13215,234 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
     );
   }
 
+  Widget _mediaHero({
+    required bool isDark,
+    String? image,
+    required bool hasVideo,
+  }) {
+    if (image == null && !hasVideo) return const SizedBox.shrink();
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (image != null)
+            Image.network(
+              image,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => ColoredBox(
+                color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
+              ),
+            )
+          else
+            ColoredBox(
+              color: isDark ? const Color(0xFF111827) : const Color(0xFFE5E7EB),
+            ),
+          if (hasVideo)
+            Center(
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pollStrip(_Post post, ThemeData theme, bool isDark) {
+    final polls = post.pollDataList;
+
+    if (polls.isEmpty && post.pollSlides.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final questions = <String>[];
+
+    for (final slide in post.pollSlides) {
+      if (slide['type']?.toString() == 'text') {
+        final text = (slide['text'] ?? '').toString().trim();
+        if (text.isNotEmpty && !questions.contains(text)) {
+          questions.add(text);
+        }
+      }
+    }
+
+    if (polls.isNotEmpty) {
+      for (final poll in polls) {
+        final pollMap = _pollToMap(poll);
+        for (final key in ['question', 'title', 'text', 'prompt']) {
+          final value = (pollMap[key] ?? '').toString().trim();
+          if (value.isNotEmpty && !questions.contains(value)) {
+            questions.add(value);
+            break;
+          }
+        }
+      }
+    }
+
+    if (questions.isEmpty) {
+      final fallback = post.title.trim();
+      questions.add(fallback.isNotEmpty ? fallback : 'ما رأيك؟');
+    }
+
+    return _pollGlassStyle(
+      questions: questions,
+      isDark: isDark,
+      author: post.author,
+      authorId: post.authorId,
+    );
+  }
+
+
+  Widget _pollGlassStyle({
+    required List<String> questions,
+
+    required bool isDark,
+    required String author,
+    String? authorId,
+  }) {
+    final textColor = isDark ? Colors.white : const Color(0xFF102A2C);
+    final mutedColor = isDark
+        ? Colors.white.withValues(alpha: 0.65)
+        : const Color(0xFF527174);
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Container(
+        margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [
+              Color.lerp(AppTeal.main, const Color(0xFF0B1418), 0.72)!,
+              Color.lerp(AppTeal.main, const Color(0xFF12181C), 0.88)!,
+            ]
+                : [
+              Color.lerp(AppTeal.main, Colors.white, 0.88)!,
+              Color.lerp(AppTeal.main, Colors.white, 0.96)!,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppTeal.main.withValues(alpha: 0.28),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.poll_outlined,
+                  color: AppTeal.main,
+                  size: 19,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'Poll',
+                  style: TextStyle(
+                    color: AppTeal.main,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 80,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: questions.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, i) {
+                  return Container(
+                    width: 160,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: isDark ? 0.07 : 0.65),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: isDark ? 0.16 : 0.85),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppTeal.main.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '${i + 1}',
+                            style: TextStyle(
+                              color: AppTeal.main,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Text(
+                            questions[i],
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                              height: 1.3,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = AppTeal.main;
+    final border = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE5E7EB);
+    final fill = isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white;
 
     if (_loading) {
       return Container(
-        height: 72,
+        height: 88,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: theme.dividerColor.withValues(alpha: 0.4),
-          ),
+          border: Border.all(color: border),
         ),
         child: const SizedBox(
           width: 22,
@@ -10941,47 +13451,211 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
         ),
       );
     }
+
     if (_isCommentRepost) {
-      return InkWell(
-          onTap: _openRepostedComment,
-          borderRadius: BorderRadius.circular(16),
-          child: _CommentRepostPreview(
-        author: (widget.data['commentAuthor'] ?? 'طالب UniSpace').toString(),
-        authorId: widget.data['commentAuthorId']?.toString(),
-        authorPhotoUrl: widget.data['commentAuthorPhotoUrl']?.toString(),
-        text: (widget.data['commentText'] ?? widget.data['body'] ?? '').toString(),
-        mediaUrl: widget.data['commentMediaUrl']?.toString(),
-        mediaType: widget.data['commentMediaType']?.toString(),
-        contextLabel: () {
-          final t = (widget.data['title'] ?? '').toString().trim();
-          return t.isEmpty ? 'تعليق' : 'تعليق على: $t';
-        }(),
-      ));
+      final author =
+      (widget.data['commentAuthor'] ?? 'طالب UniSpace').toString();
+      final authorId = widget.data['commentAuthorId']?.toString();
+      final photo = widget.data['commentAuthorPhotoUrl']?.toString();
+      final text =
+      (widget.data['commentText'] ?? widget.data['body'] ?? '')
+          .toString()
+          .trim();
+      final mediaType = widget.data['commentMediaType']?.toString();
+      final mediaUrl = widget.data['commentMediaUrl']?.toString();
+      final image = (mediaType == 'image' || mediaType == 'gif')
+          ? _http(mediaUrl)
+          : null;
+      final hasVideo = mediaType == 'video';
+      final t = (widget.data['title'] ?? '').toString().trim();
+      final footer = t.isEmpty ? 'تعليق أصلي' : 'تعليق على: $t';
+
+      return _ogShell(
+        theme: theme,
+        isDark: isDark,
+        accent: accent,
+        border: border,
+        fill: fill,
+        onTap: _openTarget,
+        hero: _mediaHero(isDark: isDark, image: image, hasVideo: hasVideo),
+        author: author,
+        authorId: authorId,
+        photo: photo,
+        time: '',
+        title: text,
+        snippet: '',
+        extra: null,
+        footer: footer,
+      );
     }
+
     final post = _post;
     if (post == null) return const SizedBox.shrink();
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.dividerColor.withValues(alpha: 0.45),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: _PostCard(
-        post: post,
-        isEmbedded: true,
-        onChanged: widget.onChanged ?? () {},
-        onDelete: () async {},
-        onHidden: () {
+    String? image;
+    for (final p in post.imagePaths) {
+      image = _http(p);
+      if (image != null) break;
+    }
+    final hasVideo = post.videoPaths.any((p) => p.trim().isNotEmpty);
+    final title = post.title.trim();
+    final snippet = post.body.trim();
 
-        },
-        feedPosts: [post],
+    return _ogShell(
+      theme: theme,
+      isDark: isDark,
+      accent: accent,
+      border: border,
+      fill: fill,
+      onTap: _openTarget,
+      hero: _mediaHero(isDark: isDark, image: image, hasVideo: hasVideo),
+      author: post.author,
+      authorId: post.authorId,
+      photo: post.authorPhotoUrl,
+      time: post.timeAgo,
+      title: title,
+      snippet: snippet,
+      extra: _pollStrip(post, theme, isDark),
+      footer: post.pollDataList.isNotEmpty || post.pollSlides.isNotEmpty
+          ? 'استطلاع أصلي · UniSpace'
+          : 'منشور أصلي · UniSpace',
+    );
+  }
+
+  Widget _ogShell({
+    required ThemeData theme,
+    required bool isDark,
+    required Color accent,
+    required Color border,
+    required Color fill,
+    required VoidCallback onTap,
+    required Widget hero,
+    required String author,
+    required String? authorId,
+    required String? photo,
+    required String time,
+    required String title,
+    required String snippet,
+    required Widget? extra,
+    required String footer,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              hero,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        LiveAuthorPhoto(
+                          userId: authorId,
+                          fallbackUrl: photo,
+                          size: 24,
+                          radius: 12,
+                          iconSize: 12,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: AuthorProfiles.revision,
+                            builder: (context, _, __) {
+                              if ((authorId ?? '').isNotEmpty) {
+                                AuthorProfiles.ensure(authorId!);
+                              }
+                              final live =
+                              AuthorProfiles.nameOf(authorId)?.trim();
+                              final name =
+                              (live != null && live.isNotEmpty)
+                                  ? live
+                                  : author;
+                              return Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        if (time.isNotEmpty)
+                          Text(
+                            time,
+                            style: TextStyle(
+                              color: theme.hintColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (title.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        title,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                    if (snippet.isNotEmpty && snippet != title) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        snippet,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: theme.hintColor,
+                        ),
+                      ),
+                    ],
+                    if (extra != null) extra,
+                    const SizedBox(height: 8),
+                    Text(
+                      footer,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+
 
 class _CommentRepostPreview extends StatelessWidget {
   const _CommentRepostPreview({
@@ -11003,103 +13677,629 @@ class _CommentRepostPreview extends StatelessWidget {
   final String? mediaType;
   final String? contextLabel;
   final String? authorId;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final hasPhoto =
-        authorPhotoUrl != null && authorPhotoUrl!.trim().isNotEmpty;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.dividerColor.withValues(alpha: 0.45),
-        ),
-        color: isDark
-            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
-            : const Color(0xFFF8FAFC),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              LiveAuthorPhoto(
-                userId: authorId,
-                fallbackUrl: authorPhotoUrl,
-                size: 36,
-                iconSize: 20,
+    final accent = AppTeal.main;
+    final url = (mediaUrl ?? '').trim();
+    final type = (mediaType ?? '').trim().toLowerCase();
+
+    final validUrl =
+        url.startsWith('http://') || url.startsWith('https://');
+
+    final hasImage =
+        validUrl && (type == 'image' || type == 'gif');
+
+    final hasVideo =
+        validUrl && type == 'video';
+
+    final hasMedia = hasImage || hasVideo;
+
+    final background = isDark
+        ? const Color(0xFF151A21)
+        : Colors.white;
+
+    final secondaryBackground = isDark
+        ? const Color(0xFF202832)
+        : const Color(0xFFF5F7F8);
+
+    final primaryText = isDark
+        ? Colors.white
+        : const Color(0xFF17212B);
+
+    final mutedText = isDark
+        ? Colors.white.withValues(alpha: 0.55)
+        : const Color(0xFF78838F);
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.09)
+                : const Color(0xFFE4E9ED),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(
+                alpha: isDark ? 0.25 : 0.08,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  author,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
+              blurRadius: 30,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            _buildTopBanner(
+              accent: accent,
+              isDark: isDark,
+            ),
+
+            Transform.translate(
+              offset: const Offset(0, -28),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Column(
+                  children: [
+                    _buildAuthorSection(
+                      primaryText: primaryText,
+                      mutedText: mutedText,
+                      isDark: isDark,
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    if (text.trim().isNotEmpty)
+                      _buildCommentSection(
+                        accent: accent,
+                        secondaryBackground: secondaryBackground,
+                        primaryText: primaryText,
+                        isDark: isDark,
+                      ),
+
+                    if (hasMedia) ...[
+                      const SizedBox(height: 15),
+                      _buildMediaSection(
+                        url: url,
+                        hasImage: hasImage,
+                        hasVideo: hasVideo,
+                        accent: accent,
+                        isDark: isDark,
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    _buildBottomInfo(
+                      accent: accent,
+                      mutedText: mutedText,
+                      isDark: isDark,
+                    ),
+                  ],
                 ),
               ),
-              if (timeLabel != null && timeLabel!.isNotEmpty)
-                Text(
-                  timeLabel!,
-                  style: TextStyle(
-                    color: theme.hintColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBanner({
+    required Color accent,
+    required bool isDark,
+  }) {
+    return Container(
+      height: 108,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            accent,
+            Color.alphaBlend(
+              Colors.black.withValues(alpha: 0.20),
+              accent,
+            ),
+          ],
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -35,
+            left: -20,
+            child: Container(
+              width: 130,
+              height: 130,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -42,
+            right: 75,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.07),
+              ),
+            ),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.20),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.30),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.repeat_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'إعادة نشر تعليق',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'مشاركة رأي من المجتمع',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.78),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if ((timeLabel ?? '').trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    timeLabel!.trim(),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.78),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
             ],
           ),
-          if (text.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              text,
-              style: const TextStyle(
-                fontSize: 13.5,
-                height: 1.4,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-          if (mediaUrl != null && mediaUrl!.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _CommentMedia(url: mediaUrl!, type: mediaType),
-          ],
-          if (contextLabel != null && contextLabel!.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              contextLabel!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: theme.hintColor,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
+
+  Widget _buildAuthorSection({
+    required Color primaryText,
+    required Color mutedText,
+    required bool isDark,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xFF151A21)
+                : Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: LiveAuthorPhoto(
+            userId: authorId,
+            fallbackUrl: authorPhotoUrl,
+            size: 52,
+            radius: 26,
+            iconSize: 21,
+          ),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: ValueListenableBuilder<int>(
+            valueListenable: AuthorProfiles.revision,
+            builder: (context, _, __) {
+              if ((authorId ?? '').isNotEmpty) {
+                AuthorProfiles.ensure(authorId!);
+              }
+
+              final liveName =
+              AuthorProfiles.nameOf(authorId)?.trim();
+
+              final resolvedName =
+              liveName != null && liveName.isNotEmpty
+                  ? liveName
+                  : author.trim();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    resolvedName.isEmpty ? 'مستخدم' : resolvedName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: primaryText,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 13,
+                        color: mutedText,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'تعليق منقول',
+                        style: TextStyle(
+                          color: mutedText,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.07)
+                : const Color(0xFFF1F4F6),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            Icons.more_horiz_rounded,
+            color: mutedText,
+            size: 21,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCommentSection({
+    required Color accent,
+    required Color secondaryBackground,
+    required Color primaryText,
+    required bool isDark,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+      decoration: BoxDecoration(
+        color: secondaryBackground,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : const Color(0xFFE8EDF0),
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Icon(
+              Icons.format_quote_rounded,
+              size: 33,
+              color: accent.withValues(alpha: 0.22),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 4,
+                  constraints: const BoxConstraints(
+                    minHeight: 34,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    text.trim(),
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: primaryText,
+                      fontSize: 14.5,
+                      height: 1.5,
+                      fontWeight: FontWeight(650),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMediaSection({
+    required String url,
+    required bool hasImage,
+    required bool hasVideo,
+    required Color accent,
+    required bool isDark,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: AspectRatio(
+        aspectRatio: 1.55,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (hasImage)
+              Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) {
+                  return _buildMediaPlaceholder(
+                    isDark: isDark,
+                    icon: Icons.image_not_supported_outlined,
+                  );
+                },
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+
+                  return _buildMediaPlaceholder(
+                    isDark: isDark,
+                    icon: Icons.hourglass_empty_rounded,
+                  );
+                },
+              )
+            else
+              _buildMediaPlaceholder(
+                isDark: isDark,
+                icon: Icons.video_library_outlined,
+              ),
+
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.05),
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.45),
+                  ],
+                ),
+              ),
+            ),
+
+            if (hasVideo)
+              Center(
+                child: Container(
+                  width: 62,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      width: 3,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.28),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 38,
+                  ),
+                ),
+              ),
+
+            Positioned(
+              left: 12,
+              bottom: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hasVideo
+                          ? Icons.videocam_rounded
+                          : Icons.image_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      hasVideo ? 'فيديو' : 'صورة',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaPlaceholder({
+    required bool isDark,
+    required IconData icon,
+  }) {
+    return Container(
+      color: isDark
+          ? const Color(0xFF27313B)
+          : const Color(0xFFE9EEF1),
+      alignment: Alignment.center,
+      child: Icon(
+        icon,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.45)
+            : const Color(0xFF75808A),
+        size: 42,
+      ),
+    );
+  }
+
+  Widget _buildBottomInfo({
+    required Color accent,
+    required Color mutedText,
+    required bool isDark,
+  }) {
+    final label = (contextLabel ?? '').trim().isEmpty
+        ? 'تعليق أصلي'
+        : contextLabel!.trim();
+
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: accent,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: accent,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Icon(
+          Icons.verified_rounded,
+          color: accent,
+          size: 16,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          'محتوى موثّق',
+          style: TextStyle(
+            color: mutedText,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
+
+
+enum SavedItemType {
+  post,
+  comment,
 }
 
 class _SavedListItem {
   const _SavedListItem({
+    required this.type,
     required this.savedAt,
     this.post,
-    this.comment,
+    this.savedComment,
+    this.commentHit,
   });
 
-  final DateTime savedAt;
+  final SavedItemType type;
+  final DateTime? savedAt;
+
   final _Post? post;
-  final _SavedComment? comment;
+  final _SavedComment? savedComment;
+  final _CommentSearchHit? commentHit;
+
+  bool get isPost => type == SavedItemType.post;
+
+  bool get isComment => type == SavedItemType.comment;
+
+  String get id {
+    if (isPost) {
+      return post?.id ?? '';
+    }
+
+    return savedComment?.commentId ?? '';
+  }
 }
 
 class _SavedComment {
@@ -11107,9 +14307,9 @@ class _SavedComment {
     required this.commentId,
     required this.postId,
     required this.author,
+    required this.text,
     this.authorId,
     this.authorPhotoUrl,
-    required this.text,
     this.mediaUrl,
     this.mediaType,
     this.postTitle,
@@ -11125,7 +14325,10 @@ class _SavedComment {
   final String? mediaType;
   final String? postTitle;
 
-  factory _SavedComment.fromMap(String id, Map<String, dynamic> data) {
+  factory _SavedComment.fromMap(
+      String id,
+      Map<String, dynamic> data,
+      ) {
     return _SavedComment(
       commentId: (data['commentId'] ?? id).toString(),
       postId: (data['postId'] ?? '').toString(),
@@ -11148,115 +14351,425 @@ class SavedPostsScreen extends StatefulWidget {
 }
 
 class _SavedPostsScreenState extends State<SavedPostsScreen> {
+  static const int _pageSize = 20;
+  static const int _whereInLimit = 30;
+
+  final TextEditingController _searchController =
+  TextEditingController();
+
+  final ScrollController _scrollController = ScrollController();
+
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _isSearchOpen = false;
+
   String? _error;
-  List<_SavedListItem> _items = [];
+
+  int _selectedTab = 0;
+  String _searchQuery = '';
+
+  final List<_SavedListItem> _items = [];
+
+  DocumentSnapshot<Map<String, dynamic>>? _postsCursor;
+  DocumentSnapshot<Map<String, dynamic>>? _commentsCursor;
+
+  bool _hasMorePosts = true;
+  bool _hasMoreComments = true;
 
   @override
   void initState() {
     super.initState();
+
+    _scrollController.addListener(_onScroll);
+
     _load();
   }
 
-  DateTime _savedAtOf(Map<String, dynamic> data) {
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+
+    super.dispose();
+  }
+
+  DateTime? _savedAtOf(Map<String, dynamic> data) {
     final raw = data['savedAt'];
-    if (raw is Timestamp) return raw.toDate();
-    return DateTime.fromMillisecondsSinceEpoch(0);
+
+    if (raw is Timestamp) {
+      return raw.toDate();
+    }
+
+    if (raw is DateTime) {
+      return raw;
+    }
+
+    if (raw is int) {
+      return DateTime.fromMillisecondsSinceEpoch(raw);
+    }
+
+    return null;
+  }
+
+  void _sortItems() {
+    _items.sort((a, b) {
+      if (a.savedAt == null && b.savedAt == null) {
+        return 0;
+      }
+
+      if (a.savedAt == null) {
+        return 1;
+      }
+
+      if (b.savedAt == null) {
+        return -1;
+      }
+
+      return b.savedAt!.compareTo(a.savedAt!);
+    });
+  }
+
+  _Comment? _findComment(
+      List<_Comment> comments,
+      String id,
+      ) {
+    for (final comment in comments) {
+      if (comment.id == id) {
+        return comment;
+      }
+
+      final nested = _findComment(
+        comment.replies,
+        id,
+      );
+
+      if (nested != null) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    final position = _scrollController.position;
+
+    if (position.pixels >= position.maxScrollExtent - 500) {
+      _loadMore();
+    }
+  }
+
+  Query<Map<String, dynamic>> _savedCollectionQuery({
+    required String uid,
+    required String collectionName,
+    required DocumentSnapshot<Map<String, dynamic>>? cursor,
+  }) {
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection(collectionName)
+        .orderBy(FieldPath.documentId)
+        .limit(_pageSize);
+
+    if (cursor != null) {
+      query = query.startAfterDocument(cursor);
+    }
+
+    return query;
+  }
+
+  Future<Map<String, _Post>> _fetchPostsByIds(
+      Iterable<String> ids,
+      ) async {
+    final cleanIds = ids
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final result = <String, _Post>{};
+
+    if (cleanIds.isEmpty) {
+      return result;
+    }
+
+    for (var i = 0; i < cleanIds.length; i += _whereInLimit) {
+      final end = (i + _whereInLimit < cleanIds.length)
+          ? i + _whereInLimit
+          : cleanIds.length;
+
+      final chunk = cleanIds.sublist(i, end);
+
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('community_posts')
+            .where(
+          FieldPath.documentId,
+          whereIn: chunk,
+        )
+            .get();
+
+        for (final document in snapshot.docs) {
+          result[document.id] = _Post.fromFirestore(document);
+        }
+      } catch (e) {
+        debugPrint('fetch posts batch failed: $e');
+      }
+    }
+
+    return result;
+  }
+
+  Future<void> _loadPostsPage({
+    required String uid,
+    required bool reset,
+  }) async {
+    if (!reset && !_hasMorePosts) {
+      return;
+    }
+
+    final query = _savedCollectionQuery(
+      uid: uid,
+      collectionName: 'saved_posts',
+      cursor: reset ? null : _postsCursor,
+    );
+
+    final savedSnapshot = await query.get();
+
+    if (savedSnapshot.docs.isEmpty) {
+      _hasMorePosts = false;
+      return;
+    }
+
+    _postsCursor = savedSnapshot.docs.last;
+
+    if (savedSnapshot.docs.length < _pageSize) {
+      _hasMorePosts = false;
+    }
+
+    final hiddenPosts = await loadHiddenPostIds();
+
+    final validSavedDocs = savedSnapshot.docs.where((savedDocument) {
+      final postId = savedDocument.id.trim();
+
+      return postId.isNotEmpty &&
+          !hiddenPosts.contains(postId);
+    }).toList();
+
+    if (validSavedDocs.isEmpty) {
+      return;
+    }
+
+    final posts = await _fetchPostsByIds(
+      validSavedDocs.map((document) => document.id),
+    );
+
+    for (final savedDocument in validSavedDocs) {
+      final postId = savedDocument.id.trim();
+      final post = posts[postId];
+
+      if (post == null) {
+        continue;
+      }
+
+      _items.add(
+        _SavedListItem(
+          type: SavedItemType.post,
+          savedAt: _savedAtOf(savedDocument.data()),
+          post: post,
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadCommentsPage({
+    required String uid,
+    required bool reset,
+  }) async {
+    if (!reset && !_hasMoreComments) {
+      return;
+    }
+
+    final query = _savedCollectionQuery(
+      uid: uid,
+      collectionName: 'saved_comments',
+      cursor: reset ? null : _commentsCursor,
+    );
+
+    final commentsSnapshot = await query.get();
+
+    if (commentsSnapshot.docs.isEmpty) {
+      _hasMoreComments = false;
+      return;
+    }
+
+    _commentsCursor = commentsSnapshot.docs.last;
+
+    if (commentsSnapshot.docs.length < _pageSize) {
+      _hasMoreComments = false;
+    }
+
+    final hiddenPosts = await loadHiddenPostIds();
+
+    final hiddenCommentsSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('hidden_comments')
+        .get();
+
+    final hiddenComments = hiddenCommentsSnapshot.docs
+        .map((document) => document.id)
+        .toSet();
+
+    final validComments = <MapEntry<
+        QueryDocumentSnapshot<Map<String, dynamic>>,
+        _SavedComment>>[];
+
+    for (final savedDocument in commentsSnapshot.docs) {
+      final data = savedDocument.data();
+
+      final commentId = savedDocument.id;
+      final savedComment = _SavedComment.fromMap(
+        commentId,
+        data,
+      );
+
+      final postId = savedComment.postId.trim();
+
+      if (hiddenComments.contains(commentId)) {
+        continue;
+      }
+
+      if (postId.isNotEmpty && hiddenPosts.contains(postId)) {
+        continue;
+      }
+
+      validComments.add(
+        MapEntry(
+          savedDocument,
+          savedComment,
+        ),
+      );
+    }
+
+    if (validComments.isEmpty) {
+      return;
+    }
+
+    final posts = await _fetchPostsByIds(
+      validComments.map((entry) => entry.value.postId),
+    );
+
+    for (final entry in validComments) {
+      final savedDocument = entry.key;
+      final savedComment = entry.value;
+
+      final postId = savedComment.postId.trim();
+      final realPost = posts[postId];
+
+      _Post? post = realPost;
+
+      _Comment? foundComment;
+
+      if (realPost != null) {
+        foundComment = _findComment(
+          realPost.comments,
+          savedComment.commentId,
+        );
+      }
+
+      foundComment ??= _Comment(
+        id: savedComment.commentId,
+        author: savedComment.author,
+        authorId: savedComment.authorId,
+        authorPhotoUrl: savedComment.authorPhotoUrl,
+        text: savedComment.text,
+        createdAt: _savedAtOf(savedDocument.data()) ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        mediaUrl: savedComment.mediaUrl,
+        mediaType: savedComment.mediaType,
+      );
+
+      post ??= _Post(
+        author: '',
+        title: savedComment.postTitle ?? 'منشور غير متاح',
+        body: '',
+        createdAt: _savedAtOf(savedDocument.data()) ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+      );
+
+      _items.add(
+        _SavedListItem(
+          type: SavedItemType.comment,
+          savedAt: _savedAtOf(savedDocument.data()),
+          savedComment: savedComment,
+          commentHit: _CommentSearchHit(
+            post: post,
+            comment: foundComment,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _load() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
+
     if (uid == null) {
+      if (!mounted) return;
+
       setState(() {
         _loading = false;
+        _loadingMore = false;
         _error = 'يجب تسجيل الدخول أولاً';
-        _items = [];
+        _items.clear();
       });
+
       return;
     }
 
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
+
+      _items.clear();
+
+      _postsCursor = null;
+      _commentsCursor = null;
+
+      _hasMorePosts = true;
+      _hasMoreComments = true;
     });
 
     try {
-      QuerySnapshot<Map<String, dynamic>> savedSnap;
-      try {
-        savedSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('saved_posts')
-            .orderBy('savedAt', descending: true)
-            .get();
-      } catch (e) {
-        debugPrint('saved posts orderBy failed: $e');
-        savedSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('saved_posts')
-            .get();
-      }
+      await Future.wait([
+        _loadPostsPage(
+          uid: uid,
+          reset: true,
+        ),
+        _loadCommentsPage(
+          uid: uid,
+          reset: true,
+        ),
+      ]);
 
-      QuerySnapshot<Map<String, dynamic>> commentsSnap;
-      try {
-        commentsSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('saved_comments')
-            .orderBy('savedAt', descending: true)
-            .get();
-      } catch (e) {
-        debugPrint('saved comments orderBy failed: $e');
-        commentsSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('saved_comments')
-            .get();
-      }
-
-      final items = <_SavedListItem>[];
-
-      for (final saved in savedSnap.docs) {
-        final id = saved.id.trim();
-        if (id.isEmpty) continue;
-        try {
-          final query = await FirebaseFirestore.instance
-              .collection('community_posts')
-              .where(FieldPath.documentId, isEqualTo: id)
-              .limit(1)
-              .get();
-          if (query.docs.isEmpty) continue;
-          items.add(
-            _SavedListItem(
-              savedAt: _savedAtOf(saved.data()),
-              post: _Post.fromFirestore(query.docs.first),
-            ),
-          );
-        } catch (e) {
-          debugPrint('load saved post $id failed: $e');
-        }
-      }
-
-      for (final saved in commentsSnap.docs) {
-        items.add(
-          _SavedListItem(
-            savedAt: _savedAtOf(saved.data()),
-            comment: _SavedComment.fromMap(saved.id, saved.data()),
-          ),
-        );
-      }
-
-      items.sort((a, b) => b.savedAt.compareTo(a.savedAt));
+      _sortItems();
 
       if (!mounted) return;
+
       setState(() {
-        _items = items;
         _loading = false;
       });
     } catch (e) {
       debugPrint('load saved items failed: $e');
+
       if (!mounted) return;
+
       setState(() {
         _loading = false;
         _error = 'تعذر تحميل المحفوظات';
@@ -11264,50 +14777,246 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
     }
   }
 
-  Future<void> _openSavedComment(_SavedComment comment) async {
-    final postId = comment.postId.trim();
-    if (postId.isEmpty) return;
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore) {
+      return;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (uid == null) {
+      return;
+    }
+
+    final loadPosts =
+        _selectedTab == 0 || _selectedTab == 1;
+
+    final loadComments =
+        _selectedTab == 0 || _selectedTab == 2;
+
+    final noMorePosts =
+        !loadPosts || !_hasMorePosts;
+
+    final noMoreComments =
+        !loadComments || !_hasMoreComments;
+
+    if (noMorePosts && noMoreComments) {
+      return;
+    }
+
+    setState(() {
+      _loadingMore = true;
+    });
 
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where(FieldPath.documentId, isEqualTo: postId)
-          .limit(1)
-          .get();
-      if (!mounted) return;
-      if (query.docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('المنشور الأصلي غير موجود')),
+      final futures = <Future<void>>[];
+
+      if (loadPosts && _hasMorePosts) {
+        futures.add(
+          _loadPostsPage(
+            uid: uid,
+            reset: false,
+          ),
         );
+      }
+
+      if (loadComments && _hasMoreComments) {
+        futures.add(
+          _loadCommentsPage(
+            uid: uid,
+            reset: false,
+          ),
+        );
+      }
+
+      await Future.wait(futures);
+
+      _sortItems();
+    } catch (e) {
+      debugPrint('load more saved items failed: $e');
+    } finally {
+      if (!mounted) return;
+
+      setState(() {
+        _loadingMore = false;
+      });
+    }
+  }
+
+  List<_SavedListItem> get _visibleItems {
+    final query = _searchQuery.trim().toLowerCase();
+
+    return _items.where((item) {
+      final matchesTab = switch (_selectedTab) {
+        0 => true,
+        1 => item.isPost,
+        2 => item.isComment,
+        _ => true,
+      };
+
+      if (!matchesTab) {
+        return false;
+      }
+
+      if (query.isEmpty) {
+        return true;
+      }
+
+      if (item.isPost && item.post != null) {
+        final post = item.post!;
+
+        return post.title.toLowerCase().contains(query) ||
+            post.body.toLowerCase().contains(query) ||
+            post.author.toLowerCase().contains(query);
+      }
+
+      if (item.isComment && item.savedComment != null) {
+        final comment = item.savedComment!;
+
+        return comment.text.toLowerCase().contains(query) ||
+            comment.author.toLowerCase().contains(query) ||
+            (comment.postTitle ?? '')
+                .toLowerCase()
+                .contains(query);
+      }
+
+      return false;
+    }).toList();
+  }
+
+  String get _emptyTitle {
+    switch (_selectedTab) {
+      case 1:
+        return 'لا توجد منشورات محفوظة';
+      case 2:
+        return 'لا توجد تعليقات محفوظة';
+      default:
+        return 'لا توجد محفوظات';
+    }
+  }
+
+  String get _emptySubtitle {
+    if (_searchQuery.trim().isNotEmpty) {
+      return 'جرّب استخدام كلمات بحث مختلفة';
+    }
+
+    return 'احفظ المنشورات أو التعليقات المهمة لتجدها هنا لاحقًا';
+  }
+
+  Future<void> _openSavedComment(
+      _SavedComment savedComment,
+      ) async {
+    final postId = savedComment.postId.trim();
+
+    if (postId.isEmpty) {
+      _showMessage('المنشور الأصلي غير موجود');
+      return;
+    }
+
+    try {
+      final document = await FirebaseFirestore.instance
+          .collection('community_posts')
+          .doc(postId)
+          .get();
+
+      if (!mounted) return;
+
+      if (!document.exists) {
+        _showMessage('المنشور الأصلي غير موجود');
         return;
       }
 
-      final post = _Post.fromFirestore(query.docs.first);
-      await Navigator.push(
+      final post = _Post.fromFirestore(document);
+
+      final changed = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => CommentsScreen(
             post: post,
-            initialCommentId: comment.commentId,
+            initialCommentId: savedComment.commentId,
           ),
         ),
       );
 
-// بعد العودة حدّث اللقطة اختيارياً
-      if (mounted) _load();
+      if (changed == true && mounted) {
+        await _load();
+      }
     } catch (e) {
       debugPrint('open saved comment failed: $e');
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر فتح التعليق')),
-      );
+
+      _showMessage('تعذر فتح التعليق');
     }
   }
 
-
-  Future<void> _unsaveComment(String commentId) async {
+  Future<void> _unsavePost(
+      String postId, {
+        required _SavedListItem item,
+      }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+
+    if (uid == null) {
+      return;
+    }
+
+    final index = _items.indexOf(item);
+
+    setState(() {
+      _items.remove(item);
+    });
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('saved_posts')
+          .doc(postId)
+          .delete();
+
+      if (!mounted) return;
+
+      _showUndoMessage(
+        message: 'تم إلغاء حفظ المنشور',
+        onUndo: () async {
+          await _restorePost(
+            uid: uid,
+            postId: postId,
+            item: item,
+            index: index,
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint('unsave post failed: $e');
+
+      if (!mounted) return;
+
+      _restoreItem(
+        item: item,
+        index: index,
+      );
+
+      _showMessage('تعذر إلغاء حفظ المنشور');
+    }
+  }
+
+  Future<void> _unsaveComment(
+      String commentId, {
+        required _SavedListItem item,
+      }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (uid == null) {
+      return;
+    }
+
+    final index = _items.indexOf(item);
+
+    setState(() {
+      _items.remove(item);
+    });
+
     try {
       await FirebaseFirestore.instance
           .collection('users')
@@ -11315,169 +15024,515 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
           .collection('saved_comments')
           .doc(commentId)
           .delete();
+
       if (!mounted) return;
-      setState(() {
-        _items.removeWhere((e) => e.comment?.commentId == commentId);
-      });
+
+      _showUndoMessage(
+        message: 'تم إلغاء حفظ التعليق',
+        onUndo: () async {
+          await _restoreComment(
+            uid: uid,
+            commentId: commentId,
+            item: item,
+            index: index,
+          );
+        },
+      );
     } catch (e) {
       debugPrint('unsave comment failed: $e');
+
+      if (!mounted) return;
+
+      _restoreItem(
+        item: item,
+        index: index,
+      );
+
+      _showMessage('تعذر إلغاء حفظ التعليق');
     }
   }
 
+  Future<void> _restorePost({
+    required String uid,
+    required String postId,
+    required _SavedListItem item,
+    required int index,
+  }) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('saved_posts')
+          .doc(postId)
+          .set({
+        'savedAt': item.savedAt == null
+            ? FieldValue.serverTimestamp()
+            : Timestamp.fromDate(item.savedAt!),
+      });
+
+      if (!mounted) return;
+
+      _restoreItem(
+        item: item,
+        index: index,
+      );
+    } catch (e) {
+      debugPrint('restore saved post failed: $e');
+
+      if (!mounted) return;
+
+      _showMessage('تعذر التراجع عن إلغاء الحفظ');
+    }
+  }
+
+  Future<void> _restoreComment({
+    required String uid,
+    required String commentId,
+    required _SavedListItem item,
+    required int index,
+  }) async {
+    final savedComment = item.savedComment;
+
+    if (savedComment == null) {
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('saved_comments')
+          .doc(commentId)
+          .set({
+        'commentId': savedComment.commentId,
+        'postId': savedComment.postId,
+        'author': savedComment.author,
+        'authorId': savedComment.authorId,
+        'authorPhotoUrl': savedComment.authorPhotoUrl,
+        'text': savedComment.text,
+        'mediaUrl': savedComment.mediaUrl,
+        'mediaType': savedComment.mediaType,
+        'postTitle': savedComment.postTitle,
+        'savedAt': item.savedAt == null
+            ? FieldValue.serverTimestamp()
+            : Timestamp.fromDate(item.savedAt!),
+      });
+
+      if (!mounted) return;
+
+      _restoreItem(
+        item: item,
+        index: index,
+      );
+    } catch (e) {
+      debugPrint('restore saved comment failed: $e');
+
+      if (!mounted) return;
+
+      _showMessage('تعذر التراجع عن إلغاء الحفظ');
+    }
+  }
+
+  void _restoreItem({
+    required _SavedListItem item,
+    required int index,
+  }) {
+    if (_items.contains(item)) {
+      return;
+    }
+
+    final safeIndex = index.clamp(0, _items.length).toInt();
+
+    setState(() {
+      _items.insert(safeIndex, item);
+      _sortItems();
+    });
+  }
+
+  void _showUndoMessage({
+    required String message,
+    required VoidCallback onUndo,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'تراجع',
+            onPressed: onUndo,
+          ),
+        ),
+      );
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
+  }
+
+  Widget _buildErrorView() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 100),
+        const Icon(
+          Icons.cloud_off_outlined,
+          size: 56,
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: Text(
+            _error ?? 'حدث خطأ غير متوقع',
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Center(
+          child: ElevatedButton.icon(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh),
+            label: const Text('إعادة المحاولة'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyView() {
+    final isSearching = _searchQuery.trim().isNotEmpty;
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 90),
+        Icon(
+          isSearching
+              ? Icons.search_off_rounded
+              : Icons.bookmark_border_rounded,
+          size: 64,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: Text(
+            isSearching ? 'لا توجد نتائج مطابقة' : _emptyTitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              _emptySubtitle,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList() {
+    final visibleItems = _visibleItems;
+    final accent = Theme.of(context).colorScheme.primary;
+
+    if (visibleItems.isEmpty) {
+      return _buildEmptyView();
+    }
+
+    return ListView.separated(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+      itemCount: visibleItems.length + (_loadingMore ? 1 : 0),
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        if (index >= visibleItems.length) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        final item = visibleItems[index];
+
+        if (item.isPost && item.post != null) {
+          final post = item.post!;
+
+          return _RedditStylePostCard(
+            post: post,
+            accent: accent,
+            onUnsave: post.id == null
+                ? null
+                : () {
+              _unsavePost(
+                post.id!,
+                item: item,
+              );
+            },
+          );
+        }
+
+        final hit = item.commentHit;
+        if (hit == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: _RedditStyleCommentTile(
+            hit: hit,
+            accent: accent,
+            onUnsave: () {
+              _unsaveComment(
+                item.savedComment!.commentId,
+                item: item,
+              );
+            },
+          ),
+        );
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_error != null) {
+      return _buildErrorView();
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: _buildList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('المحفوظات'),
-      ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? ListView(
-          children: [
-            const SizedBox(height: 120),
-            Center(child: Text(_error!)),
-          ],
-        )
-            : _items.isEmpty
-            ? ListView(
-          children: const [
-            SizedBox(height: 80),
-            EmptyState(
-              icon: Icons.bookmark_border_rounded,
-              title: 'لا توجد محفوظات',
-            ),
-          ],
-        )
-            : ListView.separated(
-          padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
-          itemCount: _items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
-            final item = _items[i];
-            final post = item.post;
-            if (post != null) {
-              return _PostCard(
-                post: post,
-                feedPosts: _items
-                    .map((e) => e.post)
-                    .whereType<_Post>()
-                    .toList(),
-                onChanged: _load,
-                onDelete: () async {
-                  setState(() {
-                    _items.removeWhere((e) => e.post?.id == post.id);
-                  });
-                },
-                onHidden: () {
-                  setState(() {
-                    _items.removeWhere((e) => e.post?.id == post.id);
-                  });
-                },
-              );
-            }
+        titleSpacing: 0,
 
-            final comment = item.comment!;
-            return _SavedCommentTile(
-              comment: comment,
-              onTap: () => _openSavedComment(comment),
-              onUnsave: () => _unsaveComment(comment.commentId),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 400),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            return SizeTransition(
+              sizeFactor: animation,
+              axis: Axis.horizontal,
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
             );
           },
+          child: _isSearchOpen
+              ? Padding(
+            key: const ValueKey('search_field'),
+            padding: const EdgeInsetsDirectional.only(
+              start: 8,
+              end: 4,
+            ),
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'البحث في المحفوظات',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                  onPressed: () {
+                    _searchController.clear();
+
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                  },
+                  icon: const Icon(Icons.clear),
+                ),
+                filled: true,
+                fillColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          )
+              : const Center(child: Text(
+            'المحفوظات',
+            key: ValueKey('saved_title'),
+          ),)
         ),
+
+        actions: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _isSearchOpen
+                ? IconButton(
+              key: const ValueKey('close_search'),
+              tooltip: 'إغلاق البحث',
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                _searchController.clear();
+
+                setState(() {
+                  _searchQuery = '';
+                  _isSearchOpen = false;
+                });
+              },
+            )
+                : IconButton(
+              key: const ValueKey('open_search'),
+              tooltip: 'بحث',
+              icon: const Icon(Icons.search),
+              onPressed: () {
+                setState(() {
+                  _isSearchOpen = true;
+                });
+              },
+            ),
+          ),
+        ],
+      ),
+
+
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SavedFilterChip(
+                    label: 'الكل',
+                    selected: _selectedTab == 0,
+                    onTap: () {
+                      setState(() {
+                        _selectedTab = 0;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SavedFilterChip(
+                    label: 'المنشورات',
+                    selected: _selectedTab == 1,
+                    onTap: () {
+                      setState(() {
+                        _selectedTab = 1;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SavedFilterChip(
+                    label: 'التعليقات',
+                    selected: _selectedTab == 2,
+                    onTap: () {
+                      setState(() {
+                        _selectedTab = 2;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Expanded(
+            child: _buildBody(),
+          ),
+        ],
       ),
     );
   }
+
 }
 
-class _SavedCommentTile extends StatelessWidget {
-  const _SavedCommentTile({
-    required this.comment,
+class _SavedFilterChip extends StatelessWidget {
+  const _SavedFilterChip({
+    required this.label,
+    required this.selected,
     required this.onTap,
-    required this.onUnsave,
   });
 
-  final _SavedComment comment;
+  final String label;
+  final bool selected;
   final VoidCallback onTap;
-  final VoidCallback onUnsave;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasPhoto = comment.authorPhotoUrl != null &&
-        comment.authorPhotoUrl!.trim().isNotEmpty;
+    final colors = Theme.of(context).colorScheme;
 
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundImage:
-              hasPhoto ? NetworkImage(comment.authorPhotoUrl!) : null,
-              child: hasPhoto
-                  ? null
-                  : const Icon(Icons.person_rounded, size: 16),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: selected
+                ? colors.primary
+                : colors.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected
+                  ? colors.onPrimary
+                  : colors.onSurface,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    comment.author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (comment.text.trim().isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      comment.text,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        height: 1.35,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 6),
-                  Text(
-                    (comment.postTitle ?? '').trim().isEmpty
-                        ? 'تعليق محفوظ'
-                        : 'تعليق على: ${comment.postTitle!.trim()}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: theme.hintColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'إلغاء الحفظ',
-              onPressed: onUnsave,
-              icon: Icon(Icons.bookmark_rounded, color: AppTeal.main),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
+
+
 
 
 final authorProfileRevision = ValueNotifier<int>(0);
@@ -11658,6 +15713,19 @@ bool isBlockedPost(_Post post, Set<String> blockedIds) {
     if (orig.isNotEmpty && blockedIds.contains(orig)) return true;
   }
   return false;
+}
+
+Future<void> setUserPresence({required bool online}) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+  try {
+    await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      'isOnline': online,
+      'lastSeenAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  } catch (e) {
+    debugPrint('setUserPresence failed: $e');
+  }
 }
 
 Future<Set<String>> loadHiddenPostIds() async {
@@ -28757,6 +32825,7 @@ class _CommentsScreenState extends State<CommentsScreen>
   final FocusNode _composerFocusNode = FocusNode();
   bool _isSearching = false;
   String _searchQuery = '';
+  List<String> _hiddenWords = [];
 
   static  Color _primaryTeal = AppTeal.main;
   static const Color _primaryBlue = Color(0xFF1565C0);
@@ -28803,15 +32872,34 @@ class _CommentsScreenState extends State<CommentsScreen>
   Future<void> _loadHiddenCommentIds() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('hidden_comments')
-        .get();
+    final ids = <String>{};
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('hidden_comments')
+          .get();
+      ids.addAll(snap.docs.map((d) => d.id));
+    } catch (_) {}
+
+    final postId = widget.post.id?.trim();
+    if (postId != null && postId.isNotEmpty) {
+      try {
+        final postDoc = await FirebaseFirestore.instance
+            .collection('community_posts')
+            .doc(postId)
+            .get();
+        final mod = postDoc.data()?['moderation'];
+        if (mod is Map && mod['hiddenCommentIds'] is List) {
+          ids.addAll(
+            (mod['hiddenCommentIds'] as List).map((e) => e.toString()),
+          );
+        }
+      } catch (_) {}
+    }
+
     if (!mounted) return;
-    setState(() {
-      _hiddenCommentIds = snap.docs.map((d) => d.id).toSet();
-    });
+    setState(() => _hiddenCommentIds = ids);
   }
 
   bool _isHiddenComment(String id) => _hiddenCommentIds.contains(id);
@@ -28838,6 +32926,7 @@ class _CommentsScreenState extends State<CommentsScreen>
       reverseCurve: Curves.easeInCubic,
     );
     _loadBlockedIds();
+    _loadHiddenWords();
     _loadHiddenCommentIds();
     _loadCommentPermission();
     final jumpId = widget.initialCommentId?.trim();
@@ -28850,6 +32939,32 @@ class _CommentsScreenState extends State<CommentsScreen>
     }
   }
 
+  Future<void> _loadHiddenWords() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final raw = doc.data()?['privacy'];
+      final list = raw is Map ? raw['hiddenWords'] : null;
+      if (list is! List) return;
+      final words = list
+          .map((e) => e.toString().trim().toLowerCase())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (mounted) setState(() => _hiddenWords = words);
+    } catch (e) {
+      debugPrint('load hidden words failed: $e');
+    }
+  }
+
+  bool _matchesHiddenWords(String text) {
+    if (_hiddenWords.isEmpty) return false;
+    final t = text.toLowerCase();
+    return _hiddenWords.any((w) => t.contains(w));
+  }
 
   Future<void> _loadCommentPermission() async {
     final authorId = widget.post.authorId ?? '';
@@ -28935,7 +33050,11 @@ class _CommentsScreenState extends State<CommentsScreen>
   List<_Comment> _withoutBlocked(List<_Comment> list) {
     final filtered = <_Comment>[];
     for (final c in list) {
-      if (_isBlockedAuthor(c.authorId) || _isHiddenComment(c.id)) continue;
+      if (_isBlockedAuthor(c.authorId) ||
+          _isHiddenComment(c.id) ||
+          _matchesHiddenWords(c.text)) {
+        continue;
+      }
       filtered.add(
         _Comment(
           id: c.id,
@@ -29494,7 +33613,7 @@ class _CommentsScreenState extends State<CommentsScreen>
     if (result == null || !mounted) return;
 
     try {
-      await submitCommunityReport(
+      await runWithReportSpinner(context, () => submitCommunityReport(
         type: CommunityReportType.comment,
         targetId: comment.id,
         parentId: postId,
@@ -29503,7 +33622,7 @@ class _CommentsScreenState extends State<CommentsScreen>
         reason: result.reasonId,
         details: result.details,
         snapshot: communityReportSnapshotFromComment(comment),
-      );
+      ));
 
       await FirebaseFirestore.instance
           .collection('users')
@@ -29516,6 +33635,7 @@ class _CommentsScreenState extends State<CommentsScreen>
         'source': 'report',
         'hiddenAt': FieldValue.serverTimestamp(),
       });
+      hiddenListRevision.value++;
 
       if (!mounted) return;
       setState(() => _hiddenCommentIds.add(comment.id));
@@ -29687,6 +33807,17 @@ class _CommentsScreenState extends State<CommentsScreen>
         'version': 1,
       });
 
+      final commentOwner = comment.authorId?.trim();
+      if (commentOwner != null && commentOwner.isNotEmpty) {
+        unawaited(pushNotificationFromMe(
+          toUid: commentOwner,
+          type: 'repost',
+          message: 'أعاد نشر تعليقك',
+          postId: originalId,
+          commentId: comment.id,
+        ));
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('تمت إعادة نشر التعليق')),
@@ -29747,13 +33878,16 @@ class _CommentsScreenState extends State<CommentsScreen>
       });
       HapticFeedback.lightImpact();
       if (likedNow) {
-        unawaited(pushNotificationFromMe(
+        unawaited(pushAggregatedLikeFromMe(
           toUid: comment.authorId ?? '',
-          type: 'like_comment',
-          message: 'أعجب بتعليقك',
-          postId: widget.post.id,
+          postId: widget.post.id ?? '',
           commentId: comment.id,
-          docId: 'like_c_${comment.id}_$uid',
+        ));
+      } else {
+        unawaited(retractAggregatedLikeFromMe(
+          toUid: comment.authorId ?? '',
+          postId: widget.post.id ?? '',
+          commentId: comment.id,
         ));
       }
     } catch (e) {
@@ -29773,7 +33907,8 @@ class _CommentsScreenState extends State<CommentsScreen>
         : allComments
         .where((c) => _commentMatchesQuery(c, _searchQuery))
         .toList();
-
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
 
 
     return Directionality(
@@ -29954,6 +34089,40 @@ class _CommentsScreenState extends State<CommentsScreen>
                   },
                 ),
               ),
+            ),
+             SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'Comments',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: muted,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ],
+                ),
+              )
             ),
             if (filteredComments.isEmpty)
               SliverToBoxAdapter(
@@ -33886,7 +38055,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   snap.connectionState == ConnectionState.waiting &&
                       !snap.hasData;
               final all = (snap.data?.docs ?? [])
+
                   .map((d) => _Post.fromFirestore(d))
+
                   .toList();
               final originals = all.where((p) => !p.isRepost).toList();
               final reposts = all.where((p) => p.isRepost).toList();
@@ -35387,18 +39558,36 @@ class AccountSettingsScreen extends StatelessWidget {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      await SessionService.instance.revokeCurrentSession(user.uid);
-      await AuthSessionService.signOutFully();
-
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تعطيل الحساب')),
-      );
       Navigator.of(context).popUntil((r) => r.isFirst);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('تعذر التعطيل: $e')),
+      );
+    }
+  }
+  Future<void> _reactivateAccount(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'accountStatus': 'active',
+        'reactivatedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'security': {
+          'frozen': false,
+          'frozenAt': null,
+        },
+      }, SetOptions(merge: true));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إعادة تفعيل الحساب')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر إعادة التفعيل: $e')),
       );
     }
   }
@@ -35683,198 +39872,561 @@ class AccountSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final app = UniSpaceApp.of(context);
     final user = FirebaseAuth.instance.currentUser;
 
+    final displayName = user?.displayName?.trim();
+    final email = user?.email?.trim();
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Settings',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+      backgroundColor: colors.surface,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 36),
+          children: [
+            _buildPageHeader(context),
+
+            const SizedBox(height: 20),
+
+            if (user != null) ...[
+              _buildProfileCard(
+                context,
+                user: user,
+                displayName: displayName,
+                email: email,
+              ),
+              const SizedBox(height: 26),
+            ],
+
+            _buildSection(
+              context,
+              title: 'الحساب والمجتمع',
+              icon: Icons.people_alt_outlined,
+              children: [
+                if (isCommunityModerator())
+                  _settingsTile(
+                    context,
+                    icon: Icons.flag_outlined,
+                    title: 'مراجعة التبليغات',
+                    subtitle: 'إدارة البلاغات الواردة من المجتمع',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                          const CommunityReportsInboxScreen(),
+                        ),
+                      );
+                    },
+                  ),
+
+                // _settingsTile(
+                //   context,
+                //   icon: Icons.block_rounded,
+                //   title: 'الحسابات المحظورة',
+                //   subtitle: 'عرض الحسابات التي قمت بحظرها',
+                //   onTap: () {
+                //     Navigator.of(context).push(
+                //       MaterialPageRoute(
+                //         builder: (_) => const BlockedUsersScreen(),
+                //       ),
+                //     );
+                //   },
+                // ),
+
+                _settingsTile(
+                  context,
+                  icon: Icons.person_add_alt_1_outlined,
+                  title: 'طلبات المتابعة',
+                  subtitle: 'إدارة طلبات المتابعة الجديدة',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const FollowRequestsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+
+            _buildSection(
+              context,
+              title: 'المظهر واللغة',
+              icon: Icons.palette_outlined,
+              children: [
+                _settingsTile(
+                  context,
+                  icon: Icons.color_lens_outlined,
+                  title: 'السمة',
+                  subtitle: app._themeMode == ThemeMode.light
+                      ? 'فاتح'
+                      : app._themeMode == ThemeMode.dark
+                      ? 'داكن'
+                      : 'حسب إعدادات النظام',
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => _ThemeModeSheet(app: app),
+                    );
+                  },
+                ),
+
+                _settingsTile(
+                  context,
+                  icon: Icons.language_outlined,
+                  title: 'اللغة',
+                  subtitle: 'تغيير لغة التطبيق',
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const _LanguageSheet(),
+                    );
+                  },
+                ),
+              ],
+            ),
+
+            _buildSection(
+              context,
+              title: 'الخصوصية والأمان',
+              icon: Icons.shield_outlined,
+              children: [
+                _settingsTile(
+                  context,
+                  icon: Icons.security_outlined,
+                  title: 'الأمان والخصوصية',
+                  subtitle: 'إدارة إعدادات الحساب والخصوصية',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SecurityPrivacyScreen(),
+                      ),
+                    );
+                  },
+                ),
+
+                _settingsTile(
+                  context,
+                  icon: Icons.notifications_none_rounded,
+                  title: 'الإشعارات',
+                  subtitle: 'اختيار الإشعارات التي تريد استقبالها',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                        const NotificationsSettingsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+
+            _buildSection(
+              context,
+              title: 'عن التطبيق',
+              icon: Icons.apps_outlined,
+              children: [
+                _settingsTile(
+                  context,
+                  icon: Icons.star_outline_rounded,
+                  title: 'تقييم التطبيق',
+                  subtitle: 'شاركنا رأيك حول UniSpace',
+                  showArrow: false,
+                  onTap: () => _rateApp(context),
+                ),
+
+                _settingsTile(
+                  context,
+                  icon: Icons.share_outlined,
+                  title: 'مشاركة التطبيق',
+                  subtitle: 'دع أصدقاءك يعرفون عن UniSpace',
+                  showArrow: false,
+                  onTap: () => Share.share(AppLinks.shareMessage),
+                ),
+
+                _settingsTile(
+                  context,
+                  icon: Icons.info_outline_rounded,
+                  title: 'حول التطبيق',
+                  subtitle: 'معلومات عن UniSpace وإصدار التطبيق',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AboutScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+
+            if (user != null)
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .snapshots(),
+                builder: (context, snap) {
+                  final status =
+                  snap.data?.data()?['accountStatus']?.toString();
+                  final disabled = status == 'disabled';
+                  return _buildDangerSection(
+                    context,
+                    children: [
+                      _settingsTile(
+                        context,
+                        icon: Icons.logout_rounded,
+                        title: 'تسجيل الخروج',
+                        subtitle: 'الخروج من حسابك الحالي',
+                        iconColor: colors.error,
+                        titleColor: colors.error,
+                        showArrow: false,
+                        onTap: () => _logout(context),
+                      ),
+                      if (disabled)
+                        _settingsTile(
+                          context,
+                          icon: Icons.play_circle_outline_rounded,
+                          title: 'إلغاء التعطيل',
+                          subtitle: 'إعادة إظهار حسابك والعودة للاستخدام',
+                          iconColor: const Color(0xFF16A34A),
+                          showArrow: false,
+                          onTap: () => _reactivateAccount(context),
+                        )
+                      else
+                        _settingsTile(
+                          context,
+                          icon: Icons.pause_circle_outline_rounded,
+                          title: 'تعطيل الحساب',
+                          subtitle:
+                          'إخفاء حسابك مؤقتًا مع إمكانية العودة لاحقًا',
+                          iconColor: Colors.orange.shade700,
+                          showArrow: false,
+                          onTap: () => _deactivateAccount(context),
+                        ),
+                      _settingsTile(
+                        context,
+                        icon: Icons.delete_forever_outlined,
+                        title: 'حذف الحساب',
+                        subtitle:
+                        'حذف نهائي للبيانات ولا يمكن التراجع عنه',
+                        iconColor: colors.error,
+                        titleColor: colors.error,
+                        showArrow: false,
+                        onTap: () => _deleteAccount(context),
+                      ),
+                    ],
+                  );
+                },
+              )
+            else
+              _buildSection(
+                context,
+                title: 'الحساب',
+                icon: Icons.account_circle_outlined,
+                children: [
+                  _settingsTile(
+                    context,
+                    icon: Icons.login_rounded,
+                    title: 'تسجيل الدخول',
+                    subtitle: 'سجّل الدخول للوصول إلى حسابك',
+                    showArrow: false,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+
+            const SizedBox(height: 28),
+
+            Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.school_outlined,
+                    size: 22,
+                    color: colors.primary.withOpacity(.65),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'UniSpace',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: colors.onSurface.withOpacity(.75),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '© ${DateTime.now().year}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+    );
+  }
+
+  Widget _buildPageHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        IconButton(
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          },
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'رجوع',
+          color: colors.onSurface,
+        ),
+
+        const SizedBox(width: 4),
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'الإعدادات',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -.4,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'خصص تجربتك داخل UniSpace',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: colors.primaryContainer,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.tune_rounded,
+            color: colors.onPrimaryContainer,
+          ),
+        ),
+      ],
+    );
+  }
+
+
+  Widget _buildProfileCard(
+      BuildContext context, {
+        required User user,
+        String? displayName,
+        String? email,
+      }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    final name = displayName?.isNotEmpty == true
+        ? displayName!
+        : 'مستخدم UniSpace';
+
+    final userEmail = email?.isNotEmpty == true
+        ? email!
+        : 'مرحبًا بك في UniSpace';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            colors.primary,
+            Color.alphaBlend(
+              colors.secondary.withOpacity(.35),
+              colors.primary,
+            ),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: colors.primary.withOpacity(.18),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
         children: [
-          // —— الحساب ——
-          _settingsHeader(context, 'الحساب'),
-          _settingsCard(context, children: [
-            ListTile(
-              leading: const Icon(Icons.block_rounded),
-              title: const Text('الحسابات المحظورة'),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const BlockedUsersScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_add_alt_1_outlined),
-              title: const Text('طلبات المتابعة'),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const FollowRequestsScreen(),
+          CircleAvatar(
+            radius: 31,
+            backgroundColor: Colors.white.withOpacity(.22),
+            backgroundImage: user.photoURL != null
+                ? NetworkImage(user.photoURL!)
+                : null,
+            child: user.photoURL == null
+                ? const Icon(
+              Icons.person_rounded,
+              color: Colors.white,
+              size: 34,
+            )
+                : null,
+          ),
+
+          const SizedBox(width: 14),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
                   ),
-                );
-              },
-            ),
-          ]),
-
-          // —— المظهر ——
-          _settingsHeader(context, 'المظهر واللغة'),
-          _settingsCard(context, children: [
-            ListTile(
-              leading: const Icon(Icons.color_lens_outlined),
-              title: const Text('تغيير السمة'),
-              subtitle: Text(
-                app._themeMode == ThemeMode.light
-                    ? 'فاتح'
-                    : app._themeMode == ThemeMode.dark
-                    ? 'داكن'
-                    : 'حسب النظام',
-              ),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => _ThemeModeSheet(app: app),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.language_outlined),
-              title: const Text('تغيير اللغة'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (_) => _LanguageSheet(),
-                );
-              },
-            ),
-          ]),
-
-          // —— الخصوصية والأمان ——
-          _settingsHeader(context, 'الخصوصية والأمان'),
-          _settingsCard(context, children: [
-            ListTile(
-              leading: const Icon(Icons.security_outlined),
-              title: const Text('الأمان والخصوصية'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const SecurityPrivacyScreen(),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  userEmail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withOpacity(.82),
                   ),
-                );
-              },
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.notifications_outlined),
-              title: const Text('إعدادات الإشعارات'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const NotificationsSettingsScreen(),
+          ),
+
+          Icon(
+            Icons.verified_user_outlined,
+            color: Colors.white.withOpacity(.88),
+            size: 23,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(
+      BuildContext context, {
+        required String title,
+        required IconData icon,
+        required List<Widget> children,
+      }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              start: 4,
+              end: 4,
+              bottom: 10,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: colors.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w800,
                   ),
-                );
-              },
-            ),
-          ]),
-
-          // —— المحتوى ——
-          // _settingsHeader(context, 'المحتوى'),
-          // _settingsCard(context, children: [
-          //   ListTile(
-          //     leading: const Icon(Icons.download_outlined),
-          //     title: const Text('التحميلات'),
-          //     trailing: const Icon(Icons.chevron_right_rounded),
-          //     onTap: () {
-          //       Navigator.push(
-          //         context,
-          //         MaterialPageRoute(builder: (_) => const DownloadsScreen()),
-          //       );
-          //     },
-          //   ),
-          // ]),
-
-          // —— التطبيق ——
-          _settingsHeader(context, 'التطبيق'),
-          _settingsCard(context, children: [
-            ListTile(
-              leading: const Icon(Icons.star_rate_outlined),
-              title: const Text('تقييم التطبيق'),
-              onTap: () => _rateApp(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text('مشاركة التطبيق'),
-              onTap: () => Share.share(AppLinks.shareMessage),
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('حول التطبيق'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AboutScreen()),
-                );
-              },
-            ),
-
-          ]),
-
-          // —— خطر ——
-          _settingsHeader(context, 'الحساب'),
-          _settingsCard(context, children: [
-            if (user != null) ...[
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.redAccent),
-                title: const Text(
-                  'تسجيل الخروج',
-                  style: TextStyle(color: Colors.redAccent),
                 ),
-                onTap: () => _logout(context),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: Icon(Icons.pause_circle_outline, ),
-                title: Text(
-                  'تعطيل الحساب',
-                  //style: TextStyle(color: Colors.orange.shade800),
-                ),
-                subtitle: const Text('إخفاء حسابك مؤقتاً مع إمكانية العودة لاحقاً'),
-                onTap: () => _deactivateAccount(context),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.delete_forever_outlined, ),
-                title: const Text(
-                  'حذف الحساب',
-                  //style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
-                ),
-                subtitle: const Text('حذف نهائي للبيانات — لا يمكن التراجع'),
-                onTap: () => _deleteAccount(context),
-              ),
-            ] else
-              ListTile(
-                leading: const Icon(Icons.login),
-                title: const Text('تسجيل الدخول'),
-                onTap: () => Navigator.of(context).pop(),
-              ),
-          ]),
+              ],
+            ),
+          ),
 
-          const SizedBox(height: 16),
-          Center(
-            child: Text(
-              'UniSpace © ${DateTime.now().year}',
-              style: TextStyle(color: theme.hintColor, fontSize: 12),
+          _buildGroupCard(
+            context,
+            children: children,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDangerSection(
+      BuildContext context, {
+        required List<Widget> children,
+      }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              start: 4,
+              end: 4,
+              bottom: 10,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 18,
+                  color: colors.error,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'إجراءات الحساب',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: colors.error,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Container(
+            decoration: BoxDecoration(
+              color: colors.errorContainer.withOpacity(.32),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: colors.error.withOpacity(.12),
+              ),
+            ),
+            child: Column(
+              children: _addDividers(
+                children,
+                dividerColor: colors.error.withOpacity(.10),
+              ),
             ),
           ),
         ],
@@ -35882,28 +40434,120 @@ class AccountSettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _settingsHeader(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w700,
-          fontSize: 13,
+  Widget _buildGroupCard(
+      BuildContext context, {
+        required List<Widget> children,
+      }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withOpacity(.42),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colors.outlineVariant.withOpacity(.28),
+        ),
+      ),
+      child: Column(
+        children: _addDividers(
+          children,
+          dividerColor: colors.outlineVariant.withOpacity(.28),
         ),
       ),
     );
   }
 
-  Widget _settingsCard(BuildContext context, {required List<Widget> children}) {
+  List<Widget> _addDividers(
+      List<Widget> children, {
+        required Color dividerColor,
+      }) {
+    final result = <Widget>[];
+
+    for (var i = 0; i < children.length; i++) {
+      result.add(children[i]);
+
+      if (i < children.length - 1) {
+        result.add(
+          Divider(
+            height: 1,
+            thickness: 1,
+            indent: 72,
+            endIndent: 16,
+            color: dividerColor,
+          ),
+        );
+      }
+    }
+
+    return result;
+  }
+
+  Widget _settingsTile(
+      BuildContext context, {
+        required IconData icon,
+        required String title,
+        required String subtitle,
+        required VoidCallback onTap,
+        Color? iconColor,
+        Color? titleColor,
+        bool showArrow = true,
+      }) {
     final theme = Theme.of(context);
-    return Material(
-      color: theme.cardColor,
-      borderRadius: BorderRadius.circular(14),
-      child: Column(children: children),
+    final colors = theme.colorScheme;
+
+    final resolvedIconColor = iconColor ?? colors.primary;
+
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 7,
+      ),
+      minVerticalPadding: 8,
+      leading: Container(
+        width: 43,
+        height: 43,
+        decoration: BoxDecoration(
+          color: resolvedIconColor.withOpacity(.12),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Icon(
+          icon,
+          size: 21,
+          color: resolvedIconColor,
+        ),
+      ),
+      title: Text(
+        title,
+        style: theme.textTheme.bodyLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: titleColor ?? colors.onSurface,
+        ),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+            height: 1.25,
+          ),
+        ),
+      ),
+      trailing: showArrow
+          ? Icon(
+        Icons.chevron_left_rounded,
+        size: 22,
+        color: colors.onSurfaceVariant,
+      )
+          : null,
     );
   }
+
 }
 
 Future<void> showBlockedAccountsSheet(BuildContext context) {
@@ -36420,7 +41064,7 @@ class _ProfilePostsPane extends StatelessWidget {
                       compact: true,
                       onChanged: onChanged,
                       onDelete: () async {},
-                      onHidden: () {},
+                      onHidden: onChanged,
                       allowPin: onSetPinned != null,
                       isPinned: true,
                       onSetPinned: onSetPinned,
@@ -36433,7 +41077,7 @@ class _ProfilePostsPane extends StatelessWidget {
                     compact: true,
                     onChanged: onChanged,
                     onDelete: () async {},
-                    onHidden: () {},
+                    onHidden: onChanged,
                     allowPin: onSetPinned != null,
                     isPinned: false,
                     onSetPinned: onSetPinned,
@@ -36447,7 +41091,7 @@ class _ProfilePostsPane extends StatelessWidget {
                   compact: true,
                   onChanged: onChanged,
                   onDelete: () async {},
-                  onHidden: () {},
+                  onHidden: onChanged,
                   allowPin: onSetPinned != null,
                   isPinned: currentPinnedId != null &&
                       currentPinnedId == post.id,
@@ -36557,7 +41201,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   bool _loadingComments = true;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _postsStream;
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _presenceSub;
+  Set<String> _hiddenPostIds = {};
 
+  bool _isOnline = false;
+  DateTime? _lastSeenAt;
+  bool _showOnlineStatus = true;
+  bool _showLastSeen = true;
   bool _loadingProfile = true;
   String _displayName = '';
   String _username = '';
@@ -36616,12 +41266,15 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     _loadUserComments();
     _scrollController.addListener(_onScroll);
     _loadProfile();
+    _listenPresence();
     _loadBlockState();
+    _loadHiddenPosts();
     _checkAccess();
     _checkFollowing();
     _loadCounts();
     _loadBlockState();
     blockedListRevision.addListener(_loadBlockState);
+    hiddenListRevision.addListener(_loadHiddenPosts);
 
   }
   Future<void> _blockFromProfile() async {
@@ -36647,10 +41300,50 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _tabController.dispose();
-
+    _presenceSub?.cancel();
+    hiddenListRevision.removeListener(_loadHiddenPosts);
     blockedListRevision.removeListener(_loadBlockState);
     super.dispose();
   }
+
+  void _listenPresence() {
+    _presenceSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userId)
+        .snapshots()
+        .listen((doc) {
+      if (!mounted || !doc.exists) return;
+      final data = doc.data() ?? {};
+      final priv = data['privacy'];
+      final pmap = priv is Map ? Map<String, dynamic>.from(priv) : null;
+      final ts = data['lastSeenAt'];
+      setState(() {
+        _isOnline = data['isOnline'] == true;
+        if (ts is Timestamp) _lastSeenAt = ts.toDate();
+        if (!_isSelf) {
+          _unavailable = isUserDocUnavailable(data);
+        }
+        _showOnlineStatus = pmap?['showOnline'] != false;
+        _showLastSeen = pmap?['showLastSeen'] == true;
+      });
+    });
+  }
+
+  String? get _presenceText {
+    final allowOnline = _isSelf || _showOnlineStatus;
+    final allowSeen = _isSelf || _showLastSeen;
+    if (allowOnline && _isOnline) return 'متصل';
+    if (allowSeen && _lastSeenAt != null) {
+      final d = DateTime.now().difference(_lastSeenAt!);
+      if (d.inMinutes < 1) return 'آخر ظهور الآن';
+      if (d.inMinutes < 60) return 'آخر ظهور منذ ${d.inMinutes}د';
+      if (d.inHours < 24) return 'آخر ظهور منذ ${d.inHours}س';
+      if (d.inDays == 1) return 'آخر ظهور أمس';
+      return 'آخر ظهور منذ ${d.inDays}ي';
+    }
+    return null;
+  }
+
   Future<void> _checkAccess() async {
     if (_isSelf) {
       if (mounted) setState(() => _checkingAccess = false);
@@ -36692,7 +41385,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       _checkingAccess = false;
     });
   }
-
+  Future<void> _loadHiddenPosts() async {
+    if (_isSelf) return;
+    final ids = await loadHiddenPostIds();
+    if (!mounted) return;
+    setState(() => _hiddenPostIds = ids);
+  }
   Future<void> _confirmBlock() async {
     final me = FirebaseAuth.instance.currentUser;
     if (me == null) {
@@ -36787,7 +41485,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       targetId: targetId,
     );
     if (!mounted) return;
-
     if (already) {
       await showReportSubmittedSheet(
         context,
@@ -36818,7 +41515,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     if (result == null || !mounted) return;
 
     try {
-      await submitCommunityReport(
+      await runWithReportSpinner(context, () => submitCommunityReport(
         type: CommunityReportType.user,
         targetId: targetId,
         ownerId: targetId,
@@ -36831,7 +41528,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           'photoUrl': _photoUrl,
           'mood': _mood,
         },
-      );
+      ));
       if (!mounted) return;
       await showReportSubmittedSheet(
         context,
@@ -36920,6 +41617,18 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           (pmap?['followersVisibility'] ?? 'everyone').toString();
       _followingVisibility =
           (pmap?['followingVisibility'] ?? 'everyone').toString();
+
+      if (!widget.userId.isEmpty &&
+          !_isSelf &&
+          isUserDocUnavailable(data)) {
+        if (!mounted) return;
+        setState(() {
+          _unavailable = true;
+          _loadingProfile = false;
+          _checkingAccess = false;
+        });
+        return;
+      }
 
       if (!mounted) return;
       setState(() {
@@ -37293,6 +42002,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         ),
       );
     }
+    if (!_isSelf && _unavailable) {
+      return _blockedProfileScaffold(
+        t: t,
+        title: 'هذا الحساب غير متاح',
+        subtitle: 'تم تعطيل هذا الحساب أو لم يعد موجودًا.',
+      );
+    }
     return Scaffold(
       backgroundColor: t.pageBg,
       body: Stack(
@@ -37305,7 +42021,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   !snap.hasData;
 
               final all = (snap.data?.docs ?? [])
+                  .where((d) => !isCommunityPostRemoved(d.data()))
                   .map((d) => _Post.fromFirestore(d))
+                  .where((p) {
+                final id = p.id?.trim();
+                if (id == null || id.isEmpty) return false;
+                if (!_isSelf && _hiddenPostIds.contains(id)) return false;
+                return true;
+              })
                   .toList();
               final originals = all.where((p) => !p.isRepost).toList();
               final reposts = all.where((p) => p.isRepost).toList();
@@ -37372,9 +42095,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           ),
                         );
                       },
-                      onChanged: () {
-                        if (mounted) setState(() {});
-                      },
+                      onChanged: _loadHiddenPosts,
                     ),
                     waiting
                         ? const _ProfileTabLoading()
@@ -37383,9 +42104,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       emptyLabel: 'لا توجد إعادة نشر',
                       emptyIcon: Icons.repeat_rounded,
                       t: t,
-                      onChanged: () {
-                        if (mounted) setState(() {});
-                      },
+                      onChanged: _loadHiddenPosts,
                     ),
                     _ProfileCommentsPane(
                       loading: _loadingComments,
@@ -37555,6 +42274,19 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                             );
                             return;
                           }
+                          final peer = await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(widget.userId)
+                              .get();
+                          if (isUserDocUnavailable(peer.data())) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('لا يمكن مراسلة هذا الحساب'),
+                              ),
+                            );
+                            return;
+                          }
                           if (!mounted) return;
                           await openDirectChat(
                             context,
@@ -37605,6 +42337,19 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   Text(
                     _email,
                     style: TextStyle(color: t.textFaint, fontSize: 13.5),
+                  ),
+                ],
+                if (_presenceText != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _presenceText!,
+                    style: TextStyle(
+                      color: _isOnline && (_isSelf || _showOnlineStatus)
+                          ? const Color(0xFF16A34A)
+                          : t.textFaint,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ],
@@ -38766,8 +43511,14 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
         }
       }
 
+      final hiddenPosts = await loadHiddenPostIds();
+      if (!mounted) return;
+
       for (final doc in snap.docs) {
+        if (isCommunityPostRemoved(doc.data())) continue;
         final post = _Post.fromFirestore(doc);
+        final postId = post.id?.trim();
+        if (postId != null && hiddenPosts.contains(postId)) continue;
 
         final title = post.title.toLowerCase();
         final body = post.body.toLowerCase();
@@ -40426,6 +45177,8 @@ String severityForReportReason(String reasonId) {
 }
 
 
+
+
 Future<bool> hasCommunityReport({
   required CommunityReportType type,
   required String targetId,
@@ -40461,6 +45214,26 @@ String communityReportDocId({
       return '${reporterId}_user_$targetId';
     case CommunityReportType.comment:
       return '${reporterId}_comment_$targetId';
+  }
+}
+
+Future<T> runWithReportSpinner<T>(
+    BuildContext context,
+    Future<T> Function() task,
+    ) async {
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    useRootNavigator: true,
+    builder: (_) => const Center(
+      child: CircularProgressIndicator(),
+    ),
+  );
+  try {
+    return await task();
+  } finally {
+    final nav = Navigator.of(context, rootNavigator: true);
+    if (nav.canPop()) nav.pop();
   }
 }
 
@@ -40536,6 +45309,7 @@ Future<void> submitCommunityReport({
 
   if (isNew) {
     payload['createdAt'] = FieldValue.serverTimestamp();
+    payload['history'] = [moderationHistoryEntry('reported')];
   } else if (prevStatus != null &&
       prevStatus != 'pending' &&
       prevStatus != 'dismissed') {
@@ -40543,6 +45317,23 @@ Future<void> submitCommunityReport({
   }
 
   await ref.set(payload, SetOptions(merge: true));
+
+  if (isNew && type == CommunityReportType.post) {
+    try {
+      await FirebaseFirestore.instance
+          .collection('community_posts')
+          .doc(id)
+          .set({
+        'reportCount': FieldValue.increment(1),
+        'reportScore': FieldValue.increment(
+          scoreForSeverity(severityForReportReason(reason)),
+        ),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('report score failed: $e');
+    }
+  }
 }
 
 Map<String, dynamic> communityReportSnapshotFromPost(_Post post) {
@@ -41148,108 +45939,582 @@ class _ReportSubmittedSheetState extends State<_ReportSubmittedSheet> {
 
 
 
-class BlockedUsersScreen extends StatelessWidget {
+
+
+
+
+class BlockedUsersScreen extends StatefulWidget {
   const BlockedUsersScreen({super.key});
+
+  @override
+  State<BlockedUsersScreen> createState() => _BlockedUsersScreenState();
+}
+
+class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
+
+  bool _searchOpen = false;
+  String _query = '';
+  String? _busyId;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  CollectionReference<Map<String, dynamic>>? get _col {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('blocked_accounts');
+  }
+
+  void _toggleSearch() {
+    setState(() => _searchOpen = !_searchOpen);
+    if (_searchOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    } else {
+      _searchController.clear();
+      _searchFocus.unfocus();
+      setState(() => _query = '');
+    }
+  }
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _prepare(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+      ) {
+    final copy = [...docs];
+    copy.sort((a, b) {
+      final ta = a.data()['blockedAt'];
+      final tb = b.data()['blockedAt'];
+      if (ta is Timestamp && tb is Timestamp) return tb.compareTo(ta);
+      return 0;
+    });
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return copy;
+    return copy.where((d) {
+      final data = d.data();
+      final name = (data['targetName'] ?? '').toString().toLowerCase();
+      final user = (data['targetUsername'] ?? '').toString().toLowerCase();
+      final id = (data['targetId'] ?? d.id).toString().toLowerCase();
+      return name.contains(q) || user.contains(q) || id.contains(q);
+    }).toList();
+  }
+
+  String _idOf(QueryDocumentSnapshot<Map<String, dynamic>> d) =>
+      (d.data()['targetId'] ?? d.id).toString();
+
+  String _nameOf(Map<String, dynamic> data) {
+    final n = (data['targetName'] ?? '').toString().trim();
+    return n.isEmpty ? 'مستخدم' : n;
+  }
+
+  String? _userOf(Map<String, dynamic> data) {
+    final u = (data['targetUsername'] ?? '').toString().trim();
+    return u.isEmpty ? null : u;
+  }
+
+  String? _photoOf(Map<String, dynamic> data) {
+    final p = (data['targetPhotoUrl'] ?? '').toString().trim();
+    return p.isEmpty ? null : p;
+  }
+
+  Future<void> _confirmUnblock({
+    required String userId,
+    required String name,
+  }) async {
+    if (_busyId != null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text(
+            'إلغاء الحظر؟',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            'ستظهر منشورات $name في الفيد، ويمكنكما المتابعة مجدداً.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('إلغاء الحظر'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busyId = userId);
+    try {
+      await unblockAccount(userId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('تم إلغاء حظر $name')));
+    } catch (e) {
+      debugPrint('unblock failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر إلغاء الحظر، حاول مجددًا')),
+      );
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = _ProfileTheme.of(context);
-    final me = FirebaseAuth.instance.currentUser?.uid;
+    final col = _col;
 
-    return Scaffold(
-      backgroundColor: t.pageBg,
-      appBar: AppBar(
-        title: const Text('الحسابات المحظورة'),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
         backgroundColor: t.pageBg,
-        surfaceTintColor: Colors.transparent,
-      ),
-      body: me == null
-          ? const Center(child: Text('سجّل الدخول أولاً'))
-          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(me)
-            .collection('blocked_accounts')
-            .snapshots(),
-        builder: (context, snap) {
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final docs = [...snap.data!.docs];
-          docs.sort((a, b) {
-            final ta = a.data()['blockedAt'];
-            final tb = b.data()['blockedAt'];
-            if (ta is Timestamp && tb is Timestamp) {
-              return tb.compareTo(ta);
-            }
-            return 0;
-          });
-          if (docs.isEmpty) {
-            return Center(
-              child: Text(
-                'لا توجد حسابات محظورة',
-                style: TextStyle(color: t.textFaint),
+        appBar: AppBar(
+          backgroundColor: t.pageBg,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          titleSpacing: 0,
+          title: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: _searchOpen
+                ? TextField(
+              key: const ValueKey('blocked_search'),
+              controller: _searchController,
+              focusNode: _searchFocus,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              onChanged: (v) => setState(() => _query = v),
+              decoration: InputDecoration(
+                hintText: 'ابحث في المحظورين',
+                border: InputBorder.none,
+                hintStyle: TextStyle(color: t.textFaint),
               ),
-            );
-          }
-          return ListView.separated(
-            itemCount: docs.length,
-            separatorBuilder: (_, __) =>
-                Divider(height: 1, color: t.cardBorder),
-            itemBuilder: (context, i) {
-              final d = docs[i].data();
-              final id = (d['targetId'] ?? docs[i].id).toString();
-              final name = (d['targetName'] ?? 'مستخدم').toString();
-              final photo = d['targetPhotoUrl']?.toString();
-              return ListTile(
-                leading: LiveAuthorPhoto(
-                  userId: id,
-                  fallbackUrl: photo,
-                  size: 44,
-                  radius: 22,
-                  iconSize: 22,
+              style: TextStyle(
+                color: t.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+                : Text(
+              'الحسابات المحظورة',
+              key: const ValueKey('blocked_title'),
+              style: TextStyle(
+                color: t.textPrimary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: _searchOpen ? 'إغلاق' : 'بحث',
+              onPressed: _toggleSearch,
+              icon: Icon(
+                _searchOpen ? Icons.close_rounded : Icons.search_rounded,
+                color: t.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        body: col == null
+            ? Center(
+          child: Text(
+            'سجّل الدخول أولاً',
+            style: TextStyle(color: t.textFaint),
+          ),
+        )
+            : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: col.snapshots(),
+          builder: (context, snap) {
+            if (snap.hasError) {
+              return Center(
+                child: Text(
+                  'تعذر تحميل القائمة',
+                  style: TextStyle(color: t.textFaint),
                 ),
-                title: Text(
-                  name,
-                  style: TextStyle(
-                    color: t.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                trailing: TextButton(
-                  onPressed: () => unblockAccount(id),
-                  child: Text(
-                    'إلغاء الحظر',
-                    style: TextStyle(
-                      color: AppTeal.main,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => UserProfileScreen(
-                        userId: id,
-                        initialName: name,
-                        initialPhotoUrl: photo,
-                      ),
-                    ),
-                  );
-                },
               );
-            },
-          );
-        },
+            }
+            if (!snap.hasData) {
+              return const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
+              );
+            }
+
+            final all = snap.data!.docs;
+            final docs = _prepare(all);
+
+            if (all.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.block_rounded,
+                          size: 40, color: t.textFaint),
+                      const SizedBox(height: 12),
+                      Text(
+                        'لا توجد حسابات محظورة',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: t.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            if (docs.isEmpty) {
+              return Center(
+                child: Text(
+                  'لا نتائج مطابقة',
+                  style: TextStyle(color: t.textFaint),
+                ),
+              );
+            }
+
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 24),
+              itemCount: docs.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                indent: 72,
+                color: t.cardBorder.withValues(alpha: 0.7),
+              ),
+              itemBuilder: (context, i) {
+                final d = docs[i];
+                final data = d.data();
+                final id = _idOf(d);
+                final name = _nameOf(data);
+                return _BlockedUserRow(
+                  userId: id,
+                  name: name,
+                  username: _userOf(data),
+                  photoUrl: _photoOf(data),
+                  busy: _busyId == id,
+                  t: t,
+                  onUnblock: () =>
+                      _confirmUnblock(userId: id, name: name),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
 }
 
+class _BlockedUserRow extends StatelessWidget {
+  const _BlockedUserRow({
+    required this.userId,
+    required this.name,
+    required this.username,
+    required this.photoUrl,
+    required this.busy,
+    required this.t,
+    required this.onUnblock,
+  });
+
+  final String userId;
+  final String name;
+  final String? username;
+  final String? photoUrl;
+  final bool busy;
+  final _ProfileTheme t;
+  final VoidCallback onUnblock;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Semantics(
+      container: true,
+      label: username == null
+          ? name
+          : '$name، اسم المستخدم $username',
+      child: Container(
+        margin: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: t.cardBorder.withOpacity(.75),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(.04),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: busy ? null : onUnblock,
+              splashColor: colorScheme.primary.withOpacity(.06),
+              highlightColor: colorScheme.primary.withOpacity(.03),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(
+                  14,
+                  12,
+                  12,
+                  12,
+                ),
+                child: Row(
+
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildAvatar(),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildUserInfo(),
+                    ),
+                    const SizedBox(width: 10),
+                    _buildActionButton(colorScheme),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar() {
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        LiveAuthorPhoto(
+          userId: userId,
+          fallbackUrl: photoUrl,
+          size: 48,
+          radius: 24,
+          iconSize: 22,
+        ),
+        Container(
+          width: 15,
+          height: 15,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            shape: BoxShape.circle,
+          ),
+          padding: const EdgeInsets.all(2),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: t.textFaint.withOpacity(.65),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserInfo() {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name.trim().isEmpty ? 'مستخدم' : name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: t.textPrimary,
+              fontSize: 15,
+              height: 1.2,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (username != null && username!.trim().isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(
+              '@${username!.trim()}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textDirection: TextDirection.ltr,
+              style: TextStyle(
+                color: t.textFaint,
+                fontSize: 12.5,
+                height: 1.1,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+          const SizedBox(height: 7),
+          _buildBlockedBadge(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlockedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: t.textFaint.withOpacity(.09),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        'محظور',
+        style: TextStyle(
+          color: t.textFaint,
+          fontSize: 10.5,
+          height: 1,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(ColorScheme colorScheme) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SizedBox(
+        height: 38,
+        child: FilledButton(
+          onPressed: busy ? null : onUnblock,
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            disabledBackgroundColor: colorScheme.primary.withOpacity(.65),
+            disabledForegroundColor: colorScheme.onPrimary.withOpacity(.9),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            minimumSize: const Size(0, 38),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+            ),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            child: busy
+                ? const SizedBox(
+              key: ValueKey('loading'),
+              width: 17,
+              height: 17,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+                : const Row(
+              key: ValueKey('label'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_open_rounded,
+                  size: 16,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'إلغاء الحظر',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
 // ============================================================================
 // END OF FILE — UniSpace
 // ============================================================================
+
+Future<bool> isPeerUnavailable(String uid) async {
+  if (uid.trim().isEmpty) return false;
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid.trim())
+        .get();
+    return isUserDocUnavailable(doc.data());
+  } catch (_) {
+    return false;
+  }
+}
+
+Future<Set<String>> loadUnavailableUserIds(Iterable<String> ids) async {
+  final out = <String>{};
+  final list = ids
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toSet()
+      .toList();
+  for (var i = 0; i < list.length; i += 10) {
+    final end = i + 10 > list.length ? list.length : i + 10;
+    final chunk = list.sublist(i, end);
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .where(FieldPath.documentId, whereIn: chunk)
+        .get();
+    for (final d in snap.docs) {
+      if (isUserDocUnavailable(d.data())) out.add(d.id);
+    }
+  }
+  return out;
+}
+
+bool isUserDocUnavailable(Map<String, dynamic>? data) {
+  final status = data?['accountStatus']?.toString();
+  if (status == 'disabled' || status == 'deleted') return true;
+  final sec = data?['security'];
+  return sec is Map && sec['frozen'] == true;
+}
+
+
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -41266,74 +46531,88 @@ final FlutterLocalNotificationsPlugin _localNotifs =
 FlutterLocalNotificationsPlugin();
 
 Future<void> initPushNotifications() async {
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  try {
+    final messaging = FirebaseMessaging.instance;
 
-  final messaging = FirebaseMessaging.instance;
-  await messaging.requestPermission(alert: true, badge: true, sound: true);
+    try {
+      await messaging
+          .requestPermission(alert: true, badge: true, sound: true)
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('FCM permission: $e');
+    }
 
-  await _localNotifs
-      .resolvePlatformSpecificImplementation<
-      AndroidFlutterLocalNotificationsPlugin>()
-      ?.createNotificationChannel(_fcmChannel);
+    await _localNotifs
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_fcmChannel);
 
-  await _localNotifs.initialize(
-    const InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      iOS: DarwinInitializationSettings(),
-    ),
-    onDidReceiveNotificationResponse: (res) {
-      final payload = res.payload;
-      if (payload == null || payload.isEmpty) return;
-      // يُفتح من الشاشة الحالية عبر navigatorKey
-      unispaceNavigatorKey.currentState?.context;
-      _handleFcmPayload(payload);
-    },
-  );
-
-  await messaging.setForegroundNotificationPresentationOptions(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-
-  FirebaseMessaging.onMessage.listen((msg) async {
-    final n = msg.notification;
-    if (n == null) return;
-    await _localNotifs.show(
-      msg.hashCode,
-      n.title,
-      n.body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _fcmChannel.id,
-          _fcmChannel.name,
-          channelDescription: _fcmChannel.description,
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-        iOS: const DarwinNotificationDetails(),
+    await _localNotifs.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
       ),
-      payload: jsonEncode(msg.data),
+      onDidReceiveNotificationResponse: (res) {
+        final payload = res.payload;
+        if (payload == null || payload.isEmpty) return;
+        _handleFcmPayload(payload);
+      },
     );
-  });
 
-  FirebaseMessaging.onMessageOpenedApp.listen((msg) {
-    _openFromFcmData(msg.data);
-  });
+    await messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
 
-  final initial = await messaging.getInitialMessage();
-  if (initial != null) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _openFromFcmData(initial.data);
+    FirebaseMessaging.onMessage.listen((msg) async {
+      final n = msg.notification;
+      if (n == null) return;
+      await _localNotifs.show(
+        msg.hashCode,
+        n.title,
+        n.body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _fcmChannel.id,
+            _fcmChannel.name,
+            channelDescription: _fcmChannel.description,
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+          iOS: const DarwinNotificationDetails(),
+        ),
+        payload: jsonEncode(msg.data),
+      );
     });
-  }
 
-  await saveFcmToken();
-  FirebaseMessaging.instance.onTokenRefresh.listen((t) => saveFcmToken(t));
-  FirebaseAuth.instance.authStateChanges().listen((user) {
-    if (user != null) saveFcmToken();
-  });
+    FirebaseMessaging.onMessageOpenedApp.listen((msg) {
+      _openFromFcmData(msg.data);
+    });
+
+    try {
+      final initial = await messaging
+          .getInitialMessage()
+          .timeout(const Duration(seconds: 8));
+      if (initial != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _openFromFcmData(initial.data);
+        });
+      }
+    } catch (e) {
+      debugPrint('FCM initial message: $e');
+    }
+
+    await saveFcmToken();
+    FirebaseMessaging.instance.onTokenRefresh.listen((t) => saveFcmToken(t));
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) saveFcmToken();
+    });
+  } catch (e, st) {
+    debugPrint('initPushNotifications failed: $e');
+    debugPrintStack(stackTrace: st);
+  }
 }
 
 final unispaceNavigatorKey = GlobalKey<NavigatorState>();
@@ -41341,7 +46620,14 @@ final unispaceNavigatorKey = GlobalKey<NavigatorState>();
 Future<void> saveFcmToken([String? token]) async {
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) return;
-  token ??= await FirebaseMessaging.instance.getToken();
+  try {
+    token ??= await FirebaseMessaging.instance
+        .getToken()
+        .timeout(const Duration(seconds: 8));
+  } catch (e) {
+    debugPrint('getToken: $e');
+    return;
+  }
   if (token == null || token.isEmpty) return;
   try {
     await FirebaseFirestore.instance
@@ -41384,4 +46670,1781 @@ void _openFromFcmData(Map<String, dynamic> data) {
     read: false,
   );
   _openNotification(ctx, n);
+}
+
+class HiddenPostsScreen extends StatefulWidget {
+  const HiddenPostsScreen({super.key});
+
+  @override
+  State<HiddenPostsScreen> createState() => _HiddenPostsScreenState();
+}
+
+class _HiddenPostsScreenState extends State<HiddenPostsScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  // ===== منشورات =====
+  bool _loadingPosts = true;
+  String? _postsError;
+  List<_Post> _posts = [];
+
+  // ===== تعليقات =====
+  bool _loadingComments = true;
+  String? _commentsError;
+  List<_CommentSearchHit> _hiddenComments = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadPosts();
+    _loadComments();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // ---------------------------------------------------------------------
+  // منشورات
+  // ---------------------------------------------------------------------
+  Future<void> _loadPosts() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() {
+        _loadingPosts = false;
+        _postsError = 'يجب تسجيل الدخول أولاً';
+      });
+      return;
+    }
+    setState(() {
+      _loadingPosts = true;
+      _postsError = null;
+    });
+    try {
+      final hiddenSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('hidden_posts')
+          .get();
+      final ids = hiddenSnap.docs.map((d) => d.id).toList();
+      if (ids.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _posts = [];
+          _loadingPosts = false;
+        });
+        return;
+      }
+
+      final posts = <_Post>[];
+      for (var i = 0; i < ids.length; i += 10) {
+        final chunk = ids.sublist(i, i + 10 > ids.length ? ids.length : i + 10);
+        final snap = await FirebaseFirestore.instance
+            .collection('community_posts')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        for (final d in snap.docs) {
+          try {
+            posts.add(_Post.fromFirestore(d));
+          } catch (_) {}
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _posts = posts;
+        _loadingPosts = false;
+      });
+    } catch (e) {
+      debugPrint('load hidden posts failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loadingPosts = false;
+        _postsError = 'تعذر تحميل المنشورات المخفية';
+      });
+    }
+  }
+
+  Future<void> _unhidePost(String postId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('hidden_posts')
+          .doc(postId)
+          .delete();
+      if (!mounted) return;
+      setState(() => _posts.removeWhere((p) => p.id == postId));
+      blockedListRevision.value++;
+      hiddenListRevision.value++;
+    } catch (e) {
+      debugPrint('unhide post failed: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // تعليقات
+  // ---------------------------------------------------------------------
+  Future<void> _loadComments() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() {
+        _loadingComments = false;
+        _commentsError = 'يجب تسجيل الدخول أولاً';
+      });
+      return;
+    }
+    setState(() {
+      _loadingComments = true;
+      _commentsError = null;
+    });
+    try {
+      final hiddenSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('hidden_comments')
+          .get();
+
+      final Map<String, List<String>> byPost = {};
+      for (final d in hiddenSnap.docs) {
+        final data = d.data();
+        final postId = (data['postId'] ?? '').toString();
+        final commentId = (data['commentId'] ?? d.id).toString();
+        if (postId.isEmpty || commentId.isEmpty) continue;
+        byPost.putIfAbsent(postId, () => []).add(commentId);
+      }
+
+      if (byPost.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _hiddenComments = [];
+          _loadingComments = false;
+        });
+        return;
+      }
+
+      final postIds = byPost.keys.toList();
+      final posts = <String, _Post>{};
+      for (var i = 0; i < postIds.length; i += 10) {
+        final chunk =
+        postIds.sublist(i, i + 10 > postIds.length ? postIds.length : i + 10);
+        final snap = await FirebaseFirestore.instance
+            .collection('community_posts')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        for (final doc in snap.docs) {
+          try {
+            posts[doc.id] = _Post.fromFirestore(doc);
+          } catch (_) {}
+        }
+      }
+
+      _Comment? find(_Comment c, String id) {
+        if (c.id == id) return c;
+        for (final r in c.replies) {
+          final f = find(r, id);
+          if (f != null) return f;
+        }
+        return null;
+      }
+
+      final hits = <_CommentSearchHit>[];
+      byPost.forEach((postId, commentIds) {
+        final post = posts[postId];
+        if (post == null) return;
+        for (final cid in commentIds) {
+          _Comment? found;
+          for (final c in post.comments) {
+            found = find(c, cid);
+            if (found != null) break;
+          }
+          if (found != null) {
+            hits.add(_CommentSearchHit(post: post, comment: found));
+          }
+        }
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _hiddenComments = hits;
+        _loadingComments = false;
+      });
+    } catch (e) {
+      debugPrint('load hidden comments failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loadingComments = false;
+        _commentsError = 'تعذر تحميل التعليقات المخفية';
+      });
+    }
+  }
+
+  Future<void> _unhideComment(String commentId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('hidden_comments')
+          .doc(commentId)
+          .delete();
+      if (!mounted) return;
+      setState(() =>
+          _hiddenComments.removeWhere((h) => h.comment.id == commentId));
+      hiddenListRevision.value++;
+    } catch (e) {
+      debugPrint('unhide comment failed: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    final t = _ProfileTheme.of(context);
+    return Scaffold(
+      backgroundColor: t.pageBg,
+      appBar: AppBar(
+        title: const Text('العناصر المخفبة'),
+        backgroundColor: t.pageBg,
+        surfaceTintColor: Colors.transparent,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: t.textPrimary,
+          unselectedLabelColor: t.textFaint,
+          indicatorColor: AppTeal.main,
+          tabs: const [
+            Tab(text: 'منشورات'),
+            Tab(text: 'تعليقات'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildPostsTab(),
+          _buildCommentsTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostsTab() {
+    return RefreshIndicator(
+      onRefresh: _loadPosts,
+      child: _loadingPosts
+          ? const Center(child: CircularProgressIndicator())
+          : _postsError != null
+          ? ListView(
+        children: [
+          const SizedBox(height: 80),
+          Center(child: Text(_postsError!)),
+        ],
+      )
+          : _posts.isEmpty
+          ? ListView(
+        children: const [
+          SizedBox(height: 80),
+          EmptyState(
+            icon: Icons.visibility_off_outlined,
+            title: 'لا توجد منشورات مخفية',
+          ),
+        ],
+      )
+          : ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        itemCount: _posts.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, i) {
+          final p = _posts[i];
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _RedditStylePostCard(
+                post: p,
+                accent: Theme.of(context).colorScheme.primary,
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: p.id == null ? null : () => _unhidePost(p.id!),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.visibility_off_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCommentsTab() {
+    return RefreshIndicator(
+      onRefresh: _loadComments,
+      child: _loadingComments
+          ? const Center(child: CircularProgressIndicator())
+          : _commentsError != null
+          ? ListView(
+        children: [
+          const SizedBox(height: 80),
+          Center(child: Text(_commentsError!)),
+        ],
+      )
+          : _hiddenComments.isEmpty
+          ? ListView(
+        children: const [
+          SizedBox(height: 80),
+          EmptyState(
+            icon: Icons.visibility_off_outlined,
+            title: 'لا توجد تعليقات مخفية',
+          ),
+        ],
+      )
+          : ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        itemCount: _hiddenComments.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, i) {
+          final hit = _hiddenComments[i];
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _RedditStyleCommentTile(
+                hit: hit,
+                accent: Theme.of(context).colorScheme.primary,
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => _unhideComment(hit.comment.id),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.visibility_off_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+final moderationRevision = ValueNotifier<int>(0);
+
+class CommunityReportsInboxScreen extends StatefulWidget {
+  const CommunityReportsInboxScreen({super.key});
+
+  @override
+  State<CommunityReportsInboxScreen> createState() =>
+      _CommunityReportsInboxScreenState();
+}
+
+class _CommunityReportsInboxScreenState
+    extends State<CommunityReportsInboxScreen> {
+  String _filter = 'pending';
+  String _search = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  // ===== عدّادات سريعة لكل حالة (لعرضها فالرأس) =====
+  Map<String, int> _counts = {
+    'pending': 0,
+    'actioned': 0,
+    'dismissed': 0,
+    'restored': 0,
+  };
+
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _countsSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenCounts();
+  }
+
+  @override
+  void dispose() {
+    _countsSub?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _listenCounts() {
+    _countsSub = FirebaseFirestore.instance
+        .collection('community_reports')
+        .snapshots()
+        .listen((snap) {
+      final next = {'pending': 0, 'actioned': 0, 'dismissed': 0, 'restored': 0};
+      for (final d in snap.docs) {
+        final s = (d.data()['status'] ?? 'pending').toString();
+        next[s] = (next[s] ?? 0) + 1;
+      }
+      if (mounted) setState(() => _counts = next);
+    });
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'comment':
+        return 'تعليق';
+      case 'user':
+        return 'حساب';
+      default:
+        return 'منشور';
+    }
+  }
+
+  String _reasonLabel(String id) {
+    switch (id) {
+      case 'academic/exam_leak':
+        return 'تسريب امتحان أو فرض';
+      case 'academic/cheating':
+        return 'غش أو بيع حلول';
+      case 'academic/misinfo':
+        return 'معلومات دراسية مضللة';
+      case 'abuse':
+        return 'إساءة أو تنمّر';
+      case 'sexual':
+        return 'محتوى غير لائق';
+      case 'spam':
+        return 'إعلان أو سبام';
+      case 'impersonation':
+        return 'انتحال شخصية';
+      case 'hate':
+        return 'خطاب كراهية';
+      case 'harassment':
+        return 'مضايقة';
+      case 'fake':
+        return 'حساب وهمي';
+      case 'inappropriate_profile':
+        return 'معلومات غير لائقة';
+      case 'other':
+        return 'أخرى';
+      default:
+        return id;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'actioned':
+        return 'مخفي';
+      case 'dismissed':
+        return 'مرفوض';
+      case 'restored':
+        return 'مستعاد';
+      default:
+        return 'معلّق';
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'actioned':
+        return const Color(0xFFDC2626);
+      case 'dismissed':
+        return const Color(0xFF64748B);
+      case 'restored':
+        return const Color(0xFF16A34A);
+      default:
+        return AppTeal.main;
+    }
+  }
+
+  Color _severityColor(String sev) {
+    switch (sev) {
+      case 'P1':
+        return const Color(0xFFDC2626);
+      case 'P2':
+        return const Color(0xFFF59E0B);
+      default:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  String _emptyLabel() {
+    switch (_filter) {
+      case 'actioned':
+        return 'لا يوجد محتوى مخفي';
+      case 'dismissed':
+        return 'لا توجد تبليغات مرفوضة';
+      case 'restored':
+        return 'لا توجد محتويات مستعادة';
+      default:
+        return 'لا توجد تبليغات معلّقة حاليًا 🎉';
+    }
+  }
+
+  IconData _emptyIcon() {
+    switch (_filter) {
+      case 'actioned':
+        return Icons.visibility_off_outlined;
+      case 'dismissed':
+        return Icons.block_flipped;
+      case 'restored':
+        return Icons.restore_rounded;
+      default:
+        return Icons.task_alt_rounded;
+    }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(14),
+      ),
+    );
+  }
+  Future<void> _reopen(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    try {
+      await doc.reference.set({
+        'status': 'pending',
+        'reviewedAt': FieldValue.serverTimestamp(),
+        'reviewedBy': FirebaseAuth.instance.currentUser?.uid,
+        'history': FieldValue.arrayUnion([moderationHistoryEntry('reopened')]),
+      }, SetOptions(merge: true));
+      moderationRevision.value++;
+      _toast('أُعيد فتح التبليغ');
+    } catch (e) {
+      _toast('تعذر إعادة الفتح');
+    }
+  }
+
+  Future<void> _dismiss(String reportId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('community_reports')
+          .doc(reportId)
+          .set({
+        'status': 'dismissed',
+        'reviewedAt': FieldValue.serverTimestamp(),
+        'reviewedBy': FirebaseAuth.instance.currentUser?.uid,
+        'history': FieldValue.arrayUnion([moderationHistoryEntry('dismissed')]),
+      }, SetOptions(merge: true));
+      _toast('تم رفض التبليغ');
+    } catch (e) {
+      debugPrint('dismiss report failed: $e');
+      _toast('تعذر رفض التبليغ');
+    }
+  }
+
+  Future<void> _restore(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    final data = doc.data();
+    final type = data['type']?.toString();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final db = FirebaseFirestore.instance;
+    final batch = db.batch();
+
+    batch.set(
+      doc.reference,
+      {
+        'status': 'restored',
+        'reviewedAt': FieldValue.serverTimestamp(),
+        'reviewedBy': uid,
+        'history': FieldValue.arrayUnion([moderationHistoryEntry('restored')]),
+      },
+      SetOptions(merge: true),
+    );
+
+    if (type == 'post') {
+      final postId = (data['targetId'] ?? data['postId'] ?? '').toString();
+      if (postId.isEmpty) {
+        _toast('لا يوجد منشور مرتبط');
+        return;
+      }
+      batch.set(
+        db.collection('community_posts').doc(postId),
+        {
+          'moderation.status': 'cleared',
+          'reportCount': 0,
+          'reportScore': 0,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    } else if (type == 'comment') {
+      final commentId =
+      (data['commentId'] ?? data['targetId'] ?? '').toString().trim();
+      final postId =
+      (data['parentId'] ?? data['postId'] ?? '').toString().trim();
+      if (postId.isEmpty || commentId.isEmpty) {
+        _toast('لا يوجد تعليق مرتبط');
+        return;
+      }
+      batch.set(
+        db.collection('community_posts').doc(postId),
+        {
+          'moderation.hiddenCommentIds': FieldValue.arrayRemove([commentId]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    try {
+      await batch.commit();
+      moderationRevision.value++;
+      _toast('تمت استعادة المحتوى');
+    } catch (e) {
+      debugPrint('restore report failed: $e');
+      _toast('تعذر استعادة المحتوى');
+    }
+  }
+
+  Future<void> _action(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
+    final data = doc.data();
+    final type = data['type']?.toString();
+    final targetId = (data['targetId'] ?? data['postId'] ?? '').toString();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final db = FirebaseFirestore.instance;
+    final batch = db.batch();
+
+    batch.set(
+      doc.reference,
+      {
+        'status': 'actioned',
+        'reviewedAt': FieldValue.serverTimestamp(),
+        'reviewedBy': uid,
+        'history': FieldValue.arrayUnion([moderationHistoryEntry('hidden_by_mod')]),
+      },
+      SetOptions(merge: true),
+    );
+
+    if (type == 'post') {
+      if (targetId.isEmpty) {
+        _toast('لا يوجد منشور مرتبط');
+        return;
+      }
+      batch.set(
+        db.collection('community_posts').doc(targetId),
+        {
+          'moderation': {
+            'status': 'removed',
+            'reportId': doc.id,
+            'at': FieldValue.serverTimestamp(),
+            'by': uid,
+          },
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    } else if (type == 'comment') {
+      final commentId =
+      (data['commentId'] ?? data['targetId'] ?? '').toString().trim();
+      final postId =
+      (data['parentId'] ?? data['postId'] ?? '').toString().trim();
+      if (postId.isEmpty || commentId.isEmpty) {
+        _toast('لا يوجد تعليق مرتبط');
+        return;
+      }
+      batch.set(
+        db.collection('community_posts').doc(postId),
+        {
+          'moderation.hiddenCommentIds': FieldValue.arrayUnion([commentId]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    } else {
+      _toast('تبليغ الحساب يُرفض أو يُؤرشف فقط');
+      return;
+    }
+
+    try {
+      await batch.commit();
+      moderationRevision.value++;
+      _toast(type == 'comment'
+          ? 'تم إخفاء التعليق للجميع'
+          : 'تم إخفاء المنشور للجميع');
+    } catch (e) {
+      debugPrint('action report failed: $e');
+      _toast('تعذر إخفاء المحتوى');
+    }
+  }
+
+  Future<void> _openSheet(
+      QueryDocumentSnapshot<Map<String, dynamic>> d,
+      Map<String, dynamic> data,
+      ) async {
+    final type = data['type']?.toString() ?? 'post';
+    final reason = data['reason']?.toString() ?? '';
+    final owner = data['ownerName']?.toString() ?? '';
+    final status = data['status']?.toString() ?? 'pending';
+    final snapMap = data['snapshot'];
+    String preview = '';
+    if (snapMap is Map) {
+      preview = (snapMap['body'] ??
+          snapMap['text'] ??
+          snapMap['title'] ??
+          snapMap['displayName'] ??
+          '')
+          .toString();
+    }
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    _StatusChip(label: _statusLabel(status), color: _statusColor(status)),
+                    const SizedBox(width: 8),
+                    Text(
+                      _typeLabel(type),
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _reasonLabel(reason),
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                ),
+                if (owner.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.person_outline_rounded, size: 16, color: Theme.of(ctx).hintColor),
+                      const SizedBox(width: 4),
+                      Text('صاحب المحتوى: $owner'),
+                    ],
+                  ),
+                ],
+                if ((data['details'] ?? '').toString().trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text('تفاصيل المُبلِّغ: ${data['details']}'),
+                  ),
+                ],
+                if (preview.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    preview,
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Theme.of(ctx).hintColor, height: 1.4),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                if (status == 'pending' && (type == 'post' || type == 'comment'))
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(ctx, 'remove'),
+                      icon: const Icon(Icons.visibility_off_rounded, size: 18),
+                      label: const Text('إخفاء للجميع'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFDC2626),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                if (status == 'pending') ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(ctx, 'dismiss'),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      label: const Text('رفض التبليغ'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ],
+                if (status == 'actioned')
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(ctx, 'restore'),
+                      icon: const Icon(Icons.restore_rounded, size: 18),
+                      label: const Text('استعادة المحتوى'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                if (status == 'dismissed' || status == 'restored') ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(ctx, 'reopen'),
+                      icon: const Icon(Icons.replay_rounded, size: 18),
+                      label: const Text('تراجع: إعادة فتح التبليغ'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (action == 'dismiss') {
+      await _dismiss(d.id);
+    } else if (action == 'remove') {
+      await _action(d);
+    } else if (action == 'restore') {
+      await _restore(d);
+    } else if (action == 'reopen') {
+  await _reopen(d);
+  }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isCommunityModerator()) {
+      return const Scaffold(
+        body: Center(child: Text('غير مصرّح')),
+      );
+    }
+
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: const Text('مراجعة التبليغات', style: TextStyle(fontWeight: FontWeight.w800)),
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+      ),
+      body: Column(
+        children: [
+          // ===== شريط إحصائيات سريعة =====
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+            child: Row(
+              children: [
+                _StatChip(
+                  label: 'معلّق',
+                  count: _counts['pending'] ?? 0,
+                  color: AppTeal.main,
+                  icon: Icons.hourglass_top_rounded,
+                ),
+                const SizedBox(width: 8),
+                _StatChip(
+                  label: 'مخفي',
+                  count: _counts['actioned'] ?? 0,
+                  color: const Color(0xFFDC2626),
+                  icon: Icons.visibility_off_rounded,
+                ),
+                const SizedBox(width: 8),
+                _StatChip(
+                  label: 'مرفوض',
+                  count: _counts['dismissed'] ?? 0,
+                  color: const Color(0xFF64748B),
+                  icon: Icons.block_flipped,
+                ),
+              ],
+            ),
+          ),
+
+          // ===== فلاتر بشكل كبسولات =====
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _FilterPill(
+                    label: 'معلّق',
+                    value: 'pending',
+                    selected: _filter == 'pending',
+                    count: _counts['pending'] ?? 0,
+                    color: AppTeal.main,
+                    onTap: () => setState(() => _filter = 'pending'),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterPill(
+                    label: 'مخفي',
+                    value: 'actioned',
+                    selected: _filter == 'actioned',
+                    count: _counts['actioned'] ?? 0,
+                    color: const Color(0xFFDC2626),
+                    onTap: () => setState(() => _filter = 'actioned'),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterPill(
+                    label: 'مرفوض',
+                    value: 'dismissed',
+                    selected: _filter == 'dismissed',
+                    count: _counts['dismissed'] ?? 0,
+                    color: const Color(0xFF64748B),
+                    onTap: () => setState(() => _filter = 'dismissed'),
+                  ),
+                  const SizedBox(width: 8),
+                  _FilterPill(
+                    label: 'مستعاد',
+                    value: 'restored',
+                    selected: _filter == 'restored',
+                    count: _counts['restored'] ?? 0,
+                    color: const Color(0xFF16A34A),
+                    onTap: () => setState(() => _filter = 'restored'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ===== حقل بحث بسيط باسم صاحب المحتوى =====
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
+              style: const TextStyle(fontSize: 13.5),
+              decoration: InputDecoration(
+                hintText: 'ابحث باسم صاحب المحتوى...',
+                hintStyle: TextStyle(fontSize: 13, color: theme.hintColor),
+                prefixIcon: Icon(Icons.search_rounded, size: 20, color: theme.hintColor),
+                suffixIcon: _search.isEmpty
+                    ? null
+                    : IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _search = '');
+                  },
+                ),
+                filled: true,
+                fillColor: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.04),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('community_reports')
+                  .where('status', isEqualTo: _filter)
+                  .snapshots(),
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'تعذر تحميل التبليغات\n${snap.error}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+                if (!snap.hasData) {
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                    itemCount: 4,
+                    itemBuilder: (_, __) => const _ReportCardSkeleton(),
+                  );
+                }
+                var docs = [...snap.data!.docs];
+
+                if (_search.isNotEmpty) {
+                  docs = docs.where((d) {
+                    final owner = (d.data()['ownerName'] ?? '').toString().toLowerCase();
+                    return owner.contains(_search);
+                  }).toList();
+                }
+
+                docs.sort((a, b) {
+                  const order = {'P1': 0, 'P2': 1, 'P3': 2};
+                  final sa = order[a.data()['severity']?.toString()] ?? 9;
+                  final sb = order[b.data()['severity']?.toString()] ?? 9;
+                  if (sa != sb) return sa.compareTo(sb);
+                  final ta = a.data()['createdAt'];
+                  final tb = b.data()['createdAt'];
+                  if (ta is Timestamp && tb is Timestamp) return tb.compareTo(ta);
+                  return 0;
+                });
+
+                if (docs.isEmpty) {
+                  return _EmptyModerationState(
+                    icon: _emptyIcon(),
+                    label: _emptyLabel(),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) {
+                    final d = docs[i];
+                    final data = d.data();
+                    final type = data['type']?.toString() ?? 'post';
+                    final reason = data['reason']?.toString() ?? '';
+                    final status = data['status']?.toString() ?? 'pending';
+                    final severity = data['severity']?.toString() ?? 'P3';
+
+                    return _ModerationReportCard(
+                      data: data,
+                      severityColor: _severityColor(severity),
+                      severityLabel: severity,
+                      statusLabel: _statusLabel(status),
+                      statusColor: _statusColor(status),
+                      reasonLabel: _reasonLabel(reason),
+                      typeLabel: _typeLabel(type),
+                      onReview: () => _openSheet(d, data),
+                      onQuickDismiss: status == 'pending' ? () => _dismiss(d.id) : null,
+                      onQuickAction:
+                      status == 'pending' && type != 'user' ? () => _action(d) : null,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== شريط إحصائيات صغير أعلى الصفحة ====================
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.icon,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.22)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 14, color: color),
+                const SizedBox(width: 4),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 10.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== كبسولة فلتر مع عداد ====================
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.count,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool selected;
+  final int count;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? color : color.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: selected ? Colors.white : color,
+              ),
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: selected ? Colors.white.withValues(alpha: 0.25) : color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    color: selected ? Colors.white : color,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== حالة فارغة عصرية ====================
+class _EmptyModerationState extends StatelessWidget {
+  const _EmptyModerationState({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTeal.main.withValues(alpha: 0.08),
+              ),
+              child: Icon(icon, size: 32, color: AppTeal.main),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== هيكل تحميل (Skeleton) ====================
+class _ReportCardSkeleton extends StatefulWidget {
+  const _ReportCardSkeleton();
+
+  @override
+  State<_ReportCardSkeleton> createState() => _ReportCardSkeletonState();
+}
+
+class _ReportCardSkeletonState extends State<_ReportCardSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.06);
+
+    return FadeTransition(
+      opacity: Tween(begin: 0.4, end: 1.0).animate(_c),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Container(width: 60, height: 18, decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(20))),
+              const Spacer(),
+              Container(width: 40, height: 12, decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(6))),
+            ]),
+            const SizedBox(height: 14),
+            Container(width: double.infinity, height: 60, decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(12))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== شارة الحالة ====================
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== بطاقة التبليغ الرئيسية (معاد تصميمها) ====================
+class _ModerationReportCard extends StatefulWidget {
+  const _ModerationReportCard({
+    required this.data,
+    required this.severityColor,
+    required this.severityLabel,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.reasonLabel,
+    required this.typeLabel,
+    required this.onReview,
+    this.onQuickDismiss,
+    this.onQuickAction,
+  });
+
+  final Map<String, dynamic> data;
+  final Color severityColor;
+  final String severityLabel;
+  final String statusLabel;
+  final Color statusColor;
+  final String reasonLabel;
+  final String typeLabel;
+  final VoidCallback onReview;
+  final VoidCallback? onQuickDismiss;
+  final VoidCallback? onQuickAction;
+
+  @override
+  State<_ModerationReportCard> createState() => _ModerationReportCardState();
+}
+
+class _ModerationReportCardState extends State<_ModerationReportCard> {
+  _Post? _post;
+  _Comment? _comment;
+  bool _loading = true;
+  bool _expanded = false;
+
+  String get _type => widget.data['type']?.toString() ?? 'post';
+
+  String get _postId {
+    if (_type == 'comment') {
+      return (widget.data['parentId'] ?? widget.data['postId'] ?? '').toString().trim();
+    }
+    return (widget.data['targetId'] ?? widget.data['postId'] ?? '').toString().trim();
+  }
+
+  String get _commentId =>
+      (widget.data['commentId'] ?? widget.data['targetId'] ?? '').toString().trim();
+
+  String get _timeAgo {
+    final raw = widget.data['createdAt'];
+    if (raw is! Timestamp) return '';
+    final diff = DateTime.now().difference(raw.toDate());
+    if (diff.inDays > 0) return 'منذ ${diff.inDays}ي';
+    if (diff.inHours > 0) return 'منذ ${diff.inHours}س';
+    if (diff.inMinutes > 0) return 'منذ ${diff.inMinutes}د';
+    return 'الآن';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  _Comment? _findComment(List<_Comment> list, String id) {
+    for (final c in list) {
+      if (c.id == id) return c;
+      final nested = _findComment(c.replies, id);
+      if (nested != null) return nested;
+    }
+    return null;
+  }
+
+  Future<void> _load() async {
+    final id = _postId;
+    if (id.isEmpty) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final snap =
+      await FirebaseFirestore.instance.collection('community_posts').doc(id).get();
+      if (!mounted) return;
+      if (!snap.exists) {
+        setState(() => _loading = false);
+        return;
+      }
+      final post = _Post.fromFirestore(snap);
+      _Comment? comment;
+      if (_type == 'comment') {
+        comment = _findComment(post.comments, _commentId);
+        if (comment == null) {
+          final shot = widget.data['snapshot'];
+          if (shot is Map) {
+            comment = _Comment(
+              id: _commentId,
+              author: (shot['authorName'] ?? widget.data['ownerName'] ?? '').toString(),
+              authorId: shot['authorId']?.toString(),
+              authorPhotoUrl: shot['authorPhotoUrl']?.toString(),
+              text: (shot['text'] ?? '').toString(),
+              createdAt: shot['createdAt'] is Timestamp
+                  ? (shot['createdAt'] as Timestamp).toDate()
+                  : DateTime.now(),
+            );
+          }
+        }
+      }
+      setState(() {
+        _post = post;
+        _comment = comment;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('moderation preview failed: $e');
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openPost() async {
+    var post = _post;
+    if (post == null && _postId.isNotEmpty) {
+      final snap =
+      await FirebaseFirestore.instance.collection('community_posts').doc(_postId).get();
+      if (snap.exists) post = _Post.fromFirestore(snap);
+    }
+    if (!mounted) return;
+    if (post == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('تعذر فتح المنشور')));
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CommentsScreen(
+          post: post!,
+          initialCommentId: _type == 'comment' ? _commentId : null,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmQuickAction() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('إخفاء للجميع؟'),
+          content: Text(_type == 'comment'
+              ? 'سيتم إخفاء هذا التعليق عن كل المستخدمين.'
+              : 'سيتم إخفاء هذا المنشور عن كل المستخدمين.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('إخفاء'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok == true) widget.onQuickAction?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = AppTeal.main;
+
+    return Material(
+      color: isDark ? const Color(0xFF16181C) : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.06),
+          ),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ===== شريط لون حسب الخطورة =====
+              Container(width: 4, color: widget.severityColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ===== رأس البطاقة =====
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: widget.severityColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              widget.severityLabel,
+                              style: TextStyle(
+                                color: widget.severityColor,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 10.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          _StatusChip(label: widget.statusLabel, color: widget.statusColor),
+                          const SizedBox(width: 6),
+                          Icon(
+                            _type == 'comment'
+                                ? Icons.mode_comment_outlined
+                                : _type == 'user'
+                                ? Icons.person_outline_rounded
+                                : Icons.article_outlined,
+                            size: 13,
+                            color: accent,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            widget.typeLabel,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: accent,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_timeAgo.isNotEmpty)
+                            Text(
+                              _timeAgo,
+                              style: TextStyle(fontSize: 11, color: theme.hintColor),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.reasonLabel,
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      if ((widget.data['ownerName'] ?? '').toString().trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'صاحب المحتوى: ${widget.data['ownerName']}',
+                          style: TextStyle(fontSize: 12, color: theme.hintColor),
+                        ),
+                      ],
+
+                      const SizedBox(height: 10),
+
+                      // ===== معاينة المحتوى (قابلة للطي/الفتح لتوفير المساحة) =====
+                      if (_loading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      else
+                        InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => setState(() => _expanded = !_expanded),
+                          child: AnimatedCrossFade(
+                            duration: const Duration(milliseconds: 200),
+                            crossFadeState:
+                            _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                            firstChild: _CompactPreview(
+                              type: _type,
+                              post: _post,
+                              comment: _comment,
+                              theme: theme,
+                            ),
+                            secondChild: _type == 'post' && _post != null
+                                ? _RedditStylePostCard(post: _post!, accent: accent)
+                                : _type == 'comment' && _comment != null && _post != null
+                                ? _RedditStyleCommentTile(
+                              hit: _CommentSearchHit(post: _post!, comment: _comment!),
+                              accent: accent,
+                            )
+                                : Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Text(
+                                _type == 'user' ? 'تبليغ عن حساب' : 'تعذر تحميل المحتوى',
+                                style: TextStyle(color: theme.hintColor),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      const SizedBox(height: 10),
+
+                      // ===== أزرار الإجراء =====
+                      Row(
+                        children: [
+                          if (_type != 'user')
+                            _RoundIconAction(
+                              icon: Icons.open_in_new_rounded,
+                              tooltip: 'فتح',
+                              onTap: _openPost,
+                            ),
+                          const SizedBox(width: 6),
+                          if (widget.onQuickDismiss != null)
+                            _RoundIconAction(
+                              icon: Icons.close_rounded,
+                              tooltip: 'رفض',
+                              color: const Color(0xFF64748B),
+                              onTap: widget.onQuickDismiss,
+                            ),
+                          const SizedBox(width: 6),
+                          if (widget.onQuickAction != null)
+                            _RoundIconAction(
+                              icon: Icons.visibility_off_rounded,
+                              tooltip: 'إخفاء للجميع',
+                              color: const Color(0xFFDC2626),
+                              onTap: _confirmQuickAction,
+                            ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: widget.onReview,
+                            style: TextButton.styleFrom(
+                              foregroundColor: accent,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            child: const Text(
+                              'التفاصيل الكاملة',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== معاينة مختصرة (سطر أو سطرين) قبل التوسيع ====================
+class _CompactPreview extends StatelessWidget {
+  const _CompactPreview({
+    required this.type,
+    required this.post,
+    required this.comment,
+    required this.theme,
+  });
+
+  final String type;
+  final _Post? post;
+  final _Comment? comment;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    String text = '';
+    if (type == 'comment' && comment != null) {
+      text = comment!.text.trim();
+    } else if (post != null) {
+      text = post!.title.trim().isNotEmpty ? post!.title.trim() : post!.body.trim();
+    }
+    if (text.isEmpty) text = 'لا يوجد محتوى نصي';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, height: 1.35, color: theme.colorScheme.onSurface),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(Icons.expand_more_rounded, size: 18, color: theme.hintColor),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== زر إجراء دائري صغير ====================
+class _RoundIconAction extends StatelessWidget {
+  const _RoundIconAction({
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? Theme.of(context).colorScheme.onSurface;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: c.withValues(alpha: 0.08),
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 17, color: c),
+          ),
+        ),
+      ),
+    );
+  }
 }

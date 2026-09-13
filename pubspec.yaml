@@ -22,7 +22,7 @@ dependencies:
   # واجهة التطبيق
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.3.2
-  local_auth: ^2.3.0
+  local_auth: 2.3.0
   crypto: ^3.0.6
   device_info_plus: ^11.1.0
   package_info_plus: ^8.1.0
@@ -34,7 +34,7 @@ dependencies:
   google_sign_in: ^6.3.0
   cloud_firestore: ^5.4.4
   cloud_functions: ^5.1.3
-  firebase_messaging: 15.2.5
+  firebase_messaging: ^15.2.5
 
   file_selector: ^1.0.3
   firebase_storage: ^12.3.0
@@ -56,7 +56,7 @@ dependencies:
   gallery_saver_plus: ^3.2.9
   image_cropper: ^12.2.1
   video_player: ^2.10.1
-  flutter_local_notifications: 18.0.1
+  flutter_local_notifications: ^18.0.1
   timezone: ^0.9.4
   lucide_icons_flutter: ^3.1.15
   visibility_detector: ^0.4.0+2
@@ -67,6 +67,12 @@ dependencies:
   equatable: ^2.1.0
   gal: ^2.3.3
   flutter_chat_ui: 1.6.15
+  record: ^7.1.1
+  file_picker: 8.1.2
+  just_audio: 0.9.40
+  emoji_picker_flutter: 4.5.4
+  photo_manager: 3.6.4
+  emojis: ^3.2.0
 
 
 
@@ -100,8 +106,11 @@ flutter:
     - assets/fonts/
     - assets/icons/
 
-fonts:
   fonts:
+    - family: NotoColorEmoji
+      fonts:
+        - asset: assets/fonts/NotoColorEmoji.ttf
+
     - family: Pacifico
       fonts:
         - asset: assets/fonts/Pacifico-Regular.ttf
@@ -111,5 +120,6 @@ fonts:
         - asset: assets/fonts/Tajawal-Regular.ttf
         - asset: assets/fonts/Tajawal-Bold.ttf
           weight: 700
+
 flutter_intl:
   enabled: true
