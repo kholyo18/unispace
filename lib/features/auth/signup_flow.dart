@@ -1,3 +1,4 @@
+import '../../services/media_upload_limits.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -236,7 +237,12 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     return true;
   }
 
+  int _usernameGeneration = 0;
   void _handleUsernameChange(String value) {
+    final generation = ++_usernameGeneration;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    bool current() => mounted && generation == _usernameGeneration && uid == FirebaseAuth.instance.currentUser?.uid;
+    setState(() { _usernameAvailable = null; _usernameStatus = null; _checkingUsername = false; });
     _usernameDebounce?.cancel();
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
@@ -254,23 +260,24 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       return;
     }
     _usernameDebounce = Timer(const Duration(milliseconds: 400), () async {
+      if (!current()) return;
       setState(() => _checkingUsername = true);
       try {
         final result = await _service.checkUsername(trimmed);
-        if (!mounted) return;
+        if (!current()) return;
         setState(() {
           _usernameAvailable = result.available;
           _usernameStatus =
-          result.available ? 'متاح' : result.reason ?? 'مستعمل';
+          result.available ? 'متاح وقت الفحص (غير محجوز)' : result.reason ?? 'مستعمل';
         });
       } on SignupServiceException catch (e) {
-        if (!mounted) return;
+        if (!current()) return;
         setState(() {
           _usernameAvailable = null;
           _usernameStatus = _mapSignupError(e.code);
         });
       } finally {
-        if (mounted) setState(() => _checkingUsername = false);
+        if (current()) setState(() => _checkingUsername = false);
       }
     });
   }
@@ -332,8 +339,13 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;
     final ref = FirebaseStorage.instance.ref('users/$uid/$name');
-    await ref.putFile(File(file.path), SettableMetadata(contentType: 'image/jpeg'));
-    return ref.getDownloadURL();
+    final image = File(file.path);
+    validateMediaUploadSize(await image.length(), video: false);
+    if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
+    await ref.putFile(image, SettableMetadata(contentType: 'image/jpeg'));
+    final url = await ref.getDownloadURL();
+    if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
+    return url;
   }
 
   Future<void> _pick({required bool cover}) async {
@@ -379,14 +391,11 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       final major = skipAcademic ? '' : _major.text.trim();
       final level = skipAcademic ? '' : _level.text.trim();
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      await _service.completeProfile({
         'firstName': first,
         'lastName': last,
-        'name': full,
-        'displayName': full,
         'username': _username.text.trim(),
-        'email': user.email,
-        'birthDate': _birth == null ? null : Timestamp.fromDate(_birth!),
+        'birthDate': _birth?.millisecondsSinceEpoch,
         'gender': _gender,
         if (photoUrl != null) 'profileImageUrl': photoUrl,
         if (coverUrl != null) 'coverImageUrl': coverUrl,
@@ -394,9 +403,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
         'department': department,
         'major': major,
         'level': level,
-        'onboardingCompleted': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      }, expectedUid: user.uid);
 
       if (!skipAcademic && college.isNotEmpty) {
         await AppSettings.instance.setAcademicShortcut(
@@ -422,7 +429,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       Navigator.of(context).popUntil((r) => r.isFirst);
     } catch (e) {
       if (!mounted) return;
-      _snack('تعذر حفظ الملف: $e');
+      _snack(e is SignupServiceException && e.code == 'already-exists'
+          ? 'اسم المستخدم حُجز لحساب آخر، اختر اسمًا مختلفًا' : 'تعذر حفظ الملف: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

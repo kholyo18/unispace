@@ -1,0 +1,18 @@
+[
+  {
+    "release": "projects/fachub-c631c/releases/firebase.storage/fachub-c631c.firebasestorage.app",
+    "ruleset": "projects/fachub-c631c/rulesets/b4f60519-a949-459b-85ce-d6613f7b113d",
+    "updatedAt": "2026-09-05T18:42:51.970348Z",
+    "files": [
+      "0-0-storage.rules"
+    ]
+  },
+  {
+    "release": "projects/fachub-c631c/releases/cloud.firestore",
+    "ruleset": "projects/fachub-c631c/rulesets/2e9677c3-0d2f-4082-b881-ba6f8ccbe814",
+    "updatedAt": "2026-09-09T14:22:10.368002Z",
+    "files": [
+      "1-0-firestore.rules"
+    ]
+  }
+]

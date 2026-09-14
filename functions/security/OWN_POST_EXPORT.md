@@ -1,0 +1,7 @@
+# Own post export pages
+
+readOwnPostExportPage verifies bearer, cutoff/account state and authorId ownership in a transaction. Pages ordered by document ID contain at most 50 posts and approximately 4 MiB of projected post data; oversized pages stop before the limit with a resumable cursor. Timestamps become ISO strings. Exports content fields, aggregate vote/comment counts, the caller's own comments on these posts and repost references. Excludes voter identities, other authors' comments, poll responses, internal moderation and embedded repost snapshots. This is not a full account portability implementation; comments on other authors' posts were not covered by the old export and remain out of this slice. Legacy content fields are still exported as stored.
+
+Client replaces the last explicit community_posts export query with pagination, records scope in JSON and checks UID/mounted before requesting, writing and sharing. Other account-export sections still use their current per-user Firestore paths and require review. File remains in app temporary storage as before; large exports still accumulate in client memory. Pages do not represent one frozen database snapshot.
+
+Candidate now denies direct post reads as well as mutations; remains untested/unpublished. Deploy all migrated callables before compatible client and rules. Deferred: owner isolation, revoked/disabled sessions, pagination/byte cap, nested comments, exclusions, account switch, file/share, large account and all app content reads.

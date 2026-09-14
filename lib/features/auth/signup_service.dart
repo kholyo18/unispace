@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../ui/settings/session_service.dart';
@@ -23,7 +24,34 @@ class SignupService {
   final FirebaseAuth _auth;
 
   Future<UsernameAvailability> checkUsername(String username) async {
-    return const UsernameAvailability(available: true);
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw SignupServiceException('unauthenticated');
+    try {
+      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('checkSignupUsername').call({'username': username});
+      if (uid != _auth.currentUser?.uid) throw SignupServiceException('unauthenticated');
+      final data = Map<String, dynamic>.from(result.data as Map);
+      if (data['username'] != username || data['available'] is! bool) throw SignupServiceException('unknown');
+      return UsernameAvailability(available: data['available'] as bool);
+    } on FirebaseFunctionsException catch (e) {
+      throw SignupServiceException(e.code);
+    } on SignupServiceException { rethrow; }
+    catch (_) { throw SignupServiceException('unknown'); }
+  }
+
+  Future<void> completeProfile(Map<String, dynamic> profile, {required String expectedUid}) async {
+    if (_auth.currentUser?.uid != expectedUid) throw SignupServiceException('unauthenticated');
+    try {
+      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('completeSignupProfile').call(profile);
+      if (_auth.currentUser?.uid != expectedUid) throw SignupServiceException('unauthenticated');
+      final data = Map<String, dynamic>.from(result.data as Map);
+      if (data['completed'] != true || data['uid'] != expectedUid || data['username'] != profile['username']) {
+        throw SignupServiceException('unknown');
+      }
+    } on FirebaseFunctionsException catch (e) { throw SignupServiceException(e.code); }
+    on SignupServiceException { rethrow; }
+    catch (_) { throw SignupServiceException('unknown'); }
   }
 
   Future<void> startSignup({

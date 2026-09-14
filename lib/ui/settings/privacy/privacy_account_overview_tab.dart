@@ -1,3 +1,5 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import '../../../services/post_privacy_sync.dart';
 import '../profile_privacy.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
@@ -287,29 +289,54 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
 
     setState(() => _exporting = true);
     try {
-      final db = FirebaseFirestore.instance;
-      final userRef = db.collection('users').doc(uid);
 
-      final userSnap = await userRef.get();
-      final userData = Map<String, dynamic>.from(userSnap.data() ?? {});
-      userData.remove('fcmTokens');
+      final profileResponse = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readOwnProfileExport').call(<String, dynamic>{});
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('Account changed');
+      final profileExport = Map<String, dynamic>.from(profileResponse.data as Map);
+      final userData = Map<String, dynamic>.from(profileExport['profile'] as Map);
+      final exportedPrivacy = Map<String, dynamic>.from(profileExport['privacy'] as Map);
 
+      void checkExportAccount() {
+        if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('Account changed');
+      }
       Future<List<Map<String, dynamic>>> col(String name) async {
-        final snap = await userRef.collection(name).get();
-        return snap.docs
-            .map((d) => {'id': d.id, ...d.data()})
-            .toList();
+        final items = <Map<String, dynamic>>[];
+        String? cursor;
+        while (true) {
+          checkExportAccount();
+          final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+              .httpsCallable('readOwnListExportPage').call({'collection': name, 'cursor': cursor});
+          checkExportAccount();
+          final page = Map<String, dynamic>.from(response.data as Map);
+          for (final row in page['items'] as List) {
+            items.add(Map<String, dynamic>.from(row as Map));
+          }
+          if (page['exhausted'] == true) return items;
+          final next = page['cursor'];
+          if (page['exhausted'] != false || next is! String || next.isEmpty ||
+              (cursor != null && next.compareTo(cursor) <= 0)) throw StateError('Invalid list export cursor');
+          cursor = next;
+        }
       }
 
-      final postsSnap = await db
-          .collection('community_posts')
-          .where('authorId', isEqualTo: uid)
-          .get();
-      final posts = postsSnap.docs.map((d) {
-        final m = Map<String, dynamic>.from(d.data());
-        m['id'] = d.id;
-        return m;
-      }).toList();
+      final posts = <Map<String, dynamic>>[];
+      String? cursor;
+      while (true) {
+        checkExportAccount();
+        final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+            .httpsCallable('readOwnPostExportPage').call({'cursor': cursor});
+        checkExportAccount();
+        final page = Map<String, dynamic>.from(response.data as Map);
+        for (final row in page['posts'] as List) {
+          posts.add(Map<String, dynamic>.from(row as Map));
+        }
+        if (page['exhausted'] == true) break;
+        final next = page['cursor'];
+        if (page['exhausted'] != false || next is! String || next.isEmpty ||
+            (cursor != null && next.compareTo(cursor) <= 0)) throw StateError('Invalid export cursor');
+        cursor = next;
+      }
 
       Object? jsonSafe(Object? v) {
         if (v == null) return null;
@@ -330,8 +357,11 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         'exportedAt': DateTime.now().toIso8601String(),
         'uid': uid,
         'profile': userData,
-        'privacy': _settings.toMap(),
+        'privacy': exportedPrivacy,
+        'profileExportScope': 'Explicit personal profile fields and saved privacy settings; excludes device tokens, sessions, recovery data, internal security fields and unknown fields.',
         'posts': posts,
+        'postsExportScope': 'Own posts and own comments on those posts; excludes voter identities, other users comments, poll responses and repost snapshots.',
+        'listsExportScope': 'Relationship and saved/hidden item IDs, timestamps and references only; excludes cached names, photos and content snapshots.',
         'blockedAccounts': await col('blocked_accounts'),
         'hiddenPosts': await col('hidden_posts'),
         'following': await col('following'),
@@ -340,6 +370,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         'hiddenComments': await col('hidden_comments'),
       });
 
+      checkExportAccount();
       final dir = await getTemporaryDirectory();
       final file = File(
         '${dir.path}/unispace-data-$uid.json',
@@ -348,6 +379,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         const JsonEncoder.withIndent('  ').convert(payload),
       );
 
+      checkExportAccount();
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/json')],
         text: 'نسخة بيانات UniSpace',
@@ -863,71 +895,21 @@ Future<void> syncAuthorPrivateOnPosts({
   required String uid,
   required bool isPrivate,
 }) async {
-  final snap = await FirebaseFirestore.instance
-      .collection('community_posts')
-      .where('authorId', isEqualTo: uid)
-      .get();
-  if (snap.docs.isEmpty) return;
-
-  var batch = FirebaseFirestore.instance.batch();
-  var n = 0;
-  for (final d in snap.docs) {
-    batch.update(d.reference, {'authorPrivate': isPrivate});
-    n++;
-    if (n == 400) {
-      await batch.commit();
-      batch = FirebaseFirestore.instance.batch();
-      n = 0;
-    }
-  }
-  if (n > 0) await batch.commit();
+  await syncOwnPostPrivacy(uid);
 }
 
 Future<void> syncAuthorSearchFlagOnPosts({
   required String uid,
   required bool appearInSearch,
 }) async {
-  final snap = await FirebaseFirestore.instance
-      .collection('community_posts')
-      .where('authorId', isEqualTo: uid)
-      .get();
-  if (snap.docs.isEmpty) return;
-
-  var batch = FirebaseFirestore.instance.batch();
-  var n = 0;
-  for (final d in snap.docs) {
-    batch.update(d.reference, {'authorAppearInSearch': appearInSearch});
-    n++;
-    if (n == 400) {
-      await batch.commit();
-      batch = FirebaseFirestore.instance.batch();
-      n = 0;
-    }
-  }
-  if (n > 0) await batch.commit();
+  await syncOwnPostPrivacy(uid);
 }
 
 Future<void> syncAuthorHideLikesOnPosts({
   required String uid,
   required bool hide,
 }) async {
-  final snap = await FirebaseFirestore.instance
-      .collection('community_posts')
-      .where('authorId', isEqualTo: uid)
-      .get();
-  if (snap.docs.isEmpty) return;
-  var batch = FirebaseFirestore.instance.batch();
-  var n = 0;
-  for (final d in snap.docs) {
-    batch.update(d.reference, {'authorHideLikeCounts': hide});
-    n++;
-    if (n == 400) {
-      await batch.commit();
-      batch = FirebaseFirestore.instance.batch();
-      n = 0;
-    }
-  }
-  if (n > 0) await batch.commit();
+  await syncOwnPostPrivacy(uid);
 }
 
 class _HiddenWordsSheet extends StatefulWidget {

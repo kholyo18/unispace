@@ -1,0 +1,9 @@
+# Post report submission
+
+submitPostReport accepts postId, reason and details only (10000 characters maximum). Current content access and the existing shared 60/minute reader quota are checked before a transaction. The transaction rechecks primary post availability, ownership, reporter/owner account state, revocation cutoff, private profile follower membership and both-way blocks. Own posts cannot be reported. Repost ancestry and Firebase Auth state remain preflight checks.
+
+The report identity, bounded content snapshot, severity, status and timestamps come from the server. The existing reporterId_postId document ID preserves compatibility. Existing matching reports return success without changing their status/history or increasing counters. A mismatching legacy ID fails closed. New report creation and counter/score increments commit atomically. Report reasons and score weights retain the current post-report UI policy. Existing aggregate inconsistencies are not backfilled. After a post becomes unavailable (including automatic hiding), preflight rejects retries without adding another report.
+
+Client post submission uses this callable; comment/account submissions, report-existence reads, moderation reads/actions and client moderator ID lists remain separate migrations. Deploy callable before the client. Reconciled Firestore rules must deny direct report/counter writes afterward; until then old or modified clients can bypass this boundary. No deployment performed.
+
+Deferred validation: all supported reasons; extra fields; forged owners/snapshots; self-report; concurrent duplicate reports; transaction retry/failure; existing dismissed/actioned reports; private/blocked/deleted/revoked cases; automatic hide thresholds; legacy IDs; UI and emulator tests. Only source inspection and whitespace validation performed in this phase.

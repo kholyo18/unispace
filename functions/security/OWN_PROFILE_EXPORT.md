@@ -1,0 +1,7 @@
+# Own profile export projection
+
+readOwnProfileExport accepts no target ID and reads only the authenticated user's profile. Bearer verification checks revocation, UID/auth_time and tenant; transaction checks cutoff and account availability. Explicit typed allowlists cover personal/contact/academic/social/profile fields, timestamps, counts and privacy settings. Unknown fields, sessions, FCM/device tokens, recovery/security internals and role metadata are not copied. Response limited to 2 MiB, with explicit failure rather than silent truncation.
+
+Client replaces raw user-document export plus a single-token-field exclusion with the projected profile and saved server privacy settings. Export JSON includes scope. Only stored valid fields are included: missing privacy settings remain absent rather than exporting potentially stale UI defaults. Profile and subsequent pages/subcollections are not one consistent database snapshot.
+
+This is a bounded export section, not a complete account-portability audit. Remaining blocked/hidden/follow/saved sections still export their current documents and need projection review. User profile reads/writes elsewhere and sensitive-field protection in Firestore rules are unchanged. No deployment/runtime tests. Deferred: forged UID/extra fields, revoked/disabled accounts, unknown nested security fields, every supported personal field, privacy parity, oversized profile and account switch. Deploy callable before client.

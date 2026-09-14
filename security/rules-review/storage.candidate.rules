@@ -1,0 +1,65 @@
+// REVIEW CANDIDATE ONLY. Verify SDK uploads, cross-service permissions and token URLs before deployment.
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function active() {
+      return request.auth != null
+        && (!firestore.exists(/databases/(default)/documents/authRevocations/$(request.auth.uid))
+          || request.auth.token.auth_time > firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore);
+    }
+    function ownsPost(postId) {
+      return active()
+        && firestore.get(/databases/(default)/documents/community_posts/$(postId)).data.authorId == request.auth.uid;
+    }
+    function chatMember(chatId) {
+      return active()
+        && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.memberIds;
+    }
+    function media(maxBytes, pattern) {
+      return request.resource != null && request.resource.size > 0
+        && request.resource.size <= maxBytes && request.resource.contentType.matches(pattern);
+    }
+    match /users/{userId}/{fileName} {
+      allow read: if active();
+      allow create, update: if active() && request.auth.uid == userId
+        && media(20 * 1024 * 1024, 'image/.*');
+      allow delete: if active() && request.auth.uid == userId;
+    }
+    match /community_posts/{postId}/images/{fileName} {
+      // Transitional SDK reads. Download-token privacy requires a separate delivery migration.
+      allow read: if active();
+      allow create: if ownsPost(postId) && media(20 * 1024 * 1024, 'image/.*');
+      allow update: if false;
+      allow delete: if ownsPost(postId);
+    }
+    match /community_posts/{postId}/videos/{fileName} {
+      allow read: if active();
+      allow create: if ownsPost(postId) && media(200 * 1024 * 1024, 'video/.*');
+      allow update: if false;
+      allow delete: if ownsPost(postId);
+    }
+    match /community_posts/{postId}/comments/{uploaderId}/{commentId}/{fileName} {
+      allow read: if active();
+      allow create: if active() && request.auth.uid == uploaderId
+        && firestore.exists(/databases/(default)/documents/community_posts/$(postId))
+        && media(40 * 1024 * 1024, 'image/.*|video/.*');
+      allow update: if false;
+      allow delete: if active() && request.auth.uid == uploaderId;
+    }
+    match /chats/{chatId}/{folder}/{fileName} {
+      allow read: if chatMember(chatId);
+      allow create: if chatMember(chatId) && (
+        (folder == 'images' && media(40 * 1024 * 1024, 'image/.*'))
+        || (folder == 'videos' && media(40 * 1024 * 1024, 'video/.*'))
+        || (folder == 'audio' && media(40 * 1024 * 1024, 'audio/.*'))
+        || (folder == 'files' && media(20 * 1024 * 1024, 'application/octet-stream'))
+        || (folder == 'wallpaper' && fileName == request.auth.uid + '.jpg'
+          && media(20 * 1024 * 1024, 'image/.*'))
+      );
+      // Legacy chat media paths do not carry uploader IDs; do not permit peer overwrites/deletes.
+      allow update: if chatMember(chatId) && folder == 'wallpaper'
+        && fileName == request.auth.uid + '.jpg' && media(20 * 1024 * 1024, 'image/.*');
+      allow delete: if chatMember(chatId) && folder == 'wallpaper' && fileName == request.auth.uid + '.jpg';
+    }
+  }
+}

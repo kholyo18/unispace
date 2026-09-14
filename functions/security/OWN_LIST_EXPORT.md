@@ -1,0 +1,7 @@
+# Own relationship/list export
+
+readOwnListExportPage supports only blocked_accounts, hidden_posts, hidden_comments, following, followers and saved_posts under authenticated users/UID. Bearer revocation, UID/auth_time/tenant, account availability and cutoff are checked. No caller-selected UID or arbitrary collection path. Each transaction reads up to 200 documents ordered by ID, exports only per-list reference fields and ISO timestamps, and returns a cursor with a 4 MiB response limit. Oversized strings fail rather than silently truncating.
+
+Client keeps the same six JSON sections, now via callable pagination, with UID checks before/after each page. Export scope explicitly states omission of cached names/photos/content snapshots. These are the caller's relationship/bookmark records, not authorization to retrieve current target content. Legacy unknown/nested fields are omitted. Other collections such as favorites, saved_comments and blocked_users were not in this export and are not added in this slice. No full account portability claim. Large exports still accumulate in memory; pagination is not a frozen snapshot.
+
+Deploy callable before client. Rules for interactive list screens remain unchanged and require independent review. No deployment/runtime tests. Deferred: supported/forged collections, another UID/extra fields, session cutoff, empty/multi-page lists, historical schema, timestamps, exclusions, malformed responses, account switch and file-sharing flow.

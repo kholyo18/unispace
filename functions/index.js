@@ -73,6 +73,10 @@ exports.readProfileComments = onCall({ region: 'europe-west1', timeoutSeconds: 1
 exports.readProfilePosts = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
   createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }, false, 'profile'));
 
+const { createPollResultsHandler } = require('./security/poll-results');
+exports.readOwnPollResponses = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createPollResultsHandler({ auth: getAuth(), db: getFirestore() }));
+
 exports.readAuthorizedPost = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
   createContentSearchPageHandler({ auth: getAuth(), db: getFirestore() }, true));
 
@@ -117,3 +121,83 @@ exports.syncPushDevice = onCall({region:'europe-west1'},
 
 exports.detachPushDevice = onCall({region:'europe-west1'},
   createSyncPushDeviceHandler({auth:getAuth(),db:getFirestore(),FieldValue},true));
+
+const { createPollAnswerHandler } = require('./security/poll-answers');
+exports.submitPollAnswers = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createPollAnswerHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createPostReportHandler } = require('./security/post-reports');
+exports.submitPostReport = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createPostReportHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createCommentReportHandler } = require('./security/comment-reports');
+const { createAccountReportHandler } = require('./security/account-reports');
+exports.submitCommentReport = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createCommentReportHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+exports.submitAccountReport = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createAccountReportHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createModerationActionHandler } = require('./security/moderation-actions');
+exports.moderateCommunityReport = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createModerationActionHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
+
+const { createModerationInboxHandler } = require('./security/moderation-inbox');
+exports.readModerationInbox = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createModerationInboxHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createModerationPreviewHandler } = require('./security/moderation-preview');
+exports.readModerationPreview = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createModerationPreviewHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createOwnReportStatusHandler } = require('./security/own-report-status');
+exports.readOwnReportStatus = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+  createOwnReportStatusHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createOwnProfileCountsHandler } = require('./security/own-profile-counts');
+exports.readOwnProfileCounts = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+  createOwnProfileCountsHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createSyncAuthorPrivacyHandler } = require('./security/sync-author-privacy');
+exports.syncOwnPostPrivacy = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createSyncAuthorPrivacyHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createSyncAuthorIdentityHandler } = require('./security/sync-author-identity');
+exports.syncOwnPostIdentity = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createSyncAuthorIdentityHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createOwnPostExportHandler } = require('./security/own-post-export');
+exports.readOwnPostExportPage = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createOwnPostExportHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createOwnProfileExportHandler } = require('./security/own-profile-export');
+exports.readOwnProfileExport = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+  createOwnProfileExportHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createOwnListExportHandler } = require('./security/own-list-export');
+exports.readOwnListExportPage = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createOwnListExportHandler({ auth: getAuth(), db: getFirestore() }));
+
+const { createMediaDownloadHandler } = require('./security/media-download');
+exports.readPostMediaDownload = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createMediaDownloadHandler({ auth: getAuth(), db: getFirestore(),
+    bucket: () => getStorage().bucket(commentMediaBucket.value()) }));
+
+exports.readPostMediaBatch = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createMediaDownloadHandler({ auth: getAuth(), db: getFirestore(),
+    bucket: () => getStorage().bucket(commentMediaBucket.value()) }, true));
+
+exports.readCommentMediaDownload = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createMediaDownloadHandler({ auth: getAuth(), db: getFirestore(),
+    bucket: () => getStorage().bucket(commentMediaBucket.value()) }, false, true));
+
+exports.verifyCommentMediaAccess = onCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createMediaDownloadHandler({ auth: getAuth(), db: getFirestore(),
+    bucket: () => getStorage().bucket(commentMediaBucket.value()) }, false, true, {verifyOnly:true}));
+
+const { createUsernameCheckHandler } = require('./security/username-check');
+exports.checkSignupUsername = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+  createUsernameCheckHandler({auth:getAuth(), db:getFirestore()}));
+
+const { createCompleteSignupHandler } = require('./security/complete-signup');
+exports.completeSignupProfile = onCall({region:'europe-west1',timeoutSeconds:60},
+  createCompleteSignupHandler({auth:getAuth(),db:getFirestore(),bucketName:()=>commentMediaBucket.value()}));

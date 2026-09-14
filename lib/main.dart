@@ -1,3 +1,7 @@
+import 'services/post_media_links.dart';
+import 'services/authorized_post_image.dart';
+import 'services/media_upload_limits.dart';
+import 'services/post_privacy_sync.dart';
 import 'ui/settings/push_preferences_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'ui/settings/public_profile_service.dart';
@@ -6415,13 +6419,15 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
 
   Future<String> _uploadImage(Uint8List bytes, String postId, int index) async {
     try {
+      validateMediaUploadSize(bytes.length, video: false);
+      final uploadId = FirebaseFirestore.instance.collection('community_posts').doc().id;
       final storage = FirebaseStorage.instance;
       final ref = storage
           .ref()
           .child('community_posts')
           .child(postId)
           .child('images')
-          .child('image_$index.jpg');
+          .child('image_${uploadId}_$index.jpg');
 
       final uploadTask = ref.putData(
         bytes,
@@ -6656,7 +6662,8 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
             (u) => u.startsWith('http'),
         orElse: () => '',
       );
-      if (first.isEmpty) continue;
+      // Firebase video delivery is authorized when its card becomes visible.
+      if (first.isEmpty || Uri.tryParse(first)?.host == 'firebasestorage.googleapis.com') continue;
 
       // في الخلفية — DefaultCacheManager يتجاهل إن وُجد في الكاش
       DefaultCacheManager().getSingleFile(first).then((_) {}, onError: (_) {});
@@ -6735,10 +6742,11 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
     ];
   }
   void _precacheImages(List<_Post> posts) {
+    // Firebase images resolve authorized links in the card, not during feed prefetch.
     for (final post in posts) {
       for (final url in post.imagePaths) {
         final u = url.trim();
-        if (u.startsWith('http')) {
+        if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
           precacheImage(CachedNetworkImageProvider(u), context);
         }
       }
@@ -6746,7 +6754,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
       for (final s in post.pollSlides) {
         if (s['type']?.toString() != 'image') continue;
         final u = (s['url'] ?? s['mediaPath'] ?? '').toString().trim();
-        if (u.startsWith('http')) {
+        if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
           precacheImage(CachedNetworkImageProvider(u), context);
         }
       }
@@ -6822,11 +6830,13 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
     }
 
     final extension = localPath.split('.').last.toLowerCase();
-    final contentType = extension == 'mov' ? 'video/quicktime' : 'video/mp4';
+    validateMediaUploadSize(await file.length(), video: true);
+    final contentType = postVideoContentType(extension);
+    final uploadId = FirebaseFirestore.instance.collection('community_posts').doc().id;
 
     final ref = FirebaseStorage.instance
         .ref()
-        .child('community_posts/$postId/videos/video_$index.$extension');
+        .child('community_posts/$postId/videos/video_${uploadId}_$index.$extension');
 
     await ref.putFile(file, SettableMetadata(contentType: contentType));
     return await ref.getDownloadURL();
@@ -7016,7 +7026,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
       debugPrintStack(stackTrace: stack);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(publicationConfirmed
+          SnackBar(content: Text(e is MediaUploadValidation ? e.message : publicationConfirmed
               ? 'تم نشر المنشور، لكن تعذر تحديث القائمة. حدّث الصفحة.'
               : 'تعذر تأكيد النشر. حدّث الصفحة قبل إعادة المحاولة.')),
         );
@@ -9756,6 +9766,7 @@ class _PostCard extends StatefulWidget {
 
 class _PostCardState extends State<_PostCard> {
   final GlobalKey _likeButtonKey = GlobalKey();
+  bool _submittingPollAnswers = false;
   final Map<int, dynamic> _pollAnswers = {};
 
   bool _isNavigating = false;
@@ -9838,27 +9849,16 @@ class _PostCardState extends State<_PostCard> {
   }
 
   Future<_Post> _resolveRepostRoot(_Post post) async {
-    if (!post.isRepost) return post;
-
-    var id = post.repostOf?['postId']?.toString().trim();
-    _Post current = post;
-
-    for (var i = 0; i < 5; i++) {
-      if (id == null || id.isEmpty) return current;
-
-      try {
-        final data = await _readAuthorizedPostData(id);
-        final found = _Post.fromData(id, data);
-        if (!found.isRepost) return found;
-
-        current = found;
-        id = found.repostOf?['postId']?.toString().trim();
-      } catch (e) {
-        debugPrint('resolve repost root failed: $e');
-        return current;
-      }
+    var id = post.id?.trim();
+    final visited = <String>{};
+    for (var depth = 0; depth < 8; depth++) {
+      if (id == null || id.isEmpty || !visited.add(id)) throw StateError('Invalid repost chain');
+      final data = await _readAuthorizedPostData(id);
+      final fresh = _Post.fromData(id, data);
+      if (!fresh.isRepost) return fresh;
+      id = fresh.repostOf?['postId']?.toString().trim();
     }
-    return current;
+    throw StateError('Repost chain too deep');
   }
 
   List<_PostMediaItem> _downloadableItemsFor(_Post post) {
@@ -9872,91 +9872,111 @@ class _PostCardState extends State<_PostCard> {
     return items;
   }
 
-  Future<void> _saveMediaItem(_PostMediaItem item) async {
+  Future<void> _saveMediaItem(_PostMediaItem item, Future<void> Function() verify, String postId) async {
+    await verify();
     final path = item.path.trim();
-    final isVideo = item.kind == _MediaKind.video;
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      final file = await DefaultCacheManager().getSingleFile(path);
-      if (isVideo) {
-        await Gal.putVideo(file.path, album: 'UniSpace');
-      } else {
-        await Gal.putImage(file.path, album: 'UniSpace');
+    // Downloadable files must still belong to the current authorized post.
+    if (!path.startsWith('https://') && !path.startsWith('http://')) {
+      throw StateError('Invalid downloadable media URL');
+    }
+    var downloadUrl = path;
+    final source = Uri.tryParse(path);
+    if (source?.host == 'firebasestorage.googleapis.com') {
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readPostMediaDownload').call({'postId': postId, 'url': path});
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final signed = data['url'], expiry = data['expiresAt'];
+      if (signed is! String || Uri.tryParse(signed)?.scheme != 'https' ||
+          expiry is! num || expiry <= DateTime.now().millisecondsSinceEpoch) {
+        throw StateError('Invalid download authorization');
       }
+      downloadUrl = signed;
+      await verify();
+    }
+    final file = await DefaultCacheManager().getSingleFile(downloadUrl);
+    await verify();
+    if (item.kind == _MediaKind.video) {
+      await Gal.putVideo(file.path, album: 'UniSpace');
     } else {
-      if (isVideo) {
-        await Gal.putVideo(path, album: 'UniSpace');
-      } else {
-        await Gal.putImage(path, album: 'UniSpace');
-      }
+      await Gal.putImage(file.path, album: 'UniSpace');
     }
   }
 
+  bool _downloadingMedia = false;
   Future<void> _downloadPostMedia() async {
+    if (_downloadingMedia || !mounted) return;
     final pager = _FullscreenPostPagerState.current;
     final target = pager?.currentPost ?? widget.post;
-    final items = _downloadableItemsFor(target);
-    if (items.isEmpty) return;
-
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final blocks = blockedListRevision.value;
     final overlayContext = pager?.context ?? context;
-
-    List<_PostMediaItem> selected = items;
-    if (items.length > 1) {
-      final picked = await showModalBottomSheet<_DownloadPickResult>(
-        context: overlayContext,
-        useRootNavigator: true,
-        showDragHandle: true,
-        builder: (_) => _DownloadMediaSheet(items: items),
-      );
-      if (picked == null || picked.items.isEmpty) return;
-      selected = picked.items;
-    }
-
-    final granted = await Gal.requestAccess(toAlbum: true);
-    if (granted != true) {
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('يجب السماح بالوصول لألبوم الصور')),
-      );
-      return;
-    }
-
-    showDialog<void>(
-      context: overlayContext,
-      useRootNavigator: true,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
+    final navigator = Navigator.of(overlayContext, rootNavigator: true);
+    DialogRoute<void>? progress;
+    var saved = 0;
+    bool current() => mounted && overlayContext.mounted && uid != null &&
+        uid == FirebaseAuth.instance.currentUser?.uid && blocks == blockedListRevision.value;
+    _downloadingMedia = true;
     try {
+      final data = await _readAuthorizedPostData(target.id);
+      if (!current()) return;
+      final fresh = _Post.fromData(target.id!, data);
+      final items = _downloadableItemsFor(fresh);
+      if (items.isEmpty) {
+        ScaffoldMessenger.maybeOf(overlayContext)?.showSnackBar(
+          const SnackBar(content: Text('لا توجد وسائط متاحة للتنزيل')),
+        );
+        return;
+      }
+      List<_PostMediaItem> selected = items;
+      if (items.length > 1) {
+        final picked = await showModalBottomSheet<_DownloadPickResult>(
+          context: overlayContext, useRootNavigator: true, showDragHandle: true,
+          builder: (_) => _DownloadMediaSheet(postId: fresh.id!, items: items),
+        );
+        if (!current() || picked == null || picked.items.isEmpty) return;
+        selected = picked.items;
+      }
+      final granted = await Gal.requestAccess(toAlbum: true);
+      if (!current()) return;
+      if (granted != true) {
+        ScaffoldMessenger.maybeOf(overlayContext)?.showSnackBar(
+          const SnackBar(content: Text('يجب السماح بالوصول لألبوم الصور')),
+        );
+        return;
+      }
+      progress = DialogRoute<void>(context: overlayContext, barrierDismissible: false,
+        builder: (_) => const PopScope(canPop: false, child: Center(child: CircularProgressIndicator())),
+      );
+      unawaited(navigator.push(progress));
       for (final item in selected) {
-        await _saveMediaItem(item);
+        await _saveMediaItem(item, () async {
+          if (!current()) throw StateError('Download context changed');
+          final latest = await _readAuthorizedPostData(target.id);
+          if (!current()) throw StateError('Download context changed');
+          final allowed = _downloadableItemsFor(_Post.fromData(target.id!, latest));
+          if (!allowed.any((p) => p.kind == item.kind && p.path.trim() == item.path.trim())) {
+            throw StateError('Media no longer available');
+          }
+        }, target.id!);
+        saved++;
       }
-      if (Navigator.of(overlayContext, rootNavigator: true).canPop()) {
-        Navigator.of(overlayContext, rootNavigator: true).pop();
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(
-          content: Text(
-            selected.length == 1 ? 'تم حفظ الوسائط' : 'تم حفظ ${selected.length} ملفات',
-          ),
-        ),
+      if (current()) ScaffoldMessenger.maybeOf(overlayContext)?.showSnackBar(
+        SnackBar(content: Text(saved == 1 ? 'تم حفظ الوسائط' : 'تم حفظ $saved ملفات')),
       );
-    } catch (e) {
-      debugPrint('download media failed: $e');
-      if (Navigator.of(overlayContext, rootNavigator: true).canPop()) {
-        Navigator.of(overlayContext, rootNavigator: true).pop();
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('تعذر التحميل')),
-      );
+    } catch (_) {
+      if (current()) ScaffoldMessenger.maybeOf(overlayContext)?.showSnackBar(SnackBar(
+        content: Text(saved == 0 ? 'تعذر تنزيل الوسائط أو لم تعد متاحة'
+            : 'تم حفظ $saved ملفات، وتعذر إكمال الباقي'),
+      ));
+    } finally {
+      if (navigator.mounted && progress != null && progress.isActive) navigator.removeRoute(progress);
+      _downloadingMedia = false;
     }
   }
 
   Future<void> _initPollVideo(String url) async {
     final u = url.trim();
-    if (u.isEmpty || !u.startsWith('http')) return;
+    if (u.isEmpty || !u.startsWith('http') || Uri.tryParse(u)?.host == 'firebasestorage.googleapis.com') return;
     if (_pollVideoControllers.containsKey(u)) return;
 
     final c = VideoPlayerController.networkUrl(Uri.parse(u));
@@ -10020,7 +10040,7 @@ class _PostCardState extends State<_PostCard> {
     // ===== خارج البول =====
     for (final p in widget.post.imagePaths) {
       final u = p.trim();
-      if (u.startsWith('http')) {
+      if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
         precacheImage(CachedNetworkImageProvider(u), context);
       }
     }
@@ -10030,7 +10050,7 @@ class _PostCardState extends State<_PostCard> {
       final type = s['type']?.toString();
       if (type == 'image') {
         final u = (s['url'] ?? s['mediaPath'] ?? '').toString().trim();
-        if (u.startsWith('http')) {
+        if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
           precacheImage(CachedNetworkImageProvider(u), context);
         }
       }
@@ -10072,24 +10092,42 @@ class _PostCardState extends State<_PostCard> {
     return items;
   }
 
-  void _openPostMediaFullscreen(String currentPath) {
-    final items = _postMediaItems();
+  bool _openingMedia = false;
+  Future<void> _openPostMediaFullscreen(String currentPath) async {
+    if (_openingMedia) return;
+    final postId = widget.post.id;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final blocks = blockedListRevision.value;
+    bool current() => mounted && uid == FirebaseAuth.instance.currentUser?.uid &&
+        blocks == blockedListRevision.value && postId == widget.post.id;
+    _openingMedia = true;
+    try {
+    final data = await _readAuthorizedPostData(postId);
+    if (!current()) return;
+    final fresh = _Post.fromData(postId!, data);
+    final items = _mediaItemsForPost(fresh);
     if (items.isEmpty) return;
 
     final i = items.indexWhere((e) => e.path == currentPath);
-    final index = i < 0 ? 0 : i;
+    if (i < 0) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('هذا الملف لم يعد متاحاً في المنشور')),
+      );
+      return;
+    }
+    final index = i;
 
     // ===== الجديد: إذا عندنا لائحة كل المنشورات، نفتح الـ Pager العمودي =====
     final allPosts = widget.feedPosts;
     if (allPosts != null && allPosts.isNotEmpty) {
-      final swipeable = _swipeableMediaPosts(allPosts);
+      final swipeable = _swipeableMediaPosts(allPosts.map((p) => p.id == postId ? fresh : p).toList());
       debugPrint('ALL feedPosts = ${allPosts.length}');
       debugPrint('SWIPEABLE     = ${swipeable.length}');
-      debugPrint('CURRENT id    = ${widget.post.id}');
-      final startIndex = swipeable.indexWhere((p) => p.id == widget.post.id);
+      debugPrint('CURRENT id    = ${fresh.id}');
+      final startIndex = swipeable.indexWhere((p) => p.id == fresh.id);
 
       if (startIndex != -1) {
-        Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => FullscreenPostPager(
@@ -10114,33 +10152,33 @@ class _PostCardState extends State<_PostCard> {
       }
     }
 
-    // ===== الاحتياطي القديم: منشور واحد فقط (بدون سحب عمودي) =====
-    Navigator.push(
+    // Use the same authorized media path when no swipeable feed is available.
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => FullscreenMediaViewer(
-          items: items,
-          initialIndex: index,
-          authorName: _authorLabel(widget.post.author),
-          authorPhotoUrl: widget.post.authorPhotoUrl,
-          postTitle: widget.post.title,
-          postBody: widget.post.body,
+        builder: (_) => FullscreenPostPager(
+          posts: [fresh],
+          initialIndex: 0,
+          initialMediaIndex: index,
+          onChanged: widget.onChanged,
           menuButton: _buildFullscreenMenu(),
-          votes: widget.post.votes,
-          isLiked: widget.post.upvoted,
-          isDisliked: widget.post.downvoted,
-          commentsCount: widget.post.comments.length,
-          tagsCount: widget.post.tags.length,
-          onLike: _likePost,
-          onDislike: _dislikePost,
-          onComment: () async {
-            await _openComments();
-            return widget.post.comments.length;
-          },
-          onTags: _showTagsSheet,
+          onAuthorBlocked: (_) => widget.onChanged(),
         ),
       ),
     );
+    } on FirebaseFunctionsException catch (error) {
+      if (!current()) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(
+        error.code == 'not-found' ? 'المنشور لم يعد متاحاً' : 'تعذر فتح الوسائط، حاول مجدداً',
+      )));
+    } catch (_) {
+      if (!current()) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تعذر فتح الوسائط، حاول مجدداً')),
+      );
+    } finally {
+      _openingMedia = false;
+    }
   }
   bool _openingOriginal = false;
 
@@ -10207,6 +10245,40 @@ class _PostCardState extends State<_PostCard> {
     }
   }
 
+  Future<void> _openPollImage(String path) async {
+    if (_openingMedia) return;
+    final id = widget.post.id;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final blockVersion = blockedListRevision.value;
+    final moderationVersion = moderationRevision.value;
+    final profileVersion = authorProfileRevision.value;
+    bool current() => mounted && id == widget.post.id && uid != null &&
+        uid == FirebaseAuth.instance.currentUser?.uid &&
+        blockVersion == blockedListRevision.value &&
+        moderationVersion == moderationRevision.value &&
+        profileVersion == authorProfileRevision.value;
+    _openingMedia = true;
+    try {
+      final fresh = _Post.fromData(id!, await _readAuthorizedPostData(id));
+      if (!current()) return;
+      if (!fresh.pollSlides.any((slide) => slide['type'] == 'image' &&
+          (slide['url'] ?? slide['mediaPath'] ?? slide['path'] ?? '').toString().trim() == path)) {
+        throw StateError('Poll image removed');
+      }
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => Uri.tryParse(path)?.host == 'firebasestorage.googleapis.com'
+            ? _AuthorizedImageView(postId: id, path: path)
+            : SimpleFullscreenImageViewer(images: [path], initialIndex: 0),
+      ));
+    } catch (_) {
+      if (current()) ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تعذر فتح الصورة، ربما تغيّر الوصول إلى المنشور')),
+      );
+    } finally {
+      _openingMedia = false;
+    }
+  }
+
   Widget _buildImageSlide(String path) {
     final value = path.trim();
 
@@ -10218,6 +10290,7 @@ class _PostCardState extends State<_PostCard> {
         value.startsWith('http://') || value.startsWith('https://');
 
     return _AutoSizeImage(
+      postId: Uri.tryParse(value)?.host == 'firebasestorage.googleapis.com' ? (widget.post.id ?? '') : null,
       path: value,
       isNetwork: isNetwork,
       maxHeight: 480,
@@ -10230,16 +10303,7 @@ class _PostCardState extends State<_PostCard> {
         if (isFromPost) {
           _openPostMediaFullscreen(value); // ← هنا
         } else {
-          // ===== صورة من داخل البول → عارض بسيط =====
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SimpleFullscreenImageViewer(
-                images: [value],
-                initialIndex: 0,
-              ),
-            ),
-          );
+          _openPollImage(value);
         }
       },
     );
@@ -10271,6 +10335,8 @@ class _PostCardState extends State<_PostCard> {
   }
 
   Widget _buildVideoSlide(String path) => _VideoSlideWidget(
+    key: ValueKey([widget.post.id, path].join('|')),
+    postId: Uri.tryParse(path.trim())?.host == 'firebasestorage.googleapis.com' ? (widget.post.id ?? '') : null,
     videoPath: path,
     authorName: _authorLabel(widget.post.author),   // NEW
     authorPhotoUrl: widget.post.authorPhotoUrl,       // NEW
@@ -10278,6 +10344,8 @@ class _PostCardState extends State<_PostCard> {
   );
 
   Widget _buildAutoSizeVideoSlide(String path) => _AutoSizeVideo(
+    key: ValueKey([widget.post.id, path].join('|')),
+    postId: Uri.tryParse(path.trim())?.host == 'firebasestorage.googleapis.com' ? (widget.post.id ?? '') : null,
     path: path,
     maxHeight: 480,
     authorName: _authorLabel(widget.post.author),
@@ -10610,7 +10678,8 @@ class _PostCardState extends State<_PostCard> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () async {
+              onPressed: _submittingPollAnswers ? null : () async {
+                if (_submittingPollAnswers) return;
                 if (!ok) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -10623,36 +10692,11 @@ class _PostCardState extends State<_PostCard> {
 
                 final uid = FirebaseAuth.instance.currentUser?.uid;
                 final postId = widget.post.id; // ← متاح في _PostCard فقط
-                final user = FirebaseAuth.instance.currentUser;
-
                 if (uid == null || postId == null || postId.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
                   );
                   return;
-                }
-// ===== اسم الحساب =====
-                String respondentName = 'طالب UniSpace';
-                if (user != null) {
-                  try {
-                    final doc = await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(uid)
-                        .get();
-                    final data = doc.data();
-                    final fromProfile =
-                        data?['userName'] ?? data?['name'] ?? data?['displayName'];
-                    if (fromProfile is String && fromProfile.trim().isNotEmpty) {
-                      respondentName = fromProfile.trim();
-                    } else if (user.displayName != null &&
-                        user.displayName!.trim().isNotEmpty) {
-                      respondentName = user.displayName!.trim();
-                    }
-                  } catch (_) {
-                    if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
-                      respondentName = user.displayName!.trim();
-                    }
-                  }
                 }
                 Object? serializeAnswer(dynamic v) {
                   if (v == null) return null;
@@ -10669,34 +10713,33 @@ class _PostCardState extends State<_PostCard> {
 
                 final messenger = ScaffoldMessenger.maybeOf(context);
 
+                setState(() => _submittingPollAnswers = true);
                 try {
                   final encoded = <String, dynamic>{};
                   _pollAnswers.forEach((k, v) {
                     encoded[k.toString()] = serializeAnswer(v);
                   });
                   final messenger = ScaffoldMessenger.maybeOf(context);
-                  await FirebaseFirestore.instance
-                      .collection('community_posts')
-                      .doc(postId)
-                      .collection('poll_responses')
-                      .doc(uid)
-                      .set({
-                    'answers': encoded,
-                    'respondentId': uid,
-                    'respondentName': respondentName,
-                    'submittedAt': FieldValue.serverTimestamp(),
-                  }, SetOptions(merge: true));
+                  await FirebaseFunctions.instanceFor(region: 'europe-west1')
+                      .httpsCallable('submitPollAnswers')
+                      .call({'postId': postId, 'answers': encoded});
 
-                  if (!mounted) return;
+                  if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
                   messenger?.hideCurrentSnackBar();
                   messenger?.showSnackBar(
                     const SnackBar(content: Text('تم إرسال الإجابات')),
                   );
                 } catch (e) {
-                  if (!mounted) return;
+                  if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
                   messenger?.showSnackBar(
-                    const SnackBar(content: Text('تعذر إرسال الإجابات')),
+                    SnackBar(content: Text(
+                      e is FirebaseFunctionsException && e.code == 'invalid-argument'
+                          ? 'راجع الإجابات والأسئلة الإلزامية، ثم أعد المحاولة'
+                          : 'تعذر إرسال الإجابات',
+                    )),
                   );
+                } finally {
+                  if (mounted) setState(() => _submittingPollAnswers = false);
                 }
               },
               child: const Text('Confirm & Submit'),
@@ -10825,10 +10868,11 @@ class _PostCardState extends State<_PostCard> {
         (currentUserId == null && ownerId == 'local_current_user');
   }
 
-  String _postShareText() {
+  String _postShareText([_Post? source]) {
+    final post = source ?? widget.post;
     final parts = [
-      widget.post.title.trim(),
-      widget.post.body.trim(),
+      post.title.trim(),
+      post.body.trim(),
     ].where((part) => part.isNotEmpty).join('\n\n');
     return parts.isEmpty ? 'منشور UniSpace' : parts;
   }
@@ -10840,9 +10884,10 @@ class _PostCardState extends State<_PostCard> {
     return 'unispace://post/$id';
   }
 
-  String _postSharePayload() {
-    final text = _postShareText();
-    final author = _authorLabel(widget.post.author);
+  String _postSharePayload([_Post? source]) {
+    final post = source ?? widget.post;
+    final text = _postShareText(post);
+    final author = _authorLabel(post.author);
     final link = _postShareLink();
     final buffer = StringBuffer()
       ..writeln(text)
@@ -10916,13 +10961,8 @@ class _PostCardState extends State<_PostCard> {
                       icon: Icons.copy_rounded,
                       label: 'نسخ النص',
                       onTap: () async {
-                        final text = _postSharePayload();
                         Navigator.pop(ctx);
-                        await Clipboard.setData(ClipboardData(text: text));
-                        if (!mounted) return;
-                        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                          const SnackBar(content: Text('تم نسخ النص')),
-                        );
+                        await _copyAuthorizedShareText();
                       },
                     ),
                     _ShareActionTile(
@@ -10943,10 +10983,69 @@ class _PostCardState extends State<_PostCard> {
     );
   }
 
-  Future<void> _openSystemShareSheet() async {
+  bool _copyingShareText = false;
+  Future<void> _copyAuthorizedShareText() async {
+    if (!mounted || _copyingShareText) return;
+    _copyingShareText = true;
+    final id = widget.post.id, uid = FirebaseAuth.instance.currentUser?.uid;
+    final blocks = blockedListRevision.value, profiles = authorProfileRevision.value,
+        moderation = moderationRevision.value;
+    bool current() => mounted && uid != null && uid == FirebaseAuth.instance.currentUser?.uid &&
+        id == widget.post.id && blocks == blockedListRevision.value &&
+        profiles == authorProfileRevision.value && moderation == moderationRevision.value;
     try {
-      final file = await _buildPostShareImage();
-      final text = _postSharePayload();
+      final fresh = _Post.fromData(id!, await _readAuthorizedPostData(id));
+      if (!current()) return;
+      await Clipboard.setData(ClipboardData(text: _postSharePayload(fresh)));
+      if (!current()) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تم نسخ النص')),
+      );
+    } catch (_) {
+      if (current()) ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تعذر نسخ النص، ربما لم يعد المنشور متاحًا')),
+      );
+    } finally {
+      _copyingShareText = false;
+    }
+  }
+
+  bool _preparingShare = false;
+  Future<void> _openSystemShareSheet() async {
+    if (_preparingShare || !mounted) return;
+    _preparingShare = true;
+    final id = widget.post.id, uid = FirebaseAuth.instance.currentUser?.uid;
+    final blocks = blockedListRevision.value, profiles = authorProfileRevision.value,
+        moderation = moderationRevision.value;
+    bool current() => mounted && uid != null && uid == FirebaseAuth.instance.currentUser?.uid &&
+        id == widget.post.id && blocks == blockedListRevision.value &&
+        profiles == authorProfileRevision.value && moderation == moderationRevision.value;
+    String firstImage(_Post post) => post.imagePaths.map((p) => p.trim())
+        .firstWhere((p) => p.startsWith('http'), orElse: () => '');
+    try {
+      final fresh = _Post.fromData(id!, await _readAuthorizedPostData(id));
+      if (!current()) return;
+      final originalImage = firstImage(fresh);
+      var imageUrl = originalImage;
+      if (Uri.tryParse(imageUrl)?.host == 'firebasestorage.googleapis.com') {
+        imageUrl = await PostMediaLinks.read(id, imageUrl);
+        if (!current()) return;
+      }
+      if (imageUrl.isNotEmpty) {
+        Object? imageError;
+        await precacheImage(NetworkImage(imageUrl), context, onError: (error, _) => imageError = error);
+        if (imageError != null) throw StateError('Share image unavailable');
+        if (!current()) return;
+      }
+      final file = await _buildPostShareImage(fresh, imageUrl);
+      if (!current()) return;
+      final latest = _Post.fromData(id, await _readAuthorizedPostData(id));
+      if (!current()) return;
+      if (latest.title != fresh.title || latest.body != fresh.body || latest.author != fresh.author ||
+          latest.authorPhotoUrl != fresh.authorPhotoUrl || firstImage(latest) != originalImage) {
+        throw StateError('Post changed while preparing share');
+      }
+      final text = _postSharePayload(fresh);
 
       final box = context.findRenderObject() as RenderBox?;
       final origin =
@@ -10968,16 +11067,16 @@ class _PostCardState extends State<_PostCard> {
         );
       }
     } catch (e, st) {
-      debugPrint('Share failed: $e');
-      debugPrintStack(stackTrace: st);
-      if (!mounted) return;
+      if (!current()) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('تعذر فتح قائمة المشاركة')),
+        const SnackBar(content: Text('تعذر تجهيز المشاركة، ربما تغيّر المنشور أو الوصول إليه')),
       );
+    } finally {
+      _preparingShare = false;
     }
   }
 
-  Future<File?> _buildPostShareImage() async {
+  Future<File?> _buildPostShareImage(_Post post, String imageUrl) async {
     final repaintKey = GlobalKey();
     final completed = Completer<void>();
 
@@ -10995,13 +11094,11 @@ class _PostCardState extends State<_PostCard> {
             child: RepaintBoundary(
               key: repaintKey,
               child: _PostShareCard(
-                author: _authorLabel(widget.post.author),
-                authorPhotoUrl: widget.post.authorPhotoUrl,
-                title: widget.post.title.trim(),
-                body: widget.post.body.trim(),
-                imageUrl: widget.post.imagePaths
-                    .map((e) => e.trim())
-                    .firstWhere((e) => e.startsWith('http'), orElse: () => ''),
+                author: _authorLabel(post.author),
+                authorPhotoUrl: post.authorPhotoUrl,
+                title: post.title.trim(),
+                body: post.body.trim(),
+                imageUrl: imageUrl,
               ),
             ),
           ),
@@ -11068,10 +11165,17 @@ class _PostCardState extends State<_PostCard> {
       return;
     }
 
-    final already = await hasCommunityReport(
-      type: CommunityReportType.post,
-      targetId: postId,
-    );
+    bool already;
+    try {
+      already = await hasCommunityReport(
+        type: CommunityReportType.post,
+        targetId: postId,
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر التحقق من البلاغ السابق؛ أعد المحاولة')));
+      return;
+    }
     if (!mounted) return;
     if (already) {
       await showReportSubmittedSheet(
@@ -11178,7 +11282,16 @@ class _PostCardState extends State<_PostCard> {
       return;
     }
 
-    final original = await _resolveRepostRoot(widget.post);
+    final _Post original;
+    try {
+      original = await _resolveRepostRoot(widget.post);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تعذر الوصول إلى المنشور الأصلي لإعادة نشره')),
+      );
+      return;
+    }
+    if (!mounted || FirebaseAuth.instance.currentUser?.uid != user.uid) return;
     if (!mounted) return;
 
     final originalId = original.id?.trim();
@@ -11463,7 +11576,8 @@ class _PostCardState extends State<_PostCard> {
             .child('community_posts')
             .child(postId)
             .child('images')
-            .child('edit_${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
+            .child('edit_${editUploadId}_$i.jpg');
+        validateMediaUploadSize(newImages[i].length, video: false);
         await ref.putData(newImages[i], SettableMetadata(contentType: 'image/jpeg'));
         imageUrls.add(await ref.getDownloadURL());
       }
@@ -11472,13 +11586,14 @@ class _PostCardState extends State<_PostCard> {
       for (int i = 0; i < newVideos.length; i++) {
         final file = File(newVideos[i]);
         if (!await file.exists()) continue;
+        validateMediaUploadSize(await file.length(), video: true);
         final ext = newVideos[i].split('.').last.toLowerCase();
         final ref = FirebaseStorage.instance
             .ref()
-            .child('community_posts/$postId/videos/edit_${DateTime.now().millisecondsSinceEpoch}_$i.$ext');
+            .child('community_posts/$postId/videos/edit_${editUploadId}_$i.$ext');
         await ref.putFile(
           file,
-          SettableMetadata(contentType: ext == 'mov' ? 'video/quicktime' : 'video/mp4'),
+          SettableMetadata(contentType: postVideoContentType(ext)),
         );
         videoUrls.add(await ref.getDownloadURL());
       }
@@ -11501,6 +11616,7 @@ class _PostCardState extends State<_PostCard> {
             final ref = FirebaseStorage.instance.ref(
               'community_posts/$postId/images/poll_edit_${editUploadId}_${pollImg++}.jpg',
             );
+            validateMediaUploadSize((s['imageBytes'] as Uint8List).length, video: false);
             await ref.putData(
               s['imageBytes'] as Uint8List,
               SettableMetadata(contentType: 'image/jpeg'),
@@ -11516,10 +11632,13 @@ class _PostCardState extends State<_PostCard> {
             if (path.isNotEmpty) {
               final file = File(path);
               if (await file.exists()) {
+                validateMediaUploadSize(await file.length(), video: true);
+                final videoExtension = path.split('.').last.toLowerCase();
+                final videoMime = postVideoContentType(videoExtension);
                 final ref = FirebaseStorage.instance.ref(
-                  'community_posts/$postId/videos/poll_edit_${editUploadId}_${pollVid++}.mp4',
+                  'community_posts/$postId/videos/poll_edit_${editUploadId}_${pollVid++}.$videoExtension',
                 );
-                await ref.putFile(file, SettableMetadata(contentType: 'video/mp4'));
+                await ref.putFile(file, SettableMetadata(contentType: videoMime));
                 resolvedSlides.add({'type': 'video', 'url': await ref.getDownloadURL()});
               }
             }
@@ -11581,7 +11700,7 @@ class _PostCardState extends State<_PostCard> {
       debugPrintStack(stackTrace: st);
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('تعذر تعديل المنشور')),
+        SnackBar(content: Text(e is MediaUploadValidation ? e.message : 'تعذر تعديل المنشور')),
       );
     }
   }
@@ -12565,8 +12684,11 @@ class _RepostComposePageState extends State<_RepostComposePage> {
             ),
             const SizedBox(height: 16),
             IgnorePointer(
+              ignoring: widget.comment == null,
               child: widget.comment != null
                   ? _CommentRepostPreview(
+                postId: original.id ?? '',
+                commentId: widget.comment!.id,
                 author: widget.comment!.author,
 
                 authorPhotoUrl: widget.comment!.authorPhotoUrl,
@@ -12732,7 +12854,13 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
         fit: StackFit.expand,
         children: [
           if (image != null)
-            Image.network(
+            Uri.tryParse(image)?.host == 'firebasestorage.googleapis.com'
+                ? _AuthorizedImageView(
+                    postId: _post?.id ?? '',
+                    commentId: _isCommentRepost ? (widget.data['commentId']?.toString().trim() ?? '') : null,
+                    path: image, preview: true,
+                  )
+                : Image.network(
               image,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => ColoredBox(
@@ -13152,6 +13280,8 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
 
 class _CommentRepostPreview extends StatelessWidget {
   const _CommentRepostPreview({
+    required this.postId,
+    required this.commentId,
     required this.author,
     this.authorId,
     this.authorPhotoUrl,
@@ -13162,6 +13292,7 @@ class _CommentRepostPreview extends StatelessWidget {
     this.contextLabel,
   });
 
+  final String postId, commentId;
   final String author;
   final String? authorPhotoUrl;
   final String text;
@@ -13581,7 +13712,9 @@ class _CommentRepostPreview extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (hasImage)
-              Image.network(
+              Uri.tryParse(url)?.host == 'firebasestorage.googleapis.com'
+                  ? _AuthorizedImageView(postId: postId, commentId: commentId, path: url, preview: true)
+                  : Image.network(
                 url,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) {
@@ -15070,43 +15203,14 @@ Future<void> propagateAuthorToPosts({
   required String uid,
   String? photoUrl,
   String? authorName,
+  bool useFullName = false,
 }) async {
-  final patch = <String, dynamic>{
-    'updatedAt': FieldValue.serverTimestamp(),
-  };
-  if (photoUrl != null) patch['authorPhotoUrl'] = photoUrl;
+  if (photoUrl != null) await syncOwnPostIdentity(uid, 'photo');
   if (authorName != null && authorName.trim().isNotEmpty) {
-    patch['authorName'] = authorName.trim();
+    await syncOwnPostIdentity(uid, useFullName ? 'fullName' : 'displayName');
   }
-  if (patch.length == 1) return; // updatedAt فقط
-
-  QueryDocumentSnapshot<Map<String, dynamic>>? last;
-  while (true) {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-        .collection('community_posts')
-        .where('authorId', isEqualTo: uid)
-        .orderBy(FieldPath.documentId)
-        .limit(400);
-    if (last != null) q = q.startAfterDocument(last);
-
-    final snap = await q.get();
-    if (snap.docs.isEmpty) break;
-
-    final batch = FirebaseFirestore.instance.batch();
-    for (final d in snap.docs) {
-      batch.update(d.reference, patch);
-    }
-    await batch.commit();
-
-    if (snap.docs.length < 400) break;
-    last = snap.docs.last;
-  }
-
-  authorProfileRevision.value++;
+  if (FirebaseAuth.instance.currentUser?.uid == uid) authorProfileRevision.value++;
 }
-
-
-
 
 Future<Set<String>> loadBlockedUserIds() =>
     _loadNotificationBlockedIds(FirebaseAuth.instance.currentUser?.uid);
@@ -15159,7 +15263,8 @@ class _DownloadPickResult {
 }
 
 class _DownloadMediaSheet extends StatefulWidget {
-  const _DownloadMediaSheet({required this.items});
+  const _DownloadMediaSheet({required this.postId, required this.items});
+  final String postId;
   final List<_PostMediaItem> items;
 
   @override
@@ -15216,7 +15321,9 @@ class _DownloadMediaSheetState extends State<_DownloadMediaSheet> {
                                 color: Colors.white.withValues(alpha: 0.85), size: 36),
                           )
                         else
-                          item.path.startsWith('http')
+                          Uri.tryParse(item.path)?.host == 'firebasestorage.googleapis.com'
+                              ? _AuthorizedImageView(postId: widget.postId, path: item.path, preview: true)
+                              : item.path.startsWith('http')
                               ? CachedNetworkImage(imageUrl: item.path, fit: BoxFit.cover)
                               : Image.file(File(item.path), fit: BoxFit.cover),
                         if (isVideo)
@@ -15269,9 +15376,11 @@ class _AutoSizeImage extends StatefulWidget {
     required this.isNetwork,
     this.maxHeight = 480,
     this.onTap,
+    this.postId,
   });
 
   final String path;
+  final String? postId;
   final bool isNetwork;
   final double maxHeight;
   final VoidCallback? onTap;
@@ -15280,7 +15389,48 @@ class _AutoSizeImage extends StatefulWidget {
   State<_AutoSizeImage> createState() => _AutoSizeImageState();
 }
 
-class _AutoSizeImageState extends State<_AutoSizeImage> {
+class _AutoSizeImageState extends State<_AutoSizeImage> with WidgetsBindingObserver {
+  String? _signedPath;
+  bool _failed = false, _foreground = true;
+  int _generation = 0;
+  StreamSubscription<User?>? _auth;
+  String? _viewer;
+  bool get _protected => widget.postId != null;
+  void _detachImage() {
+    if (_stream != null && _listener != null) _stream!.removeListener(_listener!);
+    _stream = null;
+    _listener = null;
+  }
+  Future<void> _reload() async {
+    if (!mounted) return;
+    final generation = ++_generation;
+    _detachImage();
+    setState(() { _signedPath = null; _aspectRatio = null; _failed = false; });
+    if (!_protected) { _resolveDimensions(); return; }
+    if (!_foreground) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    try {
+      if (uid == null) throw StateError('Authentication required');
+      final url = await PostMediaLinks.read(widget.postId!, widget.path);
+      if (!mounted || generation != _generation || uid != FirebaseAuth.instance.currentUser?.uid) return;
+      _signedPath = url;
+      _resolveDimensions();
+    } catch (_) {
+      if (mounted && generation == _generation) setState(() => _failed = true);
+    }
+  }
+  void _invalidate() { if (_protected) _reload(); }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _invalidate();
+  }
+  @override
+  void didUpdateWidget(covariant _AutoSizeImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path || oldWidget.postId != widget.postId ||
+        oldWidget.isNetwork != widget.isNetwork) _reload();
+  }
   double? _aspectRatio;
   ImageStream? _stream;
   ImageStreamListener? _listener;
@@ -15288,26 +15438,35 @@ class _AutoSizeImageState extends State<_AutoSizeImage> {
   @override
   void initState() {
     super.initState();
-    _resolveDimensions();
+    _viewer = FirebaseAuth.instance.currentUser?.uid;
+    WidgetsBinding.instance.addObserver(this);
+    blockedListRevision.addListener(_invalidate);
+    moderationRevision.addListener(_invalidate);
+    authorProfileRevision.addListener(_invalidate);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user?.uid != _viewer) { _viewer = user?.uid; _invalidate(); }
+    });
+    _reload();
   }
 
   ImageProvider get _provider {
-    if (widget.isNetwork) return NetworkImage(widget.path);
+    if (widget.isNetwork) return _protected ? CachedNetworkImageProvider(_signedPath!) : NetworkImage(widget.path);
     if (widget.path.startsWith('assets/')) return AssetImage(widget.path);
     return FileImage(File(widget.path));
   }
 
   void _resolveDimensions() {
+    final generation = _generation;
     final stream = _provider.resolve(const ImageConfiguration());
     final listener = ImageStreamListener((info, _) {
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
       final w = info.image.width.toDouble();
       final h = info.image.height.toDouble();
       if (h > 0) {
         setState(() => _aspectRatio = w / h);
       }
     }, onError: (error, stack) {
-      debugPrint('AutoSizeImage resolve error: $error');
+      if (_protected && mounted && generation == _generation) setState(() => _failed = true);
     });
     _stream = stream;
     _listener = listener;
@@ -15316,6 +15475,12 @@ class _AutoSizeImageState extends State<_AutoSizeImage> {
 
   @override
   void dispose() {
+    _generation++;
+    _auth?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    blockedListRevision.removeListener(_invalidate);
+    moderationRevision.removeListener(_invalidate);
+    authorProfileRevision.removeListener(_invalidate);
     if (_stream != null && _listener != null) {
       _stream!.removeListener(_listener!);
     }
@@ -15327,7 +15492,7 @@ class _AutoSizeImageState extends State<_AutoSizeImage> {
       // FIX: CachedNetworkImage بدل Image.network — كتحفظ الصورة فالقرص،
       // فالمرة الثانية (بعد الرجوع/إعادة البناء) كتبان فورية بلا تحميل جديد
       return CachedNetworkImage(
-        imageUrl: widget.path,
+        imageUrl: _protected ? _signedPath! : widget.path,
         fit: fit,
         width: double.infinity,
         height: double.infinity,
@@ -15344,6 +15509,12 @@ class _AutoSizeImageState extends State<_AutoSizeImage> {
   }
 
   Widget _errorBox() {
+    if (_protected) return SizedBox(height: 180, child: Center(child: Column(
+      mainAxisSize: MainAxisSize.min, children: [
+        const Text('تعذر تحميل الصورة'),
+        TextButton(onPressed: _reload, child: const Text('إعادة المحاولة')),
+      ],
+    )));
     return Container(
       color: const Color(0xFFEAF7F8),
       height: 180,
@@ -15356,6 +15527,8 @@ class _AutoSizeImageState extends State<_AutoSizeImage> {
   Widget build(BuildContext context) {
     Widget content;
 
+    if (_protected && !_foreground) return const SizedBox(height: 220);
+    if (_failed) return _errorBox();
     if (_aspectRatio == null) {
       // NEW: أثناء انتظار القياس، ارتفاع معقول ثابت
       content = const SizedBox(
@@ -17462,7 +17635,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                                   return Stack(
                                     fit: StackFit.expand,
                                     children: [
-                                      Image.network(url, fit: BoxFit.cover),
+                                      Uri.tryParse(url)?.host == 'firebasestorage.googleapis.com'
+                                          ? _AuthorizedImageView(
+                                              key: ValueKey(url),
+                                              postId: widget.editingPost?.id ?? '',
+                                              path: url, preview: true)
+                                          : Image.network(url, fit: BoxFit.cover),
                                       Positioned(
                                         top: 10,
                                         right: 10,
@@ -18297,86 +18475,107 @@ class _SlideDotsIndicatorState extends State<_SlideDotsIndicator> {
   }
 }
 //=======================================================================
-class PollResponsesScreen extends StatelessWidget {
+class PollResponsesScreen extends StatefulWidget {
   final _Post post;
   const PollResponsesScreen({super.key, required this.post});
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> get _stream =>
-      FirebaseFirestore.instance
-          .collection('community_posts')
-          .doc(post.id)
-          .collection('poll_responses')
-          .orderBy('submittedAt', descending: true)
-          .snapshots();
-
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  State<PollResponsesScreen> createState() => _PollResponsesScreenState();
+}
 
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Poll responses'),
-        ),
-        body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _stream,
-          builder: (context, snap) {
-            if (snap.hasError) {
-              return Center(child: Text('Error: ${snap.error}'));
-            }
-            if (!snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final docs = snap.data!.docs;
-            final responses = docs.map((d) => d.data()).toList();
-
-            return DefaultTabController(
-              length: 2,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Row(
-                      children: [
-                        Text(
-                          '${responses.length} response${responses.length == 1 ? '' : 's'}',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const TabBar(
-                    tabs: [
-                      Tab(text: 'Summary'),
-                      Tab(text: 'Individual'),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        _SummaryTab(
-                          polls: post.pollDataList,
-                          responses: responses,
-                        ),
-                        _IndividualTab(
-                          polls: post.pollDataList,
-                          responses: responses,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
+class _PollResponsesScreenState extends State<PollResponsesScreen> {
+  final List<Map<String, dynamic>> _responses = [];
+  _Post? _post;
+  Map<String, dynamic>? _cursor;
+  String? _error, _uid;
+  bool _loading = false, _more = true;
+  int _generation = 0;
+  StreamSubscription<User?>? _auth;
+  @override
+  void initState() {
+    super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || user?.uid == _uid) return;
+      _uid = user?.uid; _refresh();
+    });
+    moderationRevision.addListener(_refresh);
+    blockedListRevision.addListener(_refresh);
+    _refresh();
   }
+  void _refresh() { if (mounted) _load(reset: true); }
+  Future<void> _load({bool reset = false}) async {
+    if (!mounted || (!reset && (_loading || !_more))) return;
+    final generation = reset ? ++_generation : _generation;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    bool current() => mounted && generation == _generation && uid == FirebaseAuth.instance.currentUser?.uid;
+    setState(() {
+      _loading = true; _error = null;
+      if (reset) { _responses.clear(); _post = null; _cursor = null; _more = true; }
+    });
+    try {
+      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readOwnPollResponses', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+          .call<Map<String, dynamic>>({'postId': widget.post.id, 'cursor': _cursor});
+      if (!current()) return;
+      final page = result.data, rawPost = page['post'];
+      if (rawPost is! Map || rawPost['id'] != widget.post.id || rawPost['data'] is! Map ||
+          page['responses'] is! List || page['exhausted'] is! bool ||
+          (page['cursor'] != null && page['cursor'] is! Map) ||
+          (page['exhausted'] == false && page['cursor'] == null)) throw StateError('Invalid results page');
+      final post = _Post.fromData(widget.post.id!, Map<String, dynamic>.from(rawPost['data'] as Map));
+      if (post.authorId != uid) throw StateError('Not the owner');
+      final incoming = (page['responses'] as List).map((row) {
+        if (row is! Map || row['id'] is! String || row['answers'] is! Map) throw StateError('Invalid response');
+        final data = Map<String, dynamic>.from(row);
+        final date = DateTime.tryParse(data['submittedAt']?.toString() ?? '');
+        data['submittedAt'] = date == null ? null : Timestamp.fromDate(date);
+        return data;
+      }).toList();
+      setState(() {
+        _post = post;
+        for (final row in incoming) {
+          _responses.removeWhere((old) => old['id'] == row['id']);
+          _responses.add(row);
+        }
+        _cursor = page['cursor'] == null ? null : Map<String, dynamic>.from(page['cursor'] as Map);
+        _more = page['exhausted'] == false; _loading = false;
+      });
+    } catch (_) {
+      if (!current()) return;
+      setState(() { _loading = false; _responses.clear(); _post = null; _error = 'تعذر عرض النتائج أو ليست لديك صلاحية الوصول'; });
+    }
+  }
+  @override
+  void dispose() {
+    _generation++; _auth?.cancel();
+    moderationRevision.removeListener(_refresh);
+    blockedListRevision.removeListener(_refresh);
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) => Directionality(textDirection: TextDirection.ltr,
+    child: Scaffold(
+      appBar: AppBar(title: const Text('Poll responses'), actions: [
+        IconButton(onPressed: _loading ? null : _refresh, icon: const Icon(Icons.refresh), tooltip: 'تحديث'),
+      ]),
+      body: _error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(_error!), TextButton(onPressed: _refresh, child: const Text('إعادة المحاولة')),
+      ])) : _post == null ? const Center(child: CircularProgressIndicator()) : DefaultTabController(
+        length: 2, child: Column(children: [
+          Padding(padding: const EdgeInsets.all(12), child: Text(
+            _responses.length.toString() + (_more ? ' إجابة محمّلة — الملخص جزئي' : ' إجابة محمّلة'),
+          )),
+          const TabBar(tabs: [Tab(text: 'Summary'), Tab(text: 'Individual')]),
+          Expanded(child: TabBarView(children: [
+            _SummaryTab(polls: _post!.pollDataList, responses: _responses),
+            _IndividualTab(polls: _post!.pollDataList, responses: _responses),
+          ])),
+          if (_more) TextButton(onPressed: _loading ? null : () => _load(),
+            child: Text(_loading ? 'جارٍ التحميل...' : 'تحميل المزيد')),
+        ]),
+      ),
+    ),
+  );
 }
 
 class _SummaryTab extends StatelessWidget {
@@ -21625,6 +21824,8 @@ class _FeedVideoCoordinator {
 }
 class _AutoSizeVideo extends StatefulWidget {
   const _AutoSizeVideo({
+    super.key,
+    this.postId,
     required this.path,
     this.maxHeight = 480,
     this.authorPhotoUrl,
@@ -21645,6 +21846,7 @@ class _AutoSizeVideo extends StatefulWidget {
   });
 
   final String path;
+  final String? postId;
   final double maxHeight;
   final String? authorName;
   final String? authorPhotoUrl;
@@ -21667,7 +21869,24 @@ class _AutoSizeVideo extends StatefulWidget {
   State<_AutoSizeVideo> createState() => _AutoSizeVideoState();
 }
 
-class _AutoSizeVideoState extends State<_AutoSizeVideo> {
+class _AutoSizeVideoState extends State<_AutoSizeVideo> with WidgetsBindingObserver {
+  int _accessGeneration = 0;
+  bool _foreground = true, _suspended = false;
+  String? _viewer;
+  StreamSubscription<User?>? _auth;
+  void _invalidateAccess() {
+    if (!mounted || widget.postId == null) return;
+    _accessGeneration++;
+    _disposeTimer?.cancel();
+    _pauseSelf();
+    _FeedVideoCoordinator.instance.release(_pauseSelf);
+    setState(() { _suspended = true; _error = 'أعد التحقق لتشغيل الفيديو'; _loading = false; });
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) _invalidateAccess();
+  }
   VideoPlayerController? _controller;
   bool _loading = false; // كان true — اتركه false حتى تبدأ التهيئة
   String? _error;
@@ -21683,12 +21902,29 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
   @override
   void initState() {
     super.initState();
-
+    _viewer = FirebaseAuth.instance.currentUser?.uid;
+    WidgetsBinding.instance.addObserver(this);
+    blockedListRevision.addListener(_invalidateAccess);
+    moderationRevision.addListener(_invalidateAccess);
+    authorProfileRevision.addListener(_invalidateAccess);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (_viewer != user?.uid) { _viewer = user?.uid; _invalidateAccess(); }
+    });
   }
 
   Future<void> _initializeVideo() async {
-    if (_initialized || _initializing) return;
-    _initializing = true;
+    if (!mounted || _initializing || (_initialized && !_suspended) ||
+        (widget.postId != null && !_foreground)) return;
+    _disposeTimer?.cancel();
+    final generation = ++_accessGeneration;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    bool current() => mounted && generation == _accessGeneration &&
+        (widget.postId == null || (uid != null && uid == FirebaseAuth.instance.currentUser?.uid && _foreground));
+    final previous = _controller;
+    _controller = null;
+    previous?.removeListener(_onControllerUpdate);
+    previous?.dispose();
+    setState(() { _initializing = true; _initialized = false; _suspended = false; _loading = true; _error = null; });
 
     final path = widget.path.trim();
     if (path.isEmpty) {
@@ -21709,60 +21945,38 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
       return;
     }
 
+    VideoPlayerController? pending;
     try {
-      final isNetwork =
-          path.startsWith('http://') || path.startsWith('https://');
-
-      VideoPlayerController controller;
-
-      if (isNetwork) {
-        // 1) حمّل للقرص (أو من الكاش) ثم شغّل من File
-        final file = await DefaultCacheManager().getSingleFile(path);
-        if (!mounted) {
-          _VideoInitGate.instance.release();
-          _initializing = false;
-          return;
-        }
-        controller = VideoPlayerController.file(
-          file,
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-        );
-      } else {
-        controller = VideoPlayerController.file(
-          File(path),
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-        );
+      if (!current()) throw StateError('Video unavailable');
+      final isNetwork = path.startsWith('http://') || path.startsWith('https://');
+      final source = widget.postId == null ? path : await PostMediaLinks.read(widget.postId!, path);
+      if (!current()) throw StateError('Video unavailable');
+      final file = isNetwork ? await DefaultCacheManager().getSingleFile(source) : File(path);
+      if (!current()) throw StateError('Video unavailable');
+      if (widget.postId != null) {
+        final fresh = _Post.fromData(widget.postId!, await _readAuthorizedPostData(widget.postId));
+        if (!current() || !fresh.videoPaths.any((p) => p.trim() == path)) throw StateError('Video removed');
       }
-
+      final controller = VideoPlayerController.file(file,
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
+      pending = controller;
       await controller.initialize();
       await controller.setLooping(false);
-      await controller.setVolume(0); // مكتوم في الخلاصة
-
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-
+      await controller.setVolume(0);
+      if (!current()) throw StateError('Video unavailable');
       controller.addListener(_onControllerUpdate);
-
-      setState(() {
-        _controller = controller;
-        _loading = false;
-        _initialized = true;
-        _error = null;
+      setState(() { _controller = controller; _loading = false; _initialized = true; _error = null; _finished = false; });
+      pending = null;
+    } catch (_) {
+      if (mounted && generation == _accessGeneration) setState(() {
+        _loading = false; _error = 'تعذر تحميل الفيديو';
       });
-    } catch (e, st) {
-      debugPrint('AutoSizeVideo init failed: $e');
-      debugPrintStack(stackTrace: st);
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'تعذر تحميل الفيديو';
-        });
-      }
     } finally {
-      _VideoInitGate.instance.release();
-      _initializing = false;
+      try { await pending?.dispose(); }
+      finally {
+        _VideoInitGate.instance.release();
+        if (mounted) { setState(() => _initializing = false); } else { _initializing = false; }
+      }
     }
   }
 
@@ -21780,6 +21994,7 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
   }
 
   void _handleVisibilityChanged(VisibilityInfo info) {
+    if (_suspended || (widget.postId != null && !_foreground)) return;
     final visible = info.visibleFraction >= _visibilityThreshold;
 
     if (visible) {
@@ -21822,6 +22037,7 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
   }
 
   void _toggleMute() {
+    if (_suspended) return;
     final c = _controller;
     if (c == null) return;
 
@@ -21832,6 +22048,8 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
   }
 
   Future<void> _openFullscreen() async {
+    if (_suspended || (widget.postId != null && !_foreground)) return;
+    final generation = _accessGeneration;
     final c = _controller;
 
     if (c == null) return;
@@ -21839,6 +22057,12 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
     await c.pause();
     await c.setVolume(0);
     if (!mounted) return;
+    if (generation != _accessGeneration) return;
+    if (widget.postId != null) {
+      // The authorized post pager owns a separate controller and rechecks access.
+      widget.onOpenFullscreen?.call();
+      return;
+    }
     if (widget.onOpenFullscreen != null) {
       widget.onOpenFullscreen!();
       // بعد الرجوع من العارض الموحّد
@@ -21900,6 +22124,12 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
 
   @override
   void dispose() {
+    _accessGeneration++;
+    _auth?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    blockedListRevision.removeListener(_invalidateAccess);
+    moderationRevision.removeListener(_invalidateAccess);
+    authorProfileRevision.removeListener(_invalidateAccess);
     _pauseSelf();
     _disposeTimer?.cancel(); // ← هنا
     _FeedVideoCoordinator.instance.release(_pauseSelf);
@@ -21928,6 +22158,8 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
             _error ?? 'تعذر تحميل الفيديو',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
+          if (widget.postId != null) TextButton(onPressed: _initializeVideo,
+              child: const Text('إعادة المحاولة')),
         ],
       )
           : const CircularProgressIndicator(color: Colors.white),
@@ -21947,6 +22179,7 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> {
   }
 
   Widget _buildBody() {
+    if (_suspended) return _placeholderBox(isError: true);
     if (_loading || _initializing || (!_initialized && _error == null)) {
       return _placeholderBox(isError: false);
     }
@@ -22218,6 +22451,8 @@ class _PickedVideoTileState extends State<_PickedVideoTile> {
 // ==================== VideoSlideWidget ====================
 class _VideoSlideWidget extends StatefulWidget {
   final String videoPath;
+  final String? postId;
+  final String? commentId;
   final String? authorName;
   final String? authorPhotoUrl;
   final String? postTitle;
@@ -22225,6 +22460,9 @@ class _VideoSlideWidget extends StatefulWidget {
   final Widget? menuButton;
 
   const _VideoSlideWidget({
+    super.key,
+    this.postId,
+    this.commentId,
     required this.videoPath,
     this.authorName,
     this.authorPhotoUrl,
@@ -22237,7 +22475,29 @@ class _VideoSlideWidget extends StatefulWidget {
   State<_VideoSlideWidget> createState() => _VideoSlideWidgetState();
 }
 
-class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
+class _VideoSlideWidgetState extends State<_VideoSlideWidget> with WidgetsBindingObserver {
+  int _accessGeneration = 0;
+  bool _foreground = true, _suspended = false, _openingFullscreen = false;
+  String? _viewer;
+  StreamSubscription<User?>? _auth;
+  TransitionRoute<void>? _fullscreenRoute;
+  void _invalidateVideo() {
+    if (!mounted || widget.postId == null) return;
+    _accessGeneration++;
+    _controller?.pause();
+    _controller?.setVolume(0);
+    setState(() { _suspended = true; _loading = false; _error = 'تغيّر الوصول، أعد التحقق لتشغيل الفيديو'; });
+    final route = _fullscreenRoute;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = route?.navigator;
+      if (route != null && nav != null && nav.mounted && route.isActive) nav.removeRoute(route);
+    });
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) _invalidateVideo();
+  }
   VideoPlayerController? _controller;
   bool _loading = true;
   String? _error;
@@ -22253,12 +22513,62 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
   @override
   void initState() {
     super.initState();
+    _viewer = FirebaseAuth.instance.currentUser?.uid;
+    WidgetsBinding.instance.addObserver(this);
+    blockedListRevision.addListener(_invalidateVideo);
+    moderationRevision.addListener(_invalidateVideo);
+    authorProfileRevision.addListener(_invalidateVideo);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (_viewer != user?.uid) { _viewer = user?.uid; _invalidateVideo(); }
+    });
+  }
 
+  Future<void> _verifyCommentVideoAccess() async {
+    final postId = widget.postId, commentId = widget.commentId, source = widget.videoPath.trim();
+    final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('verifyCommentMediaAccess').call({
+          'postId': postId, 'commentId': commentId, 'url': source,
+        });
+    final data = Map<String, dynamic>.from(result.data as Map);
+    if (data['authorized'] != true || data['mediaType'] != 'video' ||
+        data['postId'] != postId || data['commentId'] != commentId || data['source'] != source) {
+      throw StateError('Invalid comment video access');
+    }
+  }
+
+  Future<String> _readCommentVideoLink() async {
+    final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('readCommentMediaDownload').call({
+          'postId': widget.postId, 'commentId': widget.commentId, 'url': widget.videoPath.trim(),
+        });
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final url = data['url'], expiry = data['expiresAt'];
+    if (data['mediaType'] != 'video' || url is! String || Uri.tryParse(url)?.scheme != 'https' ||
+        expiry is! num || expiry <= DateTime.now().millisecondsSinceEpoch) {
+      throw StateError('Invalid comment video authorization');
+    }
+    return url;
   }
 
   Future<void> _initializeVideo() async {
-    if (_hasStartedLoading) return;
+    if (!mounted || _hasStartedLoading || _openingFullscreen || (widget.postId != null && !_foreground)) return;
+    final generation = ++_accessGeneration;
+    _suspended = false;
+    final previous = _controller;
+    _controller = null;
+    previous?.removeListener(_onControllerUpdate);
+    previous?.dispose();
     _hasStartedLoading = true;
+    setState(() { _loading = true; _error = null; });
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final postId = widget.postId;
+    final blockVersion = blockedListRevision.value;
+    final profileVersion = authorProfileRevision.value;
+    final moderationVersion = moderationRevision.value;
+    bool current() => mounted && generation == _accessGeneration && !_suspended && (postId == null ||
+        (uid != null && uid == FirebaseAuth.instance.currentUser?.uid &&
+         postId == widget.postId && blockVersion == blockedListRevision.value &&
+         profileVersion == authorProfileRevision.value && moderationVersion == moderationRevision.value));
 
     final path = widget.videoPath.trim();
     if (path.isEmpty) {
@@ -22275,55 +22585,42 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
       return;
     }
 
+    VideoPlayerController? pending;
     try {
-      final isNetwork =
-          path.startsWith('http://') || path.startsWith('https://');
-
-      late final VideoPlayerController controller;
-
-      if (isNetwork) {
-        final file = await DefaultCacheManager().getSingleFile(path);
-        if (!mounted) {
-          _VideoInitGate.instance.release();
-          return;
-        }
-        controller = VideoPlayerController.file(
-          file,
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-        );
-      } else {
-        controller = VideoPlayerController.file(
-          File(path),
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-        );
+      if (!current()) throw StateError('Video unavailable');
+      final isNetwork = path.startsWith('http://') || path.startsWith('https://');
+      final source = widget.commentId != null ? await _readCommentVideoLink()
+          : postId == null ? path : await PostMediaLinks.read(postId, path);
+      if (!current()) throw StateError('Video unavailable');
+      final file = isNetwork ? await DefaultCacheManager().getSingleFile(source) : File(path);
+      if (!current()) throw StateError('Video unavailable');
+      if (widget.commentId != null) {
+        // Recheck the exact comment and its ancestors after a slow download.
+        await _verifyCommentVideoAccess();
+        if (!current()) throw StateError('Video unavailable');
+      } else if (postId != null) {
+        final fresh = _Post.fromData(postId, await _readAuthorizedPostData(postId));
+        if (!current()) throw StateError('Video unavailable');
+        final belongs = fresh.videoPaths.any((p) => p.trim() == path) ||
+            fresh.pollSlides.any((slide) => slide['type'] == 'video' &&
+                (slide['url'] ?? slide['mediaPath'] ?? slide['path'] ?? '').toString().trim() == path);
+        if (!belongs) throw StateError('Video removed');
       }
-
+      final controller = VideoPlayerController.file(file,
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
+      pending = controller;
       await controller.initialize();
       await controller.setLooping(false);
       await controller.setVolume(0);
-
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-
+      if (!current()) throw StateError('Video unavailable');
       controller.addListener(_onControllerUpdate);
-
-      setState(() {
-        _controller = controller;
-        _loading = false;
-        _error = null;
-      });
-    } catch (e, st) {
-      debugPrint('VIDEO LOAD ERROR: $path\n$e');
-      debugPrintStack(stackTrace: st);
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'تعذر تحميل الفيديو';
-      });
+      setState(() { _controller = controller; _loading = false; _error = null; });
+      pending = null;
+    } catch (_) {
+      if (mounted && generation == _accessGeneration) setState(() { _loading = false; _error = 'تعذر تحميل الفيديو'; });
     } finally {
-      _VideoInitGate.instance.release();
+      try { await pending?.dispose(); }
+      finally { _VideoInitGate.instance.release(); }
     }
   }
 
@@ -22341,6 +22638,7 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
   }
 
   void _handleVisibilityChanged(VisibilityInfo info) {
+    if (_suspended || (widget.postId != null && !_foreground) || _openingFullscreen) return;
     final visible = info.visibleFraction >= _visibilityThreshold;
     if (visible && !_hasStartedLoading) {
       _initializeVideo();
@@ -22369,6 +22667,7 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
   }
 
   void _toggleMute() {
+    if (_suspended) return;
     final c = _controller;
     if (c == null) return;
 
@@ -22380,38 +22679,68 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
 
   Future<void> _openFullscreen() async {
     final c = _controller;
-    if (c == null) return;
-
-    await c.pause();
-    await c.setVolume(0);
-    if (!mounted) return;
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SimpleFullscreenVideoViewer(
-          controller: c,
-        ),
-      ),
-    );
-
-    if (!mounted) return;
-
-    // بعد الرجوع: نزامن حالة الكتم مع الـ controller
-    final isCurrentlyMuted = c.value.volume == 0;
-
-    await c.seekTo(Duration.zero);
-    await c.pause();
-    await c.setVolume(0);
-
-    setState(() {
-      _finished = true;
-      _muted = isCurrentlyMuted; // ← المهم
-    });
+    if (c == null || _suspended || _openingFullscreen) return;
+    _openingFullscreen = true;
+    final generation = _accessGeneration;
+    bool current() => mounted && generation == _accessGeneration && !_suspended && identical(c, _controller);
+    try {
+      await c.pause();
+      await c.setVolume(0);
+      if (!current()) return;
+      if (widget.commentId != null) {
+        await _verifyCommentVideoAccess();
+        if (!current()) return;
+      } else if (widget.postId != null) {
+        final fresh = _Post.fromData(widget.postId!, await _readAuthorizedPostData(widget.postId));
+        if (!current()) return;
+        final path = widget.videoPath.trim();
+        if (!fresh.videoPaths.any((p) => p.trim() == path) &&
+            !fresh.pollSlides.any((slide) => slide['type'] == 'video' &&
+                (slide['url'] ?? slide['mediaPath'] ?? slide['path'] ?? '').toString().trim() == path)) {
+          throw StateError('Video removed');
+        }
+      }
+      final route = MaterialPageRoute<void>(builder: (_) => SimpleFullscreenVideoViewer(controller: c));
+      _fullscreenRoute = route;
+      await Navigator.of(context).push(route);
+      await route.completed;
+      if (!current()) return;
+      final isCurrentlyMuted = c.value.volume == 0;
+      await c.seekTo(Duration.zero);
+      if (!current()) return;
+      await c.pause();
+      await c.setVolume(0);
+      if (current()) setState(() { _finished = true; _muted = isCurrentlyMuted; });
+    } catch (_) {
+      if (current() && widget.postId != null) _invalidateVideo();
+    } finally {
+      _fullscreenRoute = null;
+      _openingFullscreen = false;
+    }
   }
   @override
   void dispose() {
+    _accessGeneration++;
+    _auth?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    blockedListRevision.removeListener(_invalidateVideo);
+    moderationRevision.removeListener(_invalidateVideo);
+    authorProfileRevision.removeListener(_invalidateVideo);
+    final route = _fullscreenRoute;
+    final nav = route?.navigator;
+    if (route != null && nav != null && nav.mounted && route.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (nav.mounted && route.isActive) nav.removeRoute(route);
+      });
+    }
     _controller?.removeListener(_onControllerUpdate);
-    _controller?.dispose();
+    final controller = _controller;
+    if (route != null) {
+      controller?.pause();
+      route.completed.then((_) => controller?.dispose());
+    } else {
+      controller?.dispose();
+    }
     super.dispose();
   }
 
@@ -22439,6 +22768,10 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> {
                 const SizedBox(height: 8),
                 Text(_error ?? 'تعذر تحميل الفيديو',
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                if (widget.postId != null) TextButton(onPressed: () {
+                  _hasStartedLoading = false;
+                  _initializeVideo();
+                }, child: const Text('إعادة المحاولة')),
               ],
             ),
           )
@@ -22541,7 +22874,9 @@ class _SimpleFullscreenVideoViewerState
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       await c.seekTo(Duration.zero);
+      if (!mounted) return;
       await c.play();
       if (mounted) setState(() {});
     });
@@ -23039,14 +23374,77 @@ class _PostImagesSliderState extends State<PostImagesSlider> {
   }
 }
 
+class _AuthorizedImageView extends StatefulWidget {
+  const _AuthorizedImageView({required this.postId, required this.path, super.key, this.commentId, this.preview = false});
+  final String? commentId;
+  final bool preview;
+  final String postId, path;
+  @override
+  State<_AuthorizedImageView> createState() => _AuthorizedImageViewState();
+}
+
+class _AuthorizedImageViewState extends State<_AuthorizedImageView>
+    with WidgetsBindingObserver {
+  late final String? _viewer;
+  StreamSubscription<User?>? _auth;
+  bool _foreground = true;
+  int _revision = 0;
+  @override
+  void initState() {
+    super.initState();
+    _viewer = FirebaseAuth.instance.currentUser?.uid;
+    WidgetsBinding.instance.addObserver(this);
+    blockedListRevision.addListener(_invalidate);
+    moderationRevision.addListener(_invalidate);
+    authorProfileRevision.addListener(_invalidate);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user?.uid != _viewer) _invalidate();
+    });
+  }
+  void _invalidate() {
+    if (mounted) setState(() => _revision++);
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
+    setState(() {
+      _foreground = state == AppLifecycleState.resumed;
+      _revision++;
+    });
+  }
+  @override
+  void dispose() {
+    _auth?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    blockedListRevision.removeListener(_invalidate);
+    moderationRevision.removeListener(_invalidate);
+    authorProfileRevision.removeListener(_invalidate);
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    final sameAccount = _viewer != null && _viewer == FirebaseAuth.instance.currentUser?.uid;
+    final image = !sameAccount
+        ? const Center(child: Text('تغيّر الحساب، أغلق العارض وأعد فتحه',
+            style: TextStyle(color: Colors.white)))
+        : AuthorizedPostImage(key: ValueKey(_revision), postId: widget.postId,
+            commentId: widget.commentId, url: widget.path, active: _foreground,
+            fit: widget.preview ? BoxFit.cover : BoxFit.contain);
+    if (widget.preview) return SizedBox(height: 220, width: double.infinity, child: image);
+    return SimpleFullscreenImageViewer(images: [widget.path], imageBuilder: (_, __) => image);
+  }
+}
+
 class SimpleFullscreenImageViewer extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
+  final Widget Function(String path, int index)? imageBuilder;
 
   const SimpleFullscreenImageViewer({
     super.key,
     required this.images,
     this.initialIndex = 0,
+    this.imageBuilder,
   });
 
   @override
@@ -23231,7 +23629,9 @@ class _SimpleFullscreenImageViewerState
                         final isNetwork = path.startsWith('http://') ||
                             path.startsWith('https://');
 
-                        final Widget imageWidget = path.startsWith('assets/')
+                        final Widget imageWidget = widget.imageBuilder != null
+                            ? widget.imageBuilder!(path, index)
+                            : path.startsWith('assets/')
                             ? Image.asset(path, fit: BoxFit.contain)
                             : isNetwork
                             ? Image.network(
@@ -25457,17 +25857,28 @@ class _FullscreenPostPagerState extends State<FullscreenPostPager> {
             : const PageScrollPhysics(),
         itemCount: _posts.length, // ← القائمة الداخلية
         onPageChanged: (i) {
-          setState(() => _currentIndex = i);
+          setState(() { _currentIndex = i; _lockVertical = false; });
           _maybeLoadMore(i);
         },
         itemBuilder: (context, index) {
           final post = _posts[index];
-          return _PostPagerPage(
+          return _AuthorizedPagerMedia(
+            key: ValueKey(post.id),
+            postId: post.id,
+            active: index == _currentIndex,
+            onChecking: () {
+              if (mounted && _lockVertical) setState(() => _lockVertical = false);
+            },
+            onAuthorized: (fresh) {
+              if (!mounted || index >= _posts.length || _posts[index].id != fresh.id) return;
+              _posts[index] = fresh;
+            },
+            builder: (fresh) => _PostPagerPage(
             key: ValueKey(
               post.id ??
                   '${post.author}_${post.createdAt.millisecondsSinceEpoch}',
             ),
-            post: post,
+            post: fresh,
             isActive: index == _currentIndex,
             initialMediaIndex:
             index == widget.initialIndex ? widget.initialMediaIndex : 0,
@@ -25480,6 +25891,7 @@ class _FullscreenPostPagerState extends State<FullscreenPostPager> {
                 setState(() => _lockVertical = lock);
               }
             },
+            ),
           );
         },
       ),
@@ -25488,6 +25900,115 @@ class _FullscreenPostPagerState extends State<FullscreenPostPager> {
 }
 
 // ==================== صفحة منشور واحد داخل الـ Pager ====================
+
+class _AuthorizedPagerMedia extends StatefulWidget {
+  const _AuthorizedPagerMedia({super.key, required this.postId, required this.active,
+    required this.builder, required this.onAuthorized, required this.onChecking});
+  final String? postId;
+  final bool active;
+  final Widget Function(_Post) builder;
+  final ValueChanged<_Post> onAuthorized;
+  final VoidCallback onChecking;
+  @override
+  State<_AuthorizedPagerMedia> createState() => _AuthorizedPagerMediaState();
+}
+
+class _AuthorizedPagerMediaState extends State<_AuthorizedPagerMedia> with WidgetsBindingObserver {
+  _Post? _post;
+  String? _error, _viewer;
+  bool _loading = false;
+  int _generation = 0;
+  StreamSubscription<User?>? _auth;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewer = FirebaseAuth.instance.currentUser?.uid;
+    WidgetsBinding.instance.addObserver(this);
+    blockedListRevision.addListener(_reload);
+    moderationRevision.addListener(_reload);
+    authorProfileRevision.addListener(_reload);
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted && user?.uid != _viewer) _reload();
+    });
+    if (widget.active) _reload();
+  }
+  @override
+  void didUpdateWidget(covariant _AuthorizedPagerMedia oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active || oldWidget.postId != widget.postId) _reload();
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reload();
+    } else if (mounted) {
+      _generation++;
+      setState(() { _post = null; _loading = false; });
+    }
+  }
+  Future<void> _reload() async {
+    if (!mounted) return;
+    final generation = ++_generation;
+    final id = widget.postId;
+    setState(() { _post = null; _error = null; _loading = widget.active; });
+    if (!widget.active) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && generation == _generation) widget.onChecking();
+    });
+    if (_viewer == null || _viewer != FirebaseAuth.instance.currentUser?.uid) {
+      setState(() { _loading = false; _error = 'تغيّر الحساب، أعد فتح العارض'; });
+      return;
+    }
+    bool current() => mounted && generation == _generation && widget.active &&
+        id == widget.postId && _viewer == FirebaseAuth.instance.currentUser?.uid;
+    try {
+      final data = await _readAuthorizedPostData(id);
+      if (!current()) return;
+      final fresh = _Post.fromData(id!, data);
+      if (fresh.imagePaths.isEmpty && fresh.videoPaths.isEmpty) {
+        setState(() { _loading = false; _error = 'لم تعد هناك وسائط في هذا المنشور'; });
+        return;
+      }
+      widget.onAuthorized(fresh);
+      setState(() { _post = fresh; _loading = false; });
+    } on FirebaseFunctionsException catch (error) {
+      if (!current()) return;
+      setState(() { _loading = false; _error = error.code == 'not-found'
+          ? 'المنشور لم يعد متاحاً' : 'تعذر التحقق من عرض المنشور'; });
+    } catch (_) {
+      if (!current()) return;
+      setState(() { _loading = false; _error = 'تعذر التحقق من عرض المنشور'; });
+    }
+  }
+  @override
+  void dispose() {
+    _generation++;
+    _auth?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    blockedListRevision.removeListener(_reload);
+    moderationRevision.removeListener(_reload);
+    authorProfileRevision.removeListener(_reload);
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.active) return const ColoredBox(color: Colors.black);
+    if (_post != null) return widget.builder(_post!);
+    return ColoredBox(color: Colors.black, child: SafeArea(child: Stack(children: [
+      Center(child: _loading ? const CircularProgressIndicator() : Column(
+        mainAxisSize: MainAxisSize.min, children: [
+          Text(_error ?? 'اسحب للانتقال إلى منشور آخر', style: const TextStyle(color: Colors.white)),
+          TextButton(onPressed: _reload, child: const Text('إعادة المحاولة')),
+        ],
+      )),
+      Align(alignment: AlignmentDirectional.topStart, child: IconButton(
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.close, color: Colors.white), tooltip: 'إغلاق',
+      )),
+    ])));
+  }
+}
 
 class _PostPagerPage extends StatefulWidget {
   const _PostPagerPage({
@@ -25519,6 +26040,8 @@ class _PostPagerPageState extends State<_PostPagerPage> {
   late int _mediaIndex;
 
   final Map<int, VideoPlayerController> _videoControllers = {};
+  final Set<int> _signedVideoLoading = {};
+  final Set<int> _signedVideoErrors = {};
   bool _isNavigatingComments = false;
   bool _controlsVisible = true;
   List<_PostMediaItem> _mediaItemsForPost(_Post post) {
@@ -25627,9 +26150,13 @@ class _PostPagerPageState extends State<_PostPagerPage> {
   Widget _buildImagePage(int index, String path) {
     final isNetwork =
         path.startsWith('http://') || path.startsWith('https://');
-    final imageWidget = isNetwork
-        ? CachedNetworkImage(imageUrl: path, fit: BoxFit.contain)
-        : Image.file(File(path), fit: BoxFit.contain);
+    final firebaseImage = Uri.tryParse(path)?.host == 'firebasestorage.googleapis.com';
+    final imageWidget = firebaseImage
+        ? AuthorizedPostImage(postId: widget.post.id!, url: path,
+            active: widget.isActive && index == _mediaIndex)
+        : isNetwork
+            ? CachedNetworkImage(imageUrl: path, fit: BoxFit.contain)
+            : Image.file(File(path), fit: BoxFit.contain);
 
     final zoomed = ((_currentScale[index] ?? 1.0) - 1.0).abs() > 0.05;
 
@@ -25654,6 +26181,12 @@ class _PostPagerPageState extends State<_PostPagerPage> {
   }
 
   Widget _buildVideoPage(int index) {
+    if (_signedVideoErrors.contains(index)) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('تعذر تحميل الفيديو', style: TextStyle(color: Colors.white)),
+        TextButton(onPressed: () => _initVideoAt(index), child: const Text('إعادة المحاولة')),
+      ]));
+    }
     final c = _videoControllers[index];
     if (c == null || !c.value.isInitialized) {
       return const Center(
@@ -25706,7 +26239,8 @@ class _PostPagerPageState extends State<_PostPagerPage> {
       final item = _items[i];
       if (item.kind != _MediaKind.image) continue;
       final p = item.path.trim();
-      if (p.startsWith('http') && mounted) {
+      if (p.startsWith('http') && mounted &&
+          Uri.tryParse(p)?.host != 'firebasestorage.googleapis.com') {
         precacheImage(CachedNetworkImageProvider(p), context);
       }
     }
@@ -25732,6 +26266,50 @@ class _PostPagerPageState extends State<_PostPagerPage> {
     }
   }
 
+  Future<void> _initSignedVideoAt(int index, String path) async {
+    if (!mounted || !widget.isActive || index != _mediaIndex || !_signedVideoLoading.add(index)) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final postId = widget.post.id;
+    bool current() => mounted && widget.isActive && index == _mediaIndex &&
+        uid != null && uid == FirebaseAuth.instance.currentUser?.uid &&
+        postId == widget.post.id && index < _items.length && _items[index].path.trim() == path;
+    VideoPlayerController? controller;
+    setState(() => _signedVideoErrors.remove(index));
+    try {
+      if (!current()) throw StateError('Video unavailable');
+      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readPostMediaDownload').call({'postId': postId, 'url': path});
+      if (!current()) return;
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final url = data['url'], expiry = data['expiresAt'];
+      if (url is! String || Uri.tryParse(url)?.scheme != 'https' ||
+          expiry is! num || expiry <= DateTime.now().millisecondsSinceEpoch) {
+        throw StateError('Invalid video authorization');
+      }
+      final file = await DefaultCacheManager().getSingleFile(url);
+      if (!current()) return;
+      // Download may be slow; verify access again before using cached bytes.
+      final fresh = _Post.fromData(postId!, await _readAuthorizedPostData(postId));
+      if (!current()) return;
+      if (!fresh.videoPaths.any((p) => p.trim() == path)) throw StateError('Video removed');
+      controller = VideoPlayerController.file(file,
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
+      await controller.initialize();
+      await controller.setLooping(true);
+      if (!current()) return;
+      await controller.play();
+      if (!current()) return;
+      _videoControllers[index] = controller;
+      controller = null; // Ownership transferred to the page.
+      setState(() {});
+    } catch (_) {
+      if (current()) setState(() => _signedVideoErrors.add(index));
+    } finally {
+      await controller?.dispose();
+      _signedVideoLoading.remove(index);
+    }
+  }
+
   Future<void> _initVideoAt(int index) async {
     if (index < 0 || index >= _items.length) return;
     final item = _items[index];
@@ -25740,6 +26318,10 @@ class _PostPagerPageState extends State<_PostPagerPage> {
 
     final path = item.path.trim();
     if (path.isEmpty) return;
+    if (Uri.tryParse(path)?.host == 'firebasestorage.googleapis.com') {
+      await _initSignedVideoAt(index, path);
+      return;
+    }
 
     final isNetwork =
         path.startsWith('http://') || path.startsWith('https://');
@@ -25815,7 +26397,9 @@ class _PostPagerPageState extends State<_PostPagerPage> {
   void _playCurrentVideo() {
     final c = _videoControllers[_mediaIndex];
     if (c != null && c.value.isInitialized) {
-      c.seekTo(Duration.zero);
+      if (Uri.tryParse(_items[_mediaIndex].path)?.host != 'firebasestorage.googleapis.com') {
+        c.seekTo(Duration.zero);
+      }
       c.play();
     }
   }
@@ -32668,6 +33252,7 @@ class _CommentsScreenState extends State<_CommentsContentScreen>
           allComments: widget.post.comments,
           onCommentsChanged: () => setState(() {}),
           parentActions: _CommentActionsCallbacks(
+            postId: widget.post.id!,
             onReply: (c) {}, // ماستعملهاش _ThreadDetailScreen عندها composer خاص بيها
             onEdit: (c) {
               Navigator.pop(context);
@@ -32935,10 +33520,18 @@ class _CommentsScreenState extends State<_CommentsContentScreen>
       return;
     }
 
-    final already = await hasCommunityReport(
-      type: CommunityReportType.comment,
-      targetId: comment.id,
-    );
+    bool already;
+    try {
+      already = await hasCommunityReport(
+        type: CommunityReportType.comment,
+        targetId: comment.id,
+        parentId: postId,
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر التحقق من البلاغ السابق؛ أعد المحاولة')));
+      return;
+    }
     if (!mounted) return;
 
     if (already) {
@@ -33396,6 +33989,7 @@ class _CommentsScreenState extends State<_CommentsContentScreen>
                         child: _CommentThreadCard(
                           comment: comment,
                           actions: _CommentActionsCallbacks(
+                            postId: widget.post.id!,
                             onReply: (c) {
                               setState(() {
                                 _replyTo = c;
@@ -34260,7 +34854,7 @@ class _CommentTileState extends State<CommentTile> {
                               ),
                               if (comment.mediaUrl != null && comment.mediaUrl!.isNotEmpty) ...[
                                 const SizedBox(height: 6),
-                                _CommentMedia(url: comment.mediaUrl!, type: comment.mediaType),
+                                _CommentMedia(postId: widget.actions.postId, commentId: comment.id, url: comment.mediaUrl!, type: comment.mediaType),
                               ],
                             ],
                           ),
@@ -34403,6 +34997,7 @@ class _ThreadDetailScreenState extends State<_ThreadDetailScreen> {
     super.initState();
     _replyTo = widget.rootComment;
     _localActions = _CommentActionsCallbacks(
+      postId: widget.postId,
       onReply: (c) {
         setState(() {
           _replyTo = c;
@@ -35337,12 +35932,33 @@ class _ExpandedLinePainter extends CustomPainter {
 // ==========================Comment====================================
 
 
+class _MediaUploadError implements Exception {
+  const _MediaUploadError(this.message);
+  final String message;
+}
+
 enum CommentMediaKind { image, video, gif }
 
 class CommentAttachment {
   final CommentMediaKind kind;
   final Uint8List bytes;
   final String extension; // 'jpg' | 'mp4' | 'gif' | 'png' ...
+
+  String get uploadContentType {
+    const types = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+      'gif': 'image/gif', 'webp': 'image/webp', 'bmp': 'image/bmp',
+      'heic': 'image/heic', 'heif': 'image/heif', 'avif': 'image/avif',
+      'mp4': 'video/mp4', 'mov': 'video/quicktime', 'm4v': 'video/x-m4v',
+      'webm': 'video/webm', 'mkv': 'video/x-matroska', '3gp': 'video/3gpp',
+    };
+    final type = types[extension.toLowerCase()];
+    if (type == null || (kind == CommentMediaKind.video) != type.startsWith('video/') ||
+        (kind == CommentMediaKind.gif && type != 'image/gif')) {
+      throw const _MediaUploadError('صيغة المرفق غير مدعومة؛ اختر صورة أو فيديو آخر');
+    }
+    return type;
+  }
 
   const CommentAttachment({
     required this.kind,
@@ -35646,29 +36262,76 @@ class _AttachmentPreview extends StatelessWidget {
   }
 }
 
-class _CommentMedia extends StatelessWidget {
-  const _CommentMedia({required this.url, required this.type});
+class _CommentMedia extends StatefulWidget {
+  const _CommentMedia({required this.postId, required this.commentId, required this.url, required this.type});
+  final String postId, commentId;
   final String url;
   final String? type;
 
   @override
+  State<_CommentMedia> createState() => _CommentMediaState();
+}
+
+class _CommentMediaState extends State<_CommentMedia> {
+  bool _opening = false;
+  Future<void> _openImage() async {
+    if (_opening) return;
+    final postId = widget.postId, commentId = widget.commentId, url = widget.url;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final blocks = blockedListRevision.value, moderation = moderationRevision.value,
+        profiles = authorProfileRevision.value;
+    bool current() => mounted && uid != null && uid == FirebaseAuth.instance.currentUser?.uid &&
+        postId == widget.postId && commentId == widget.commentId && url == widget.url &&
+        blocks == blockedListRevision.value && moderation == moderationRevision.value &&
+        profiles == authorProfileRevision.value;
+    _opening = true;
+    try {
+      final fresh = _Post.fromData(postId, await _readAuthorizedPostData(postId));
+      if (!current()) return;
+      final matches = <_Comment>[];
+      void visit(List<_Comment> comments) {
+        for (final comment in comments) {
+          if (comment.id == commentId) matches.add(comment);
+          visit(comment.replies);
+        }
+      }
+      visit(fresh.comments);
+      if (matches.length != 1 || matches.single.mediaUrl != url || matches.single.mediaType == 'video') {
+        throw StateError('Comment image unavailable');
+      }
+      await Navigator.push(context, MaterialPageRoute(
+        builder: (_) => Uri.tryParse(url)?.host == 'firebasestorage.googleapis.com'
+            ? _AuthorizedImageView(postId: postId, commentId: commentId, path: url)
+            : FullscreenImageViewer(images: [url], initialIndex: 0),
+      ));
+    } catch (_) {
+      if (current()) ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('تعذر فتح الصورة، ربما لم يعد التعليق متاحًا')),
+      );
+    } finally {
+      _opening = false;
+    }
+  }
+  @override
   Widget build(BuildContext context) {
+    final url = widget.url, type = widget.type;
     final isVideo = type == 'video';
     return GestureDetector(
-      onTap: () {
-        if (!isVideo) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => FullscreenImageViewer(images: [url], initialIndex: 0)),
-          );
-        }
-      },
+      onTap: isVideo ? null : _openImage,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 220),
           child: isVideo
-              ? _VideoSlideWidget(videoPath: url) // نفس الويدجت المستعمل فالمنشورات
+              ? _VideoSlideWidget(
+                  key: ValueKey([widget.postId, widget.commentId, url].join('|')),
+                  videoPath: url,
+                  postId: Uri.tryParse(url)?.host == 'firebasestorage.googleapis.com' ? widget.postId : null,
+                  commentId: Uri.tryParse(url)?.host == 'firebasestorage.googleapis.com' ? widget.commentId : null,
+                )
+              : Uri.tryParse(url)?.host == 'firebasestorage.googleapis.com'
+              ? _AuthorizedImageView(key: ValueKey([widget.postId, widget.commentId, url].join('|')),
+                  postId: widget.postId, commentId: widget.commentId, path: url, preview: true)
               : Image.network(
             url,
             fit: BoxFit.cover,
@@ -35999,7 +36662,12 @@ Future<void> _postComment({required BuildContext context, required String postId
     if (attachment != null) {
       final ref = FirebaseStorage.instance.ref(
           'community_posts/$postId/comments/${user.uid}/$commentId/media.${attachment.extension}');
-      await ref.putData(attachment.bytes);
+      if (attachment.bytes.isEmpty || attachment.bytes.length > 40 * 1024 * 1024) {
+        throw const _MediaUploadError('يجب أن يكون المرفق غير فارغ وألا يتجاوز 40 ميغابايت');
+      }
+      final contentType = attachment.uploadContentType;
+      if (FirebaseAuth.instance.currentUser?.uid != user.uid) throw StateError('تغيّر الحساب');
+      await ref.putData(attachment.bytes, SettableMetadata(contentType: contentType));
       mediaUrl = await ref.getDownloadURL();
       mediaType = switch (attachment.kind) {
         CommentMediaKind.video => 'video', CommentMediaKind.gif => 'gif', CommentMediaKind.image => 'image',
@@ -36020,6 +36688,10 @@ Future<void> _postComment({required BuildContext context, required String postId
     onSuccess(_commentFromMap(Map<String, dynamic>.from(raw)), replyTo != null);
   } catch (e) {
     if (!context.mounted) return;
+    if (e is _MediaUploadError) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
     final denied = e is FirebaseFunctionsException && e.code == 'permission-denied';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(denied
         ? 'التعليق غير مسموح وفق إعدادات الخصوصية الحالية.'
@@ -36052,7 +36724,9 @@ bool _insertReplyIntoCommentsStatic(List<Map<String, dynamic>> comments, String 
 
 
 class _CommentActionsCallbacks {
+  final String postId;
   const _CommentActionsCallbacks({
+    required this.postId,
     required this.onReply,
     required this.onEdit,
     required this.onDelete,
@@ -36384,6 +37058,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<CroppedFile?> _cropImage(String sourcePath, {required bool isCircle}) {
     return ImageCropper().cropImage(
       sourcePath: sourcePath,
+      compressFormat: ImageCompressFormat.jpg,
       aspectRatio: isCircle
           ? const CropAspectRatio(ratioX: 1, ratioY: 1)
           : const CropAspectRatio(ratioX: 16, ratioY: 9),
@@ -36419,13 +37094,19 @@ class _ProfileScreenState extends State<ProfileScreen>
     final ref = FirebaseStorage.instance.ref('users/$uid/$fileName');
 
     try {
-      await ref.putFile(file);
+      final size = await file.length();
+      if (size <= 0 || size > 20 * 1024 * 1024) {
+        throw const _MediaUploadError('يجب أن تكون الصورة غير فارغة وألا تتجاوز 20 ميغابايت');
+      }
+      if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
+      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
       var url = await ref.getDownloadURL();
       if (isProfile) {
         final sep = url.contains('?') ? '&' : '?';
         url = '$url${sep}v=${DateTime.now().millisecondsSinceEpoch}';
       }
 
+      if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         field: url,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -36448,7 +37129,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       debugPrint('Upload ${isProfile ? "profile" : "cover"} image failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر رفع الصورة، حاول مجددًا')),
+        SnackBar(content: Text(e is _MediaUploadError ? e.message : 'تعذر رفع الصورة، حاول مجددًا')),
       );
     }
   }
@@ -37058,7 +37739,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           final uid = FirebaseAuth.instance.currentUser?.uid;
           if (uid != null && userName.trim().isNotEmpty) {
             AuthorProfiles.putName(uid, userName.trim());
-            propagateAuthorToPosts(uid: uid, authorName: userName.trim());
+            propagateAuthorToPosts(uid: uid, authorName: userName.trim(), useFullName: true);
           }
         }
       ),
@@ -40734,10 +41415,17 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       return;
     }
 
-    final already = await hasCommunityReport(
-      type: CommunityReportType.user,
-      targetId: targetId,
-    );
+    bool already;
+    try {
+      already = await hasCommunityReport(
+        type: CommunityReportType.user,
+        targetId: targetId,
+      );
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر التحقق من البلاغ السابق؛ أعد المحاولة')));
+      return;
+    }
     if (!mounted) return;
     if (already) {
       await showReportSubmittedSheet(
@@ -40946,27 +41634,33 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
+  int _countsGeneration = 0;
   Future<void> _loadCounts() async {
     if (!_isSelf) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid != widget.userId) return;
+    final generation = ++_countsGeneration;
     try {
-      final userRef =
-      FirebaseFirestore.instance.collection('users').doc(widget.userId);
-      final followers = await userRef.collection('followers').count().get();
-      final following = await userRef.collection('following').count().get();
-      final posts = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where('authorId', isEqualTo: widget.userId)
-          .count()
-          .get();
-
-      if (!mounted) return;
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readOwnProfileCounts').call(<String, dynamic>{});
+      if (!mounted || generation != _countsGeneration ||
+          FirebaseAuth.instance.currentUser?.uid != uid || widget.userId != uid) return;
+      final data = Map<String, dynamic>.from(response.data as Map);
+      int count(String key) {
+        final value = data[key];
+        if (value is! num || !value.isFinite || value < 0 || value != value.roundToDouble()) {
+          throw StateError('Invalid profile count');
+        }
+        return value.toInt();
+      }
+      final followers = count('followers'), following = count('following'), posts = count('posts');
       setState(() {
-        _followersCount = followers.count ?? _followersCount;
-        _followingCount = following.count ?? _followingCount;
-        _postsCount = posts.count ?? _postsCount;
+        _followersCount = followers;
+        _followingCount = following;
+        _postsCount = posts;
       });
     } catch (e) {
-      debugPrint('load counts failed: $e');
+      debugPrint('load counts failed: '+ e.runtimeType.toString());
     }
   }
 
@@ -42706,15 +43400,51 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
   bool _loading = false;
   List<_ProfileSearchHit> _results = [];
   Timer? _debounce;
+  int _generation = 0;
+  String? _error, _viewer;
+  StreamSubscription<User?>? _auth;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewer = FirebaseAuth.instance.currentUser?.uid;
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || user?.uid == _viewer) return;
+      _viewer = user?.uid; _refreshAccess();
+    });
+    blockedListRevision.addListener(_refreshAccess);
+    hiddenListRevision.addListener(_refreshAccess);
+    authorProfileRevision.addListener(_refreshAccess);
+    followRevision.addListener(_refreshAccess);
+    moderationRevision.addListener(_refreshAccess);
+  }
+
+  void _refreshAccess() { if (mounted) _onQueryChanged(_ctrl.text); }
+
+  @override
+  void didUpdateWidget(covariant _ProfileSearchSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.authorId != widget.authorId) _refreshAccess();
+  }
 
   @override
   void dispose() {
+    _generation++;
+    _auth?.cancel();
+    blockedListRevision.removeListener(_refreshAccess);
+    hiddenListRevision.removeListener(_refreshAccess);
+    authorProfileRevision.removeListener(_refreshAccess);
+    followRevision.removeListener(_refreshAccess);
+    moderationRevision.removeListener(_refreshAccess);
     _debounce?.cancel();
     _ctrl.dispose();
     super.dispose();
   }
 
   void _onQueryChanged(String q) {
+    if (!mounted) return;
+    _generation++;
+    setState(() { _query = q.trim().toLowerCase(); _results = []; _error = null; _loading = _query.isNotEmpty; });
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 280), () {
       _runSearch(q);
@@ -42724,8 +43454,15 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
   Future<void> _runSearch(String q) async {
     final text = q.trim().toLowerCase();
     if (!mounted) return;
+    final generation = ++_generation;
+    final viewer = FirebaseAuth.instance.currentUser?.uid;
+    final author = widget.authorId;
+    bool current() => mounted && generation == _generation &&
+        viewer == FirebaseAuth.instance.currentUser?.uid && author == widget.authorId;
 
     setState(() {
+      _error = null;
+      _results = [];
       _query = text;
       _loading = text.isNotEmpty;
       if (text.isEmpty) _results = [];
@@ -42737,12 +43474,27 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
     }
 
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('community_posts')
-          .where('authorId', isEqualTo: widget.authorId)
-          .orderBy('createdAt', descending: true)
-          .limit(100)
-          .get();
+      final authorized = <String, _Post>{};
+      Map<String, dynamic>? cursor;
+      for (var pageNumber = 0; pageNumber < 4; pageNumber++) {
+        if (!current()) return;
+        final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+            .httpsCallable('readProfilePosts', options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+            .call<Map<String, dynamic>>({'userId': author, 'cursor': cursor});
+        if (!current()) return;
+        final page = response.data;
+        if (page['posts'] is! List || page['exhausted'] is! bool ||
+            (page['cursor'] != null && page['cursor'] is! Map) ||
+            (page['exhausted'] == false && page['cursor'] == null)) throw StateError('Invalid search page');
+        for (final row in page['posts'] as List) {
+          if (row is! Map || row['id'] is! String || row['data'] is! Map) throw StateError('Invalid post');
+          final post = _Post.fromData(row['id'] as String, Map<String, dynamic>.from(row['data'] as Map));
+          if (post.authorId != author) throw StateError('Unexpected author');
+          authorized[row['id'] as String] = post;
+        }
+        if (page['exhausted'] == true) break;
+        cursor = Map<String, dynamic>.from(page['cursor'] as Map);
+      }
 
       final hits = <_ProfileSearchHit>[];
 
@@ -42762,11 +43514,9 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
       }
 
       final hiddenPosts = await loadHiddenPostIds();
-      if (!mounted) return;
-
-      for (final doc in snap.docs) {
-        if (isCommunityPostRemoved(doc.data())) continue;
-        final post = _Post.fromFirestore(doc);
+      if (!current()) return;
+      final posts = authorized.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      for (final post in posts.take(100)) {
         final postId = post.id?.trim();
         if (postId != null && hiddenPosts.contains(postId)) continue;
 
@@ -42780,17 +43530,18 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
         walkComments(post, post.comments);
       }
 
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _results = hits;
         _loading = false;
       });
     } catch (e) {
       debugPrint('profile search failed: $e');
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _loading = false;
         _results = [];
+        _error = 'تعذر إتمام البحث، حاول مجدداً';
       });
     }
   }
@@ -42894,6 +43645,13 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
                         ),
                       ),
                     )
+                        : _error != null
+                        ? Center(child: Padding(padding: const EdgeInsets.all(20), child: Column(
+                          mainAxisSize: MainAxisSize.min, children: [
+                            Text(_error!),
+                            TextButton(onPressed: () => _onQueryChanged(_ctrl.text), child: const Text('إعادة المحاولة')),
+                          ],
+                        )))
                         : _query.isEmpty
                         ? Center(
                       child: Padding(
@@ -42969,7 +43727,7 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => CommentsScreen(post: hit.post),
+              builder: (_) => CommentsScreen(post: hit.post, initialCommentId: c.id),
             ),
           );
         },
@@ -43733,24 +44491,7 @@ Future<void> syncAuthorPrivateOnPosts({
   required String uid,
   required bool isPrivate,
 }) async {
-  final snap = await FirebaseFirestore.instance
-      .collection('community_posts')
-      .where('authorId', isEqualTo: uid)
-      .get();
-  if (snap.docs.isEmpty) return;
-
-  var batch = FirebaseFirestore.instance.batch();
-  var n = 0;
-  for (final d in snap.docs) {
-    batch.update(d.reference, {'authorPrivate': isPrivate});
-    n++;
-    if (n == 400) {
-      await batch.commit();
-      batch = FirebaseFirestore.instance.batch();
-      n = 0;
-    }
-  }
-  if (n > 0) await batch.commit();
+  await syncOwnPostPrivacy(uid);
 }
 Future<bool> canInteractWithAuthor({
   required String authorId,
@@ -44222,24 +44963,21 @@ String severityForReportReason(String reasonId) {
 Future<bool> hasCommunityReport({
   required CommunityReportType type,
   required String targetId,
+  String? parentId,
 }) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return false;
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) throw const CommunityReportError(CommunityReportError.notSignedIn);
   final id = targetId.trim();
-  if (id.isEmpty) return false;
-  try {
-    final doc = await FirebaseFirestore.instance
-        .collection('community_reports')
-        .doc(communityReportDocId(
-      reporterId: user.uid,
-      type: type,
-      targetId: id,
-    ))
-        .get();
-    return doc.exists;
-  } catch (_) {
-    return false;
+  if (id.isEmpty) throw const CommunityReportError(CommunityReportError.invalidTarget);
+  final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable('readOwnReportStatus')
+      .call({'type': type.name, 'targetId': id, 'parentId': parentId?.trim()});
+  if (FirebaseAuth.instance.currentUser?.uid != uid) {
+    throw const CommunityReportError(CommunityReportError.notSignedIn);
   }
+  final data = Map<String, dynamic>.from(response.data as Map);
+  if (data['exists'] is! bool) throw StateError('Invalid report status response');
+  return data['exists'] as bool;
 }
 
 String communityReportDocId({
@@ -44297,83 +45035,26 @@ Future<void> submitCommunityReport({
     throw const CommunityReportError(CommunityReportError.invalidTarget);
   }
 
-  final owner = ownerId?.trim();
-  if (owner != null && owner.isNotEmpty && owner == user.uid) {
-    throw const CommunityReportError(CommunityReportError.selfReport);
-  }
-
-  final ref = FirebaseFirestore.instance
-      .collection('community_reports')
-      .doc(communityReportDocId(
-    reporterId: user.uid,
-    type: type,
-    targetId: id,
-  ));
-
-  var isNew = true;
-  String? prevStatus;
-  try {
-    final existing = await ref.get();
-    isNew = !existing.exists;
-    prevStatus = existing.data()?['status']?.toString();
-  } on FirebaseException catch (e) {
-    debugPrint('submitCommunityReport get skipped: ${e.code}');
-    isNew = true;
-  }
-
-  final payload = <String, dynamic>{
-    'type': type.name,
-    'targetId': id,
-    'reporterId': user.uid,
-    'ownerId': owner,
-    'ownerName': ownerName,
-    'reason': reason,
-    'details': details.trim(),
-    'severity': severityForReportReason(reason),
-    'status': 'pending',
-    'updatedAt': FieldValue.serverTimestamp(),
-  };
-
-  if (parentId != null && parentId.trim().isNotEmpty) {
-    payload['parentId'] = parentId.trim();
-  }
   if (type == CommunityReportType.post) {
-    payload['postId'] = id;
-  } else if (type == CommunityReportType.comment) {
-    payload['commentId'] = id;
-    if (parentId != null && parentId.trim().isNotEmpty) {
-      payload['postId'] = parentId.trim();
+    await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('submitPostReport')
+        .call({'postId': id, 'reason': reason, 'details': details.trim()});
+    return;
+  }
+
+  if (type == CommunityReportType.comment) {
+    final postId = parentId?.trim();
+    if (postId == null || postId.isEmpty) {
+      throw const CommunityReportError(CommunityReportError.invalidTarget);
     }
+    await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('submitCommentReport')
+        .call({'postId': postId, 'commentId': id, 'reason': reason, 'details': details.trim()});
+    return;
   }
-  if (snapshot != null) payload['snapshot'] = snapshot;
-
-  if (isNew) {
-    payload['createdAt'] = FieldValue.serverTimestamp();
-    payload['history'] = [moderationHistoryEntry('reported')];
-  } else if (prevStatus != null &&
-      prevStatus != 'pending' &&
-      prevStatus != 'dismissed') {
-    payload.remove('status');
-  }
-
-  await ref.set(payload, SetOptions(merge: true));
-
-  if (isNew && type == CommunityReportType.post) {
-    try {
-      await FirebaseFirestore.instance
-          .collection('community_posts')
-          .doc(id)
-          .set({
-        'reportCount': FieldValue.increment(1),
-        'reportScore': FieldValue.increment(
-          scoreForSeverity(severityForReportReason(reason)),
-        ),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('report score failed: $e');
-    }
-  }
+  await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable('submitAccountReport')
+      .call({'userId': id, 'reason': reason, 'details': details.trim()});
 }
 
 Map<String, dynamic> communityReportSnapshotFromPost(_Post post) {
@@ -45704,6 +46385,33 @@ class HiddenPostsScreen extends StatefulWidget {
 class _HiddenPostsScreenState extends State<HiddenPostsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  int _postsGeneration = 0, _commentsGeneration = 0;
+  String? _uid;
+  StreamSubscription<User?>? _auth;
+  bool _current(String uid, int generation, bool comments) => mounted &&
+      FirebaseAuth.instance.currentUser?.uid == uid &&
+      generation == (comments ? _commentsGeneration : _postsGeneration);
+  void _refreshAccess() { if (mounted) { _loadPosts(); _loadComments(); } }
+
+  Future<Map<String, _Post>> _readHiddenPostContent(
+    Iterable<String> input, String uid, int generation, bool comments,
+  ) async {
+    final ids = input.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet().toList();
+    final posts = <String, _Post>{};
+    for (var i = 0; i < ids.length; i += 5) {
+      if (!_current(uid, generation, comments)) return {};
+      final end = i + 5 < ids.length ? i + 5 : ids.length;
+      await Future.wait(ids.sublist(i, end).map((id) async {
+        try {
+          final data = await _readAuthorizedPostData(id);
+          if (_current(uid, generation, comments)) posts[id] = _Post.fromData(id, data);
+        } on FirebaseFunctionsException catch (error) {
+          if (error.code != 'not-found') rethrow;
+        }
+      }));
+    }
+    return posts;
+  }
 
   // ===== منشورات =====
   bool _loadingPosts = true;
@@ -45719,12 +46427,27 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadPosts();
-    _loadComments();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _auth = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted || user?.uid == _uid) return;
+      _uid = user?.uid;
+      _refreshAccess();
+    });
+    blockedListRevision.addListener(_refreshAccess);
+    hiddenListRevision.addListener(_refreshAccess);
+    authorProfileRevision.addListener(_refreshAccess);
+    moderationRevision.addListener(_refreshAccess);
+    _refreshAccess();
   }
 
   @override
   void dispose() {
+    _postsGeneration++; _commentsGeneration++;
+    _auth?.cancel();
+    blockedListRevision.removeListener(_refreshAccess);
+    hiddenListRevision.removeListener(_refreshAccess);
+    authorProfileRevision.removeListener(_refreshAccess);
+    moderationRevision.removeListener(_refreshAccess);
     _tabController.dispose();
     super.dispose();
   }
@@ -45733,15 +46456,19 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
   // منشورات
   // ---------------------------------------------------------------------
   Future<void> _loadPosts() async {
+    if (!mounted) return;
+    final generation = ++_postsGeneration;
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       setState(() {
+        _posts = [];
         _loadingPosts = false;
         _postsError = 'يجب تسجيل الدخول أولاً';
       });
       return;
     }
     setState(() {
+      _posts = [];
       _loadingPosts = true;
       _postsError = null;
     });
@@ -45753,7 +46480,7 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
           .get();
       final ids = hiddenSnap.docs.map((d) => d.id).toList();
       if (ids.isEmpty) {
-        if (!mounted) return;
+        if (!_current(uid, generation, false)) return;
         setState(() {
           _posts = [];
           _loadingPosts = false;
@@ -45761,27 +46488,16 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
         return;
       }
 
-      final posts = <_Post>[];
-      for (var i = 0; i < ids.length; i += 10) {
-        final chunk = ids.sublist(i, i + 10 > ids.length ? ids.length : i + 10);
-        final snap = await FirebaseFirestore.instance
-            .collection('community_posts')
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get();
-        for (final d in snap.docs) {
-          try {
-            posts.add(_Post.fromFirestore(d));
-          } catch (_) {}
-        }
-      }
-      if (!mounted) return;
+      final authorized = await _readHiddenPostContent(ids, uid, generation, false);
+      final posts = authorized.values.toList();
+      if (!_current(uid, generation, false)) return;
       setState(() {
         _posts = posts;
         _loadingPosts = false;
       });
     } catch (e) {
       debugPrint('load hidden posts failed: $e');
-      if (!mounted) return;
+      if (!_current(uid, generation, false)) return;
       setState(() {
         _loadingPosts = false;
         _postsError = 'تعذر تحميل المنشورات المخفية';
@@ -45799,9 +46515,8 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
           .collection('hidden_posts')
           .doc(postId)
           .delete();
-      if (!mounted) return;
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
       setState(() => _posts.removeWhere((p) => p.id == postId));
-      blockedListRevision.value++;
       hiddenListRevision.value++;
     } catch (e) {
       debugPrint('unhide post failed: $e');
@@ -45812,15 +46527,19 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
   // تعليقات
   // ---------------------------------------------------------------------
   Future<void> _loadComments() async {
+    if (!mounted) return;
+    final generation = ++_commentsGeneration;
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       setState(() {
+        _hiddenComments = [];
         _loadingComments = false;
         _commentsError = 'يجب تسجيل الدخول أولاً';
       });
       return;
     }
     setState(() {
+      _hiddenComments = [];
       _loadingComments = true;
       _commentsError = null;
     });
@@ -45841,7 +46560,7 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
       }
 
       if (byPost.isEmpty) {
-        if (!mounted) return;
+        if (!_current(uid, generation, true)) return;
         setState(() {
           _hiddenComments = [];
           _loadingComments = false;
@@ -45849,21 +46568,8 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
         return;
       }
 
-      final postIds = byPost.keys.toList();
-      final posts = <String, _Post>{};
-      for (var i = 0; i < postIds.length; i += 10) {
-        final chunk =
-        postIds.sublist(i, i + 10 > postIds.length ? postIds.length : i + 10);
-        final snap = await FirebaseFirestore.instance
-            .collection('community_posts')
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get();
-        for (final doc in snap.docs) {
-          try {
-            posts[doc.id] = _Post.fromFirestore(doc);
-          } catch (_) {}
-        }
-      }
+      final posts = await _readHiddenPostContent(byPost.keys, uid, generation, true);
+      if (!_current(uid, generation, true)) return;
 
       _Comment? find(_Comment c, String id) {
         if (c.id == id) return c;
@@ -45890,14 +46596,14 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
         }
       });
 
-      if (!mounted) return;
+      if (!_current(uid, generation, true)) return;
       setState(() {
         _hiddenComments = hits;
         _loadingComments = false;
       });
     } catch (e) {
       debugPrint('load hidden comments failed: $e');
-      if (!mounted) return;
+      if (!_current(uid, generation, true)) return;
       setState(() {
         _loadingComments = false;
         _commentsError = 'تعذر تحميل التعليقات المخفية';
@@ -45915,7 +46621,7 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
           .collection('hidden_comments')
           .doc(commentId)
           .delete();
-      if (!mounted) return;
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
       setState(() =>
           _hiddenComments.removeWhere((h) => h.comment.id == commentId));
       hiddenListRevision.value++;
@@ -45933,7 +46639,7 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
     return Scaffold(
       backgroundColor: t.pageBg,
       appBar: AppBar(
-        title: const Text('العناصر المخفبة'),
+        title: const Text('العناصر المخفية'),
         backgroundColor: t.pageBg,
         surfaceTintColor: Colors.transparent,
         bottom: TabBar(
@@ -45967,6 +46673,7 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
         children: [
           const SizedBox(height: 80),
           Center(child: Text(_postsError!)),
+          TextButton(onPressed: _loadPosts, child: const Text('إعادة المحاولة')),
         ],
       )
           : _posts.isEmpty
@@ -46029,6 +46736,7 @@ class _HiddenPostsScreenState extends State<HiddenPostsScreen>
         children: [
           const SizedBox(height: 80),
           Center(child: Text(_commentsError!)),
+          TextButton(onPressed: _loadComments, child: const Text('إعادة المحاولة')),
         ],
       )
           : _hiddenComments.isEmpty
@@ -46093,6 +46801,24 @@ class CommunityReportsInboxScreen extends StatefulWidget {
       _CommunityReportsInboxScreenState();
 }
 
+class _ModerationInboxRow {
+  const _ModerationInboxRow(this.id, this._data);
+  final String id;
+  final Map<String, dynamic> _data;
+  Map<String, dynamic> data() => _data;
+}
+
+dynamic _decodeReportValue(dynamic value) {
+  if (value is List) return value.map(_decodeReportValue).toList();
+  if (value is Map) {
+    if (value.length == 1 && value['__reportTime'] is num) {
+      return Timestamp.fromMillisecondsSinceEpoch((value['__reportTime'] as num).toInt());
+    }
+    return value.map((k,v) => MapEntry(k.toString(), _decodeReportValue(v)));
+  }
+  return value;
+}
+
 class _CommunityReportsInboxScreenState
     extends State<CommunityReportsInboxScreen> {
   String _filter = 'pending';
@@ -46107,33 +46833,68 @@ class _CommunityReportsInboxScreenState
     'restored': 0,
   };
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _countsSub;
+  StreamSubscription<User?>? _authSub;
+  final List<_ModerationInboxRow> _reports = [];
+  bool _loading = false, _exhausted = false;
+  String? _cursor, _loadError;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _listenCounts();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) => _loadReports());
+    _loadReports();
   }
 
   @override
   void dispose() {
-    _countsSub?.cancel();
+    _loadGeneration++;
+    _authSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  void _listenCounts() {
-    _countsSub = FirebaseFirestore.instance
-        .collection('community_reports')
-        .snapshots()
-        .listen((snap) {
-      final next = {'pending': 0, 'actioned': 0, 'dismissed': 0, 'restored': 0};
-      for (final d in snap.docs) {
-        final s = (d.data()['status'] ?? 'pending').toString();
-        next[s] = (next[s] ?? 0) + 1;
-      }
-      if (mounted) setState(() => _counts = next);
+  void _selectFilter(String value) {
+    setState(() => _filter = value);
+    _loadReports();
+  }
+
+  Future<void> _loadReports({bool more = false}) async {
+    if (more && (_loading || _exhausted)) return;
+    final generation = ++_loadGeneration;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    setState(() {
+      _loading = true; _loadError = null;
+      if (!more) { _reports.clear(); _cursor = null; _exhausted = false; _counts.updateAll((_, __) => 0); }
     });
+    try {
+      if (uid == null) throw StateError('Signed out');
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readModerationInbox')
+          .call({'status': _filter, 'cursor': _cursor});
+      if (!mounted || generation != _loadGeneration || FirebaseAuth.instance.currentUser?.uid != uid) return;
+      final result = Map<String, dynamic>.from(response.data as Map);
+      final rows = (result['reports'] as List).map((v) {
+        final row = Map<String, dynamic>.from(v as Map);
+        return _ModerationInboxRow(row['id'] as String,
+            Map<String, dynamic>.from(_decodeReportValue(row['data']) as Map));
+      }).toList();
+      setState(() {
+        for (final row in rows) {
+          _reports.removeWhere((old) => old.id == row.id);
+          _reports.add(row);
+        }
+        _counts = Map<String, dynamic>.from(result['counts'] as Map).map((k,v) => MapEntry(k,(v as num).toInt()));
+        _cursor = result['cursor'] as String?;
+        _exhausted = result['exhausted'] == true;
+      });
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() { _reports.clear(); _counts.updateAll((_, __) => 0); _cursor = null;
+        _loadError = 'تعذر تحميل البلاغات أو لم تعد لديك صلاحية الوصول'; });
+    } finally {
+      if (mounted && generation == _loadGeneration) setState(() => _loading = false);
+    }
   }
 
   String _typeLabel(String type) {
@@ -46252,175 +47013,50 @@ class _CommunityReportsInboxScreenState
       ),
     );
   }
-  Future<void> _reopen(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
-    try {
-      await doc.reference.set({
-        'status': 'pending',
-        'reviewedAt': FieldValue.serverTimestamp(),
-        'reviewedBy': FirebaseAuth.instance.currentUser?.uid,
-        'history': FieldValue.arrayUnion([moderationHistoryEntry('reopened')]),
-      }, SetOptions(merge: true));
-      moderationRevision.value++;
-      _toast('أُعيد فتح التبليغ');
-    } catch (e) {
-      _toast('تعذر إعادة الفتح');
-    }
-  }
-
-  Future<void> _dismiss(String reportId) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('community_reports')
-          .doc(reportId)
-          .set({
-        'status': 'dismissed',
-        'reviewedAt': FieldValue.serverTimestamp(),
-        'reviewedBy': FirebaseAuth.instance.currentUser?.uid,
-        'history': FieldValue.arrayUnion([moderationHistoryEntry('dismissed')]),
-      }, SetOptions(merge: true));
-      _toast('تم رفض التبليغ');
-    } catch (e) {
-      debugPrint('dismiss report failed: $e');
-      _toast('تعذر رفض التبليغ');
-    }
-  }
-
-  Future<void> _restore(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
-    final data = doc.data();
-    final type = data['type']?.toString();
+  bool _moderationBusy = false;
+  Future<void> _moderateReport(
+      _ModerationInboxRow doc,
+      String action, String successMessage) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    final db = FirebaseFirestore.instance;
-    final batch = db.batch();
-
-    batch.set(
-      doc.reference,
-      {
-        'status': 'restored',
-        'reviewedAt': FieldValue.serverTimestamp(),
-        'reviewedBy': uid,
-        'history': FieldValue.arrayUnion([moderationHistoryEntry('restored')]),
-      },
-      SetOptions(merge: true),
-    );
-
-    if (type == 'post') {
-      final postId = (data['targetId'] ?? data['postId'] ?? '').toString();
-      if (postId.isEmpty) {
-        _toast('لا يوجد منشور مرتبط');
-        return;
-      }
-      batch.set(
-        db.collection('community_posts').doc(postId),
-        {
-          'moderation.status': 'cleared',
-          'reportCount': 0,
-          'reportScore': 0,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-    } else if (type == 'comment') {
-      final commentId =
-      (data['commentId'] ?? data['targetId'] ?? '').toString().trim();
-      final postId =
-      (data['parentId'] ?? data['postId'] ?? '').toString().trim();
-      if (postId.isEmpty || commentId.isEmpty) {
-        _toast('لا يوجد تعليق مرتبط');
-        return;
-      }
-      batch.set(
-        db.collection('community_posts').doc(postId),
-        {
-          'moderation.hiddenCommentIds': FieldValue.arrayRemove([commentId]),
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-    }
-
+    if (_moderationBusy || uid == null) return;
+    _moderationBusy = true;
     try {
-      await batch.commit();
-      moderationRevision.value++;
-      _toast('تمت استعادة المحتوى');
-    } catch (e) {
-      debugPrint('restore report failed: $e');
-      _toast('تعذر استعادة المحتوى');
-    }
-  }
-
-  Future<void> _action(QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
-    final data = doc.data();
-    final type = data['type']?.toString();
-    final targetId = (data['targetId'] ?? data['postId'] ?? '').toString();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    final db = FirebaseFirestore.instance;
-    final batch = db.batch();
-
-    batch.set(
-      doc.reference,
-      {
-        'status': 'actioned',
-        'reviewedAt': FieldValue.serverTimestamp(),
-        'reviewedBy': uid,
-        'history': FieldValue.arrayUnion([moderationHistoryEntry('hidden_by_mod')]),
-      },
-      SetOptions(merge: true),
-    );
-
-    if (type == 'post') {
-      if (targetId.isEmpty) {
-        _toast('لا يوجد منشور مرتبط');
-        return;
-      }
-      batch.set(
-        db.collection('community_posts').doc(targetId),
-        {
-          'moderation': {
-            'status': 'removed',
+      await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('moderateCommunityReport')
+          .call({
             'reportId': doc.id,
-            'at': FieldValue.serverTimestamp(),
-            'by': uid,
-          },
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-    } else if (type == 'comment') {
-      final commentId =
-      (data['commentId'] ?? data['targetId'] ?? '').toString().trim();
-      final postId =
-      (data['parentId'] ?? data['postId'] ?? '').toString().trim();
-      if (postId.isEmpty || commentId.isEmpty) {
-        _toast('لا يوجد تعليق مرتبط');
-        return;
-      }
-      batch.set(
-        db.collection('community_posts').doc(postId),
-        {
-          'moderation.hiddenCommentIds': FieldValue.arrayUnion([commentId]),
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-    } else {
-      _toast('تبليغ الحساب يُرفض أو يُؤرشف فقط');
-      return;
-    }
-
-    try {
-      await batch.commit();
+            'action': action,
+            'expectedStatus': (doc.data()['status'] ?? 'pending').toString(),
+          });
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
       moderationRevision.value++;
-      _toast(type == 'comment'
-          ? 'تم إخفاء التعليق للجميع'
-          : 'تم إخفاء المنشور للجميع');
+      _toast(successMessage);
+      await _loadReports();
     } catch (e) {
-      debugPrint('action report failed: $e');
-      _toast('تعذر إخفاء المحتوى');
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
+      _toast(e is FirebaseFunctionsException && e.code == 'failed-precondition'
+          ? 'تغيّرت حالة البلاغ أو تعذر تنفيذ الإجراء؛ افتح البلاغ مجدداً'
+          : 'تعذر تنفيذ إجراء الإشراف');
+    } finally {
+      _moderationBusy = false;
     }
   }
+
+  Future<void> _reopen(_ModerationInboxRow doc) =>
+      _moderateReport(doc, 'reopen', 'أُعيد فتح التبليغ');
+
+  Future<void> _dismiss(_ModerationInboxRow doc) =>
+      _moderateReport(doc, 'dismiss', 'تم رفض التبليغ');
+
+  Future<void> _restore(_ModerationInboxRow doc) =>
+      _moderateReport(doc, 'restore', 'تمت استعادة المحتوى');
+
+  Future<void> _action(_ModerationInboxRow doc) =>
+      _moderateReport(doc, 'hide', doc.data()['type'] == 'comment'
+          ? 'تم إخفاء التعليق للجميع' : 'تم إخفاء المنشور للجميع');
 
   Future<void> _openSheet(
-      QueryDocumentSnapshot<Map<String, dynamic>> d,
+      _ModerationInboxRow d,
       Map<String, dynamic> data,
       ) async {
     final type = data['type']?.toString() ?? 'post';
@@ -46562,7 +47198,7 @@ class _CommunityReportsInboxScreenState
     );
 
     if (action == 'dismiss') {
-      await _dismiss(d.id);
+      await _dismiss(d);
     } else if (action == 'remove') {
       await _action(d);
     } else if (action == 'restore') {
@@ -46587,6 +47223,7 @@ class _CommunityReportsInboxScreenState
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('مراجعة التبليغات', style: TextStyle(fontWeight: FontWeight.w800)),
+        actions: [IconButton(onPressed: () => _loadReports(), tooltip: 'تحديث', icon: const Icon(Icons.refresh))],
         elevation: 0,
         scrolledUnderElevation: 0.5,
       ),
@@ -46634,7 +47271,7 @@ class _CommunityReportsInboxScreenState
                     selected: _filter == 'pending',
                     count: _counts['pending'] ?? 0,
                     color: AppTeal.main,
-                    onTap: () => setState(() => _filter = 'pending'),
+                    onTap: () => _selectFilter('pending'),
                   ),
                   const SizedBox(width: 8),
                   _FilterPill(
@@ -46643,7 +47280,7 @@ class _CommunityReportsInboxScreenState
                     selected: _filter == 'actioned',
                     count: _counts['actioned'] ?? 0,
                     color: const Color(0xFFDC2626),
-                    onTap: () => setState(() => _filter = 'actioned'),
+                    onTap: () => _selectFilter('actioned'),
                   ),
                   const SizedBox(width: 8),
                   _FilterPill(
@@ -46652,7 +47289,7 @@ class _CommunityReportsInboxScreenState
                     selected: _filter == 'dismissed',
                     count: _counts['dismissed'] ?? 0,
                     color: const Color(0xFF64748B),
-                    onTap: () => setState(() => _filter = 'dismissed'),
+                    onTap: () => _selectFilter('dismissed'),
                   ),
                   const SizedBox(width: 8),
                   _FilterPill(
@@ -46661,7 +47298,7 @@ class _CommunityReportsInboxScreenState
                     selected: _filter == 'restored',
                     count: _counts['restored'] ?? 0,
                     color: const Color(0xFF16A34A),
-                    onTap: () => setState(() => _filter = 'restored'),
+                    onTap: () => _selectFilter('restored'),
                   ),
                 ],
               ),
@@ -46676,7 +47313,7 @@ class _CommunityReportsInboxScreenState
               onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
               style: const TextStyle(fontSize: 13.5),
               decoration: InputDecoration(
-                hintText: 'ابحث باسم صاحب المحتوى...',
+                hintText: 'ابحث في البلاغات المحمّلة باسم صاحب المحتوى...',
                 hintStyle: TextStyle(fontSize: 13, color: theme.hintColor),
                 prefixIcon: Icon(Icons.search_rounded, size: 20, color: theme.hintColor),
                 suffixIcon: _search.isEmpty
@@ -46703,31 +47340,13 @@ class _CommunityReportsInboxScreenState
           ),
 
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('community_reports')
-                  .where('status', isEqualTo: _filter)
-                  .snapshots(),
-              builder: (context, snap) {
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'تعذر تحميل التبليغات\n${snap.error}',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
+            child: Builder(
+              builder: (context) {
+                if (_loadError != null) {
+                  return Center(child: TextButton(onPressed: () => _loadReports(), child: Text(_loadError! + ' — إعادة المحاولة')));
                 }
-                if (!snap.hasData) {
-                  return ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                    itemCount: 4,
-                    itemBuilder: (_, __) => const _ReportCardSkeleton(),
-                  );
-                }
-                var docs = [...snap.data!.docs];
+                if (_loading && _reports.isEmpty) return const Center(child: CircularProgressIndicator());
+                var docs = [..._reports];
 
                 if (_search.isNotEmpty) {
                   docs = docs.where((d) {
@@ -46767,6 +47386,8 @@ class _CommunityReportsInboxScreenState
                     final severity = data['severity']?.toString() ?? 'P3';
 
                     return _ModerationReportCard(
+                      key: ValueKey(d.id),
+                      reportId: d.id,
                       data: data,
                       severityColor: _severityColor(severity),
                       severityLabel: severity,
@@ -46775,7 +47396,7 @@ class _CommunityReportsInboxScreenState
                       reasonLabel: _reasonLabel(reason),
                       typeLabel: _typeLabel(type),
                       onReview: () => _openSheet(d, data),
-                      onQuickDismiss: status == 'pending' ? () => _dismiss(d.id) : null,
+                      onQuickDismiss: status == 'pending' ? () => _dismiss(d) : null,
                       onQuickAction:
                       status == 'pending' && type != 'user' ? () => _action(d) : null,
                     );
@@ -46783,6 +47404,15 @@ class _CommunityReportsInboxScreenState
                 );
               },
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(children: [
+              const Text('البحث وترتيب الأولوية ضمن البلاغات المحمّلة', style: TextStyle(fontSize: 12)),
+              if (!_exhausted && _loadError == null)
+                TextButton(onPressed: _loading ? null : () => _loadReports(more: true),
+                    child: Text(_loading ? 'جارٍ التحميل...' : 'تحميل المزيد')),
+            ]),
           ),
         ],
       ),
@@ -47039,6 +47669,8 @@ class _StatusChip extends StatelessWidget {
 // ==================== بطاقة التبليغ الرئيسية (معاد تصميمها) ====================
 class _ModerationReportCard extends StatefulWidget {
   const _ModerationReportCard({
+    super.key,
+    required this.reportId,
     required this.data,
     required this.severityColor,
     required this.severityLabel,
@@ -47051,6 +47683,7 @@ class _ModerationReportCard extends StatefulWidget {
     this.onQuickAction,
   });
 
+  final String reportId;
   final Map<String, dynamic> data;
   final Color severityColor;
   final String severityLabel;
@@ -47071,6 +47704,8 @@ class _ModerationReportCardState extends State<_ModerationReportCard> {
   _Comment? _comment;
   bool _loading = true;
   bool _expanded = false;
+  int _previewGeneration = 0;
+  StreamSubscription<User?>? _previewAuth;
 
   String get _type => widget.data['type']?.toString() ?? 'post';
 
@@ -47097,7 +47732,20 @@ class _ModerationReportCardState extends State<_ModerationReportCard> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _previewAuth = FirebaseAuth.instance.authStateChanges().listen((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _previewGeneration++;
+    _previewAuth?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ModerationReportCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data || oldWidget.reportId != widget.reportId) _load();
   }
 
   _Comment? _findComment(List<_Comment> list, String id) {
@@ -47110,71 +47758,41 @@ class _ModerationReportCardState extends State<_ModerationReportCard> {
   }
 
   Future<void> _load() async {
-    final id = _postId;
-    if (id.isEmpty) {
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
+    final generation = ++_previewGeneration;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    setState(() { _post = null; _comment = null; _loading = true; });
     try {
-      final snap =
-      await FirebaseFirestore.instance.collection('community_posts').doc(id).get();
-      if (!mounted) return;
-      if (!snap.exists) {
-        setState(() => _loading = false);
-        return;
-      }
-      final post = _Post.fromFirestore(snap);
-      _Comment? comment;
-      if (_type == 'comment') {
-        comment = _findComment(post.comments, _commentId);
-        if (comment == null) {
-          final shot = widget.data['snapshot'];
-          if (shot is Map) {
-            comment = _Comment(
-              id: _commentId,
-              author: (shot['authorName'] ?? widget.data['ownerName'] ?? '').toString(),
-              authorId: shot['authorId']?.toString(),
-              authorPhotoUrl: shot['authorPhotoUrl']?.toString(),
-              text: (shot['text'] ?? '').toString(),
-              createdAt: shot['createdAt'] is Timestamp
-                  ? (shot['createdAt'] as Timestamp).toDate()
-                  : DateTime.now(),
-            );
-          }
-        }
-      }
-      setState(() {
-        _post = post;
-        _comment = comment;
-        _loading = false;
-      });
-    } catch (e) {
-      debugPrint('moderation preview failed: $e');
-      if (mounted) setState(() => _loading = false);
+      if (uid == null || _type == 'user') return;
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readModerationPreview').call({'reportId': widget.reportId});
+      if (!mounted || generation != _previewGeneration || FirebaseAuth.instance.currentUser?.uid != uid) return;
+      final result = Map<String, dynamic>.from(response.data as Map);
+      final raw = result['post'];
+      if (raw == null) return;
+      final row = Map<String, dynamic>.from(raw as Map);
+      final post = _Post.fromData(row['id'] as String,
+          Map<String, dynamic>.from(_decodeReportValue(row['data']) as Map));
+      setState(() { _post = post; _comment = _type == 'comment' ? _findComment(post.comments, _commentId) : null; });
+    } catch (_) {
+      // Never fall back to cached historical content as a live preview.
+    } finally {
+      if (mounted && generation == _previewGeneration) setState(() => _loading = false);
     }
   }
 
   Future<void> _openPost() async {
-    var post = _post;
-    if (post == null && _postId.isNotEmpty) {
-      final snap =
-      await FirebaseFirestore.instance.collection('community_posts').doc(_postId).get();
-      if (snap.exists) post = _Post.fromFirestore(snap);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    try {
+      // The ordinary discussion screen retains ordinary content authorization.
+      final data = await _readAuthorizedPostData(_postId);
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
+      final post = _Post.fromData(_postId, data);
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommentsScreen(
+          post: post, initialCommentId: _type == 'comment' ? _commentId : null)));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر فتح المناقشة؛ استخدم معاينة البلاغ للمراجعة')));
     }
-    if (!mounted) return;
-    if (post == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('تعذر فتح المنشور')));
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CommentsScreen(
-          post: post!,
-          initialCommentId: _type == 'comment' ? _commentId : null,
-        ),
-      ),
-    );
   }
 
   Future<void> _confirmQuickAction() async {

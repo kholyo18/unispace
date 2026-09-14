@@ -1,0 +1,15 @@
+# Owner-only poll result reading
+
+readOwnPollResponses verifies the bearer via the existing authorized post reader and again for the owner transaction. Only the current post owner may read responses. The transaction rechecks current post ownership/removal, account availability and session cutoff; it reads 100 responses ordered by submittedAt and document ID. Output contains response document ID as respondentId, bounded display name, answers and timestamp. Response limit 6 MiB. Uses the existing 60/minute content-read quota.
+
+Client removes the direct result stream, adds refresh/page/retry, clears stale results on account/moderation/block changes, and labels incomplete summaries. Individual and summary rendering are retained. Pages are not one frozen snapshot: edits during pagination require refresh. Existing response answers/names are legacy client-supplied values, not newly validated submissions. Current poll questions originate in the authorized preflight, before the results transaction.
+
+Submission now uses submitPollAnswers (poll-answers.js). Deployed rules must deny direct response reads to nonowners and reconcile writes after that migration. No rules/function deployment or runtime tests performed. Deploy callable before client. Deferred: nonowner/owner/revoked/deleted access, page cursor edge cases, edited responses, all answer types, partial summaries, UI, response limits and read costs.
+
+## Submission boundary
+
+submitPollAnswers takes only postId and answers. It uses the shared authorized reader/quota, verifies the token, then rechecks current post ownership/removal, session cutoff, account availability, private-account followers and both-way blocks inside the write transaction. Respondent identity/name/timestamp are server-derived. Each user keeps one response, replaced on resubmission (cleared optional answers are removed).
+
+Validation uses current stored questions, exact numeric question keys and optional date-time companion keys. It bounds payloads to 150000 UTF-8 bytes and validates options, scale ranges (slider 0-100, other scales zero-based), grid row/column indices, date-picker permitted days and time values. Required grids retain the existing UI meaning: at least one selected cell, not every row. Text limit is 100000 characters. Dates preserve local calendar ISO midnight strings; date rangeStart/rangeEnd are not enforced because the current picker does not use them. Selected dates require time when includeTime is enabled.
+
+Existing response documents are not backfilled. Current schemas are validated, but same-shaped question edits are not detected as a questionnaire version change. Original repost ancestry is authorized during preflight rather than in this write transaction. Deploy submitPollAnswers before the client; direct client writes must then be denied in the reconciled deployed rules. Until that rules migration, old clients may bypass this callable. No deployment or runtime validation performed. Deferred checks: every question type, optional answer clearing, required/malformed/extra answers, duplicate presses, edited polls, blocked/private/revoked access and transaction retries.

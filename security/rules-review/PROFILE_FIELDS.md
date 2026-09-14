@@ -1,0 +1,38 @@
+# Profile field contract — candidate only
+
+The candidate replaces unrestricted owner writes with an update allowlist and a nested security diff allowlist, plus authRevocations cutoff. Unknown top-level fields (including roles/admin claims, follower counters, UID/creation metadata and token fields) cannot be added/changed/deleted through profile updates. Existing unknown fields can remain unchanged. Client create/delete is denied in this draft, consistent with the separate local rules design; verify actual deployed signup/bootstrap/deletion functions and callers before deployment. The running app/live rules are not changed.
+
+Supported candidate editor fields cover display/full names, personal/academic/social information, photo/cover, privacy and online state. AccountStatus/frozen voluntary workflows remain editable because source explicitly uses them for disable/reactivate/freeze/unfreeze. Security allowlist retains login alert preferences/metadata, legacy mfaEnabled display state, incident/revoke timestamps and deletion marker. The obsolete backupCodes field may only be cleared, never populated. These metadata fields are not proof of MFA, revocation or administrator action. Firebase Auth enrollment and authRevocations remain authoritative.
+
+Critical unresolved separation: accountStatus=disabled and security.frozen are both consumed by backend access gates and editable by the user for voluntary account state. Do not use these fields for administrator-imposed restrictions. A separate server-only administrative restriction contract must be defined and checked consistently before claiming admin suspension cannot be undone. Do not silently migrate existing disabled/frozen values into administrative sanctions because their origin is ambiguous.
+
+Compatibility gates: enumerate all user-document writers (signup/bootstrap, profile editors, auth/photo fallback, settings, token/preferences services and deletion), reconcile fields and types, and test creation and reactivation. Current candidate is intentionally provisional; it may reject writers not yet covered. No complete profile read policy: authenticated users still have baseline full-profile reads until remaining readers migrate. Session/subcollection policy from local firestore.rules still needs reconciliation.
+
+Deferred checks: allowlisted editor updates, unknown field and nested role injection, changing/deleting protected fields, map replacement, clearing legacy backupCodes, stale sessions, signup/bootstrap, lifecycle actions and alternate UI paths. No emulator/compilation/runtime testing or deployment performed.
+
+## Current-source compatibility findings
+
+SignupFlow._finish writes college/level plus username/email/onboardingCompleted through a client users/{uid} merge. UserProfileService.updateAcademic writes academic={college,major,level}. The candidate now includes college/level/academic; changed academic maps accept only those three string fields. Legacy academic maps with extra keys need inventory before rollout. This is a candidate-only patch, not a complete signup fix.
+
+Confirmed release blockers:
+- SignupService.startSignup creates Firebase Auth and initializes SessionService; SignupFlow later writes the profile directly. Client create is denied by this candidate, and username/email/onboardingCompleted updates are not allowed. Determine session/bootstrap writes and implement a verified server-owned onboarding contract before deployment; do not assume a bootstrap endpoint exists.
+- SignupService.checkUsername currently returns available=true unconditionally. Username uniqueness is not enforced by that client method; the server contract needs an atomic username reservation if uniqueness is required.
+- The current account deletion UI deletes Firebase Auth first, then attempts a best-effort profile tombstone write with errors swallowed. It cannot guarantee Firestore cleanup after sign-out.
+- functions/package.json points to index.js. onUserDeleted exists in functions/src/index.ts, but the current index.js has no export/import of that handler. Its currently deployed status was not checked. Reconcile and validate deletion cleanup before claiming end-to-end account erasure; do not blindly export the old cleanup without reviewing its deletion scope.
+- firebase.json still points at root firestore.rules and has no Storage rules deployment entry. These review candidates are not deployment inputs yet.
+
+No rules compilation, emulator/runtime tests, cloud inspection or deployment performed in this pass. Remaining work includes profile read privacy, lifecycle/backend contracts and other user/subcollection writers.
+
+## Advisory username check implemented
+
+checkSignupUsername now verifies the bearer/revocation cutoff, permits pre-profile onboarding, rejects disabled/deleted/frozen existing profiles, validates the current 3-20 ASCII alphanumeric/underscore format, and checks exact username matches in users (excluding the caller). A server-only usernameCheckLimits record caps 30 checks/minute; unmatched collections remain denied in the candidate. Response is a boolean plus echoed name, no profile data. UI rejects stale name/account responses and clears prior availability immediately on input change.
+
+This replaces the unconditional true stub but does not reserve names or ensure uniqueness at final submission. Matching is case-sensitive against legacy username only. Case-folding policy, existing duplicates/aliases and atomic reservation plus server-owned onboarding remain blockers. Do not claim uniqueness or deploy the candidate yet. Deploy callable before client; no tests or deployment performed. Deferred: invalid/taken/self-owned names, rate limit, missing profile, cutoff, delayed responses, case variants and concurrent signups.
+
+## Server-owned onboarding and exact-name reservation
+
+completeSignupProfile validates the current signup fields, verifies bearer/cutoff/account, derives email from Firebase Auth and names/timestamps server-side, and atomically reserves usernameReservations/{exactName} with the profile merge. Existing exact username matches from other users also reject. Only explicit personal/academic/media fields are accepted; photo URLs must use the configured bucket and own users/uid/profile.jpg or cover.jpg path. Existing security/session fields are preserved. A completed same-name retry returns success without rewriting profile fields; changing a completed username requires a separate workflow. Availability checks now include reservations.
+
+SignupFlow uses this endpoint instead of client profile completion writes. Auth display/photo updates and uploads still precede the transaction and are not atomic with it. Existing academic shortcut service remains afterward. Reservation is case-sensitive to preserve legacy matching; no case-fold migration was performed. Reservations are retained across account deletion until a reviewed lifecycle policy is implemented.
+
+Guarantee is limited to callers of this endpoint: published permissive user writes and legacy clients can still bypass it until coordinated rules/client rollout. SessionService still writes currentSessionId and login-alert metadata before profile completion; candidate bootstrap/session compatibility remains unresolved. Existing duplicate names require remediation, and blank/legacy account identity shapes require testing. Candidates explicitly deny reservation/quota client access but are not deployed. Deploy endpoints before client; reconcile session bootstrap and old writers before rules. Deferred: concurrent same-name signup, lost response retry, duplicate/case legacy names, cutoff, malformed/forged fields, media paths, onboarding UI and deletion lifecycle. No tests or deployment.
