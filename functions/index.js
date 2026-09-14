@@ -201,3 +201,7 @@ exports.checkSignupUsername = onCall({ region: 'europe-west1', timeoutSeconds: 6
 const { createCompleteSignupHandler } = require('./security/complete-signup');
 exports.completeSignupProfile = onCall({region:'europe-west1',timeoutSeconds:60},
   createCompleteSignupHandler({auth:getAuth(),db:getFirestore(),bucketName:()=>commentMediaBucket.value()}));
+
+const { createSessionBootstrapHandler } = require('./security/session-bootstrap');
+exports.markCurrentSession = onCall({region:'europe-west1',timeoutSeconds:60},
+  createSessionBootstrapHandler({auth:getAuth(),db:getFirestore()}));

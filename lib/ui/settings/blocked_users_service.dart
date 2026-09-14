@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:UniSpace/main.dart' show blockAccount, unblockAccount;
 import 'package:firebase_auth/firebase_auth.dart';
 
 class BlockedUser {
@@ -18,8 +20,8 @@ class BlockedUser {
     final data = snapshot.data() ?? {};
     return BlockedUser(
       id: snapshot.id,
-      identifier: data['identifier'] as String? ?? snapshot.id,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      identifier: (data['targetName'] ?? data['identifier'] ?? snapshot.id).toString(),
+      createdAt: ((data['blockedAt'] ?? data['createdAt']) as Timestamp?)?.toDate(),
     );
   }
 }
@@ -34,17 +36,42 @@ class BlockedUsersService {
     if (user == null) {
       return Stream.value(const []);
     }
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('blocked_users')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => BlockedUser.fromSnapshot(doc))
-              .toList(),
-        );
+    final snapshots = <String, List<BlockedUser>>{};
+    final subscriptions = <StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>[];
+    late StreamController<List<BlockedUser>> controller;
+    controller = StreamController<List<BlockedUser>>(
+      onListen: () {
+        for (final collection in ['blocked_users', 'blocked_accounts']) {
+          subscriptions.add(FirebaseFirestore.instance.collection('users')
+              .doc(user.uid).collection(collection).snapshots().listen((snapshot) {
+            if (controller.isClosed) return;
+            if (FirebaseAuth.instance.currentUser?.uid != user.uid) {
+              controller.add(const []);
+              return;
+            }
+            snapshots[collection] = snapshot.docs.map(BlockedUser.fromSnapshot).toList();
+            final byId = <String, BlockedUser>{};
+            for (final source in ['blocked_users', 'blocked_accounts']) {
+              for (final item in snapshots[source] ?? <BlockedUser>[]) {
+                byId[item.id] = item;
+              }
+            }
+            final items = byId.values.toList()..sort((a, b) =>
+                (b.createdAt?.millisecondsSinceEpoch ?? 0)
+                    .compareTo(a.createdAt?.millisecondsSinceEpoch ?? 0));
+            controller.add(items);
+          }, onError: (Object error, StackTrace stack) {
+            if (!controller.isClosed) controller.addError(error, stack);
+          }));
+        }
+      },
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      },
+    );
+    return controller.stream;
   }
 
   Future<void> blockUser(String identifier) async {
@@ -54,15 +81,7 @@ class BlockedUsersService {
     }
     final trimmed = identifier.trim();
     if (trimmed.isEmpty) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('blocked_users')
-        .doc(trimmed)
-        .set({
-      'identifier': trimmed,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await blockAccount(targetId: trimmed, targetName: trimmed);
   }
 
   Future<void> unblockUser(String identifier) async {
@@ -70,11 +89,6 @@ class BlockedUsersService {
     if (user == null) {
       throw StateError('No signed in user');
     }
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('blocked_users')
-        .doc(identifier)
-        .delete();
+    await unblockAccount(identifier.trim());
   }
 }

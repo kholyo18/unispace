@@ -12,6 +12,7 @@ import 'package:record/record.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:video_player/video_player.dart';
 import '../../core/branding.dart';
+import '../../ui/settings/public_profile_service.dart';
 import 'package:UniSpace/main.dart';
 import 'package:flutter/services.dart';
 import 'package:translator/translator.dart';
@@ -411,24 +412,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
       ),
     );
     if (ok != true || _uid.isEmpty) return;
-    final db = FirebaseFirestore.instance;
-    final batch = db.batch();
-    batch.set(
-      db.collection('users').doc(_uid).collection('blocked_accounts').doc(widget.peerId),
-      {
-        'blockedId': widget.peerId,
-        'source': 'chat',
-        'blockedAt': FieldValue.serverTimestamp(),
-      },
-    );
-    batch.set(
-      db.collection('users').doc(widget.peerId).collection('blocked_by').doc(_uid),
-      {
-        'blockerId': _uid,
-        'blockedAt': FieldValue.serverTimestamp(),
-      },
-    );
-    await batch.commit();
+    await blockAccount(targetId: widget.peerId, targetName: widget.peerName);
     if (!mounted) return;
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
@@ -2864,10 +2848,10 @@ class _RequestRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance.collection('users').doc(senderId).get(),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: PublicProfileService.load(senderId),
       builder: (context, snapshot) {
-        final data = snapshot.data?.data() ?? {};
+        final data = snapshot.data ?? <String, dynamic>{};
         final name = _ChatPageState._readName(data);
         final photoUrl = _ChatPageState._readPhoto(data);
 
@@ -3030,12 +3014,13 @@ Future<String?> chatMessagingBlockedReason(String peerId) async {
       return 'لا يمكن الإرسال بسبب الحظر';
     }
 
-    final peerDoc =
-    await FirebaseFirestore.instance.collection('users').doc(peerId).get();
-    final privacy =
-    Map<String, dynamic>.from(peerDoc.data()?['privacy'] ?? {});
-    final who = (privacy['whoCanMessage'] ?? 'everyone').toString();
-    if (who == 'nobody') return 'هذا الحساب لا يستقبل رسائل';
+    final peer = await PublicProfileService.load(peerId);
+    if (FirebaseAuth.instance.currentUser?.uid != me) return 'انتهت الجلسة';
+    final privacy = Map<String, dynamic>.from(peer['privacy'] as Map);
+    final who = (privacy['whoCanMessage'] ?? 'none').toString();
+    if (!['everyone', 'followers', 'mutual'].contains(who)) {
+      return 'هذا الحساب لا يستقبل رسائل';
+    }
     if (who == 'followers' || who == 'mutual') {
       final iFollow = await FirebaseFirestore.instance
           .collection('users')
@@ -3058,7 +3043,9 @@ Future<String?> chatMessagingBlockedReason(String peerId) async {
     }
   } catch (e) {
     debugPrint('chatMessagingBlockedReason: $e');
+    return 'تعذر التحقق من إمكانية المراسلة. أعد المحاولة';
   }
+  if (FirebaseAuth.instance.currentUser?.uid != me) return 'انتهت الجلسة';
   return null;
 }
 
@@ -3232,16 +3219,15 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       );
     }, onError: (e) => debugPrint('messages stream error: $e'));
 
-    _peerSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.peerId)
-        .snapshots()
-        .listen((doc) {
-      if (!mounted) return;
-      final raw = doc.data()?['lastActiveAt'];
+    _peerSub = PublicProfileService.watch(widget.peerId).listen((data) {
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != _me.id) return;
+      final raw = data['lastSeenAt'];
       setState(() {
         _peerLastActive = raw is Timestamp ? raw.toDate() : null;
       });
+    }, onError: (Object error) {
+      if (mounted) setState(() => _peerLastActive = null);
+      debugPrint('Peer presence unavailable: $error');
     });
 
     _touchMyPresence();
@@ -3249,11 +3235,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   void _touchMyPresence() {
     final uid = _me.id;
-    if (uid.isEmpty) return;
+    if (uid.isEmpty || FirebaseAuth.instance.currentUser?.uid != uid) return;
     unawaited(
       FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'lastActiveAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)),
+        'lastSeenAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).catchError((Object error) {
+        debugPrint('Presence update unavailable: $error');
+      }),
     );
   }
 
@@ -3697,31 +3685,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         'lastSenderId': _me.id,
         'unread.${widget.peerId}': FieldValue.increment(1),
       });
-      final short = t.length > 70 ? '${t.substring(0, 70)}…' : t;
-      final peerMuted = Map<String, dynamic>.from(
-        (await FirebaseFirestore.instance
-            .collection('chats')
-            .doc(widget.chatId)
-            .get())
-            .data()?['muted'] ??
-            {},
-      )[widget.peerId] ==
-          true;
-      if (!peerMuted) {
-        unawaited(pushNotification(
-          toUid: widget.peerId,
-          type: 'message',
-          actorName: (FirebaseAuth.instance.currentUser?.displayName ?? '')
-              .trim()
-              .isEmpty
-              ? 'طالب UniSpace'
-              : FirebaseAuth.instance.currentUser!.displayName!,
-          actorPhotoUrl: FirebaseAuth.instance.currentUser?.photoURL,
-          message: short,
-          chatId: widget.chatId,
-          docId: 'chat_${widget.chatId}',
-        ));
-      }
       _touchMyPresence();
       unawaited(
         FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({

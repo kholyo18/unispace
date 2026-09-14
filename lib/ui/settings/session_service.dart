@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -101,7 +102,6 @@ class SessionService with WidgetsBindingObserver {
       await AuthSessionService.signOutFully();
       return;
     }
-    await markCurrentSession(uid, sessionId);
     sessionRevision.value++;
     await _attachSessionRevocationListener(uid);
     _startHeartbeat();
@@ -197,8 +197,17 @@ class SessionService with WidgetsBindingObserver {
     return data['isRevoked'] as bool? ?? false;
   }
 
-  Future<void> markCurrentSession(String uid, String sessionId) {
-    return _firestore.collection('users').doc(uid).set({'currentSessionId': sessionId}, SetOptions(merge: true));
+  Future<void> markCurrentSession(String uid, String sessionId) async {
+    if (FirebaseAuth.instance.currentUser?.uid != uid) {
+      throw StateError('Session account changed.');
+    }
+    final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('markCurrentSession').call({'sessionId': sessionId});
+    final data = result.data;
+    if (FirebaseAuth.instance.currentUser?.uid != uid ||
+        data is! Map || data['uid'] != uid || data['sessionId'] != sessionId) {
+      throw StateError('Session confirmation unavailable.');
+    }
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> sessionsStream(String uid) {
@@ -385,7 +394,10 @@ class SessionService with WidgetsBindingObserver {
       transaction.set(docRef, record, SetOptions(merge: true));
       return true;
     });
-    if (accepted && created) {
+    // Bootstrap the profile before best-effort alerts; the candidate denies
+    // client profile creation. Never continue initialization without confirmation.
+    if (accepted) await markCurrentSession(user.uid, sessionId);
+    if (accepted && created && FirebaseAuth.instance.currentUser?.uid == user.uid) {
       // Alert delivery is best effort; it must not turn a successful login into a failure.
       try {
         final ref = _firestore.collection('users').doc(user.uid);
