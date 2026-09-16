@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../features/legal/legal_consent_gate.dart';
 
 /// Failure to read a security requirement must never grant access.
 class AuthSecurityCheck extends StatefulWidget {
@@ -35,7 +36,10 @@ class _AuthSecurityCheckState extends State<AuthSecurityCheck> {
           ]),
         )));
       }
-      return snapshot.data! ? widget.challengeBuilder(context) : widget.child;
+      if (snapshot.data!) return widget.challengeBuilder(context);
+      return legalConsentPreviewEnabled
+          ? LegalConsentGate(child: widget.child)
+          : widget.child;
     },
   );
 }
