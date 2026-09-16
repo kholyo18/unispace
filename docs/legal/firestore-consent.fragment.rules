@@ -1,0 +1,6 @@
+// REVIEW FRAGMENT, NOT A DEPLOYABLE RULESET.
+// Insert inside match /databases/{database}/documents in the COMPLETE policy.
+// Remove any overlapping broad grants; explicit false never overrides another allow.
+match /legalPolicy/{document=**} { allow read, write: if false; }
+match /legalPolicyVersions/{document=**} { allow read, write: if false; }
+match /legalConsentRecords/{document=**} { allow read, write: if false; }

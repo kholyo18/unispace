@@ -39,14 +39,15 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
   }
 
   void _connect() {
-    _client = widget.client ?? FirebaseLegalConsentClient();
-    _uid = _client.currentUserId;
-    _subscription = _client.userChanges.listen((uid) {
-      if (_uid == uid) return;
+    final client = widget.client ?? FirebaseLegalConsentClient();
+    _client = client;
+    _uid = client.currentUserId;
+    _subscription = client.userChanges.listen((uid) {
+      if (!mounted || !identical(client, _client) || _uid == uid) return;
       _uid = uid;
       unawaited(_load());
     }, onError: (Object error) {
-      if (!mounted) return;
+      if (!mounted || !identical(client, _client)) return;
       _generation++;
       setState(() {
         _status = null; _documentId = null; _loading = false; _busy = false;
@@ -70,6 +71,10 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
   bool _current(int generation, String uid) => mounted && generation == _generation &&
       _uid == uid && _client.currentUserId == uid;
 
+  bool _valid(LegalConsentStatus status) => status.enabled
+      ? status.policy != null && status.acceptanceContext != null
+      : !status.required && status.policy == null && status.acceptanceContext == null;
+
   Future<void> _load() async {
     if (!mounted) return;
     final generation = ++_generation;
@@ -83,7 +88,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
     try {
       final status = await _client.readStatus(uid).timeout(widget.timeout);
       if (!_current(generation, uid)) return;
-      if (status.uid != uid) throw const LegalConsentReloadRequired();
+      if (status.uid != uid || !_valid(status)) throw const LegalConsentReloadRequired();
       setState(() { _status = status; _loading = false; });
     } catch (_) {
       if (!_current(generation, uid)) return;
@@ -102,7 +107,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
     setState(() { _busy = true; _error = null; });
     try {
       await _client.accept(status).timeout(widget.timeout);
-      if (_current(generation, status.uid)) await _load(); // Re-read; a success response alone never opens the app.
+      if (_current(generation, status.uid)) await _load(); // Re-read; success alone never opens the app.
     } on LegalConsentReloadRequired {
       if (_current(generation, status.uid)) await _load();
     } catch (_) {
@@ -155,7 +160,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
   @override
   Widget build(BuildContext context) {
     final status = _status?.uid == _client.currentUserId ? _status : null;
-    if (!_loading && !_busy && status != null && status.uid == _client.currentUserId && !status.required) {
+    if (!_loading && !_busy && status != null && _valid(status) && !status.required) {
       return widget.child;
     }
     final policy = status?.policy;
@@ -180,6 +185,8 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
             document: document, operatorName: policy.operatorName) : SingleChildScrollView(
             padding: const EdgeInsetsDirectional.fromSTEB(20, 20, 20, 28),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('معاينة تقنية غير مفعّلة للإنتاج', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
               if (_loading) ...[
                 const Center(child: CircularProgressIndicator()), const SizedBox(height: 20),
                 const Text('جارٍ التحقق من مستندات الموافقة...', textAlign: TextAlign.center),
@@ -201,13 +208,13 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
                 )),
                 const SizedBox(height: 12),
                 CheckboxListTile(key: const ValueKey('legal-terms'), contentPadding: EdgeInsets.zero,
-                  value: _terms, title: const Text('أوافق على شروط الاستخدام.'),
+                  value: _terms, title: const Text('أوافق على شروط استخدام UniSpace.'),
                   onChanged: _busy ? null : (value) => setState(() => _terms = value ?? false)),
                 CheckboxListTile(key: const ValueKey('legal-community'), contentPadding: EdgeInsets.zero,
                   value: _community, title: const Text('أوافق على قواعد المجتمع.'),
                   onChanged: _busy ? null : (value) => setState(() => _community = value ?? false)),
                 CheckboxListTile(key: const ValueKey('legal-privacy'), contentPadding: EdgeInsets.zero,
-                  value: _privacy, title: const Text('أقرّ بأنني اطّلعت على إشعار الخصوصية.'),
+                  value: _privacy, title: const Text('اطلعت على سياسة الخصوصية، بما فيها البيانات اللازمة للخدمة ومزودوها ومواقع المعالجة وحقوقي.'),
                   onChanged: _busy ? null : (value) => setState(() => _privacy = value ?? false)),
                 const SizedBox(height: 12),
                 const Text('هذه الخطوة لا تطلب موافقة لتدريب نماذج الذكاء الاصطناعي أو للتسويق.'),
@@ -227,6 +234,11 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
                 TextButton(key: const ValueKey('legal-signout'), onPressed: _busy ? null : _signOut,
                   child: const Text('عدم الموافقة وتسجيل الخروج')),
               ],
+              const SizedBox(height: 20),
+              const Text('للدعم وطلبات الحقوق أو حذف الحساب دون قبول الشروط، راسل البريد التالي. لا ترسل كلمة المرور أو رموز الدخول.'),
+              const SizedBox(height: 8),
+              const SelectableText('unispace.0.1.0@gmail.com', textDirection: TextDirection.ltr,
+                textAlign: TextAlign.center, key: ValueKey('legal-support')),
             ]),
           ),
         ))),

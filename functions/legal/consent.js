@@ -5,7 +5,7 @@ const CONFIG_PATH = 'legalPolicy/current';
 const RECEIPTS = 'legalConsentRecords';
 const ARCHIVES = 'legalPolicyVersions';
 const DOCUMENT_IDS = ['terms', 'community', 'privacy'];
-const HASH_PATTERN = /^[a-f0-9]{64}$/;
+const HASH_PATTERN = /^[a-f0-9]{64}(?![\s\S])/;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const digest = value => createHash('sha256').update(value, 'utf8').digest('hex');
 const exactKeys = (value, keys) => object(value) && Object.keys(value).length === keys.length &&
@@ -29,14 +29,14 @@ function parsePolicy(raw, HttpsError, now = Date.now()) {
       !Array.isArray(raw.documents) || raw.documents.length !== DOCUMENT_IDS.length) return fail();
   const published = Date.parse(raw.publishedAt);
   if (!Number.isFinite(published) || published < 0 || published > now ||
-      new Date(published).toISOString() !== raw.publishedAt.replace(/(?<!\.[0-9]{3})Z$/, '.000Z')) return fail();
+      new Date(published).toISOString() !== (raw.publishedAt.includes('.') ? raw.publishedAt : raw.publishedAt.replace('Z', '.000Z'))) return fail();
   const documents = DOCUMENT_IDS.map(id => {
     const matches = raw.documents.filter(item => object(item) && item.id === id);
     if (matches.length !== 1) return fail();
     const d = matches[0];
-    if (typeof d.version !== 'string' || !/^[A-Za-z0-9._-]{1,80}$/.test(d.version) ||
+    if (typeof d.version !== 'string' || !/^[A-Za-z0-9._-]{1,80}(?![\s\S])/.test(d.version) ||
         typeof d.title !== 'string' || !d.title.trim() || d.title.length > 300 ||
-        typeof d.body !== 'string' || !d.body.trim()) return fail();
+        typeof d.body !== 'string' || !d.body.trim() || Buffer.byteLength(d.body, 'utf8') > 128 * 1024) return fail();
     return {id, version: d.version, title: d.title, body: d.body, sha256: digest(d.body)};
   });
   const identity = {schemaVersion: 1, language: 'ar', operatorName: raw.operatorName.trim(),
@@ -70,7 +70,7 @@ function createConsentHandlers({auth, db, FieldValue, HttpsError, now = Date.now
     const uid = request?.auth?.uid;
     const header = request?.rawRequest?.headers?.authorization;
     if (typeof uid !== 'string' || !uid || uid.length > 128 || uid.includes('/') ||
-        typeof header !== 'string' || !/^Bearer \S+$/.test(header)) {
+        typeof header !== 'string' || !/^Bearer \S+(?![\s\S])/.test(header)) {
       throw new HttpsError('unauthenticated', 'Sign in first.');
     }
     let token;
