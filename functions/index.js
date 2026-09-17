@@ -215,3 +215,6 @@ exports.readLegalConsentStatus = onCall({ region: 'europe-west1', timeoutSeconds
   legalConsentHandlers.status);
 exports.acceptLegalDocuments = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
   legalConsentHandlers.accept);
+
+// Staged eligibility backend only; existing consent clients remain unchanged.
+require('./legal/register-eligibility')(exports);
