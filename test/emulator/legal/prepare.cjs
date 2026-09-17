@@ -30,6 +30,12 @@ for (const file of ['package.json', 'package-lock.json']) copy(path.join(root, '
 const manifest = JSON.parse(fs.readFileSync(path.join(target, 'functions/package.json')));
 if (manifest.main !== 'index.js' || manifest.engines?.node !== '24') throw new Error('Unexpected runtime contract; review rather than rewriting dependencies.');
 copy(path.join(__dirname, 'runtime.cjs'), path.join(target, 'functions/index.js'));
+// Functions discovery passes a curated environment, not all parent-process variables.
+// Publish ONLY these non-secret test flags via the sandbox's emulator-only env file.
+// Firebase supplies the project and service emulator endpoints; safety.cjs still
+// validates every endpoint before any Admin SDK initialization.
+fs.writeFileSync(path.join(target, 'functions/.env.local'),
+  `UNISPACE_LEGAL_EMULATOR_TEST=1\nUNISPACE_LEGAL_FUNCTIONS_HOST=${HOSTS.UNISPACE_LEGAL_FUNCTIONS_HOST}\n`);
 copy(path.join(root, 'firestore.rules'), path.join(target, 'firestore.rules'));
 for (const file of ['safety.cjs', 'legal.test.cjs']) copy(path.join(__dirname, file), path.join(target, file));
 const host = key => ({host: '127.0.0.1', port: Number(HOSTS[key].split(':')[1])});

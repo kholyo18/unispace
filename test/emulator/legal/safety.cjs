@@ -34,7 +34,10 @@ async function localJson(url, options = {}) {
   if (target.protocol !== 'http:' || target.username || target.password ||
       !Object.values(HOSTS).includes(target.host)) throw new Error('Non-emulator URL refused.');
   const response = await fetch(target, {...options, redirect: 'error', signal: AbortSignal.timeout(45000)});
-  const body = await response.json();
+  const text = await response.text();
+  let body;
+  try { body = JSON.parse(text); }
+  catch (_) { throw new Error(`Non-JSON emulator response: HTTP ${response.status} from ${target.host}${target.pathname}`); }
   return {status: response.status, body};
 }
 module.exports = {PROJECT, HOSTS, assertEmulatorOnly, localJson};
