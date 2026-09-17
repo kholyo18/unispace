@@ -1,0 +1,91 @@
+name: Verify community guidelines reader
+on:
+  push:
+    branches: ['work/community-guidelines-20260917']
+    paths:
+      - '.github/workflows/community-guidelines-check.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply only the community button patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check tools/community-guidelines.patch
+          git apply tools/community-guidelines.patch
+          git diff --check
+      - name: Store patched main blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import os, json, urllib.request
+          from pathlib import Path
+          data = Path('lib/main.dart').read_text()
+          payload = json.dumps({'encoding':'utf-8','content':data}).encode()
+          req = urllib.request.Request(
+            'https://api.github.com/repos/kholyo18/unispace/git/blobs',
+            data=payload,
+            method='POST',
+            headers={
+              'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+              'Accept':'application/vnd.github+json',
+              'X-GitHub-Api-Version':'2022-11-28',
+              'Content-Type':'application/json',
+            },
+          )
+          with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.load(response)
+          print('PATCHED_MAIN_BLOB='+result['sha'])
+          Path('patched-main-blob.txt').write_text(result['sha'])
+      - name: Set up Flutter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 600 \
+            https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.9-stable.tar.xz \
+            -o "$RUNNER_TEMP/flutter.tar.xz"
+          echo "a9120fa4a01048bdef438ddc3a2d4b7389662ea98a95db86eeaf10382bc4efcb  $RUNNER_TEMP/flutter.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/flutter.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" config --no-analytics
+      - name: Resolve locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          if [ ! -f lib/generated/intl/messages_all.dart ]; then
+            generator_root="$RUNNER_TEMP/community-intl"
+            mkdir -p "$generator_root/lib"
+            cp pubspec.yaml "$generator_root/"
+            cp -R lib/l10n "$generator_root/lib/l10n"
+            dart pub global activate intl_utils 2.8.16
+            (cd "$generator_root" && dart pub global run intl_utils:generate)
+            cp -R "$generator_root/lib/generated/intl" lib/generated/intl
+          fi
+      - name: Analyze community reader and tests
+        run: flutter analyze --no-pub lib/features/auth/community_guidelines_screen.dart test/widgets/community_guidelines_reader_test.dart
+      - name: Run login legal reader tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --reporter=expanded \
+            test/widgets/simple_login_terms_test.dart \
+            test/widgets/terms_of_use_reader_test.dart \
+            test/widgets/terms_of_use_copy_test.dart \
+            test/widgets/privacy_login_reader_test.dart \
+            test/widgets/community_guidelines_reader_test.dart
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: community-guidelines-verification
+          path: patched-main-blob.txt
+          retention-days: 7
