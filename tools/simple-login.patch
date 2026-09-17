@@ -28,22 +28,25 @@
      if (googleLoading || loading) {
        if (kDebugMode) {
          debugPrint('[Auth] google login ignored: another auth request is active');
-@@ -3676,11 +3683,26 @@
+@@ -3676,11 +3683,29 @@
                                    MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
                                  child: const Text('فقدت تطبيق المصادقة؟'),
                                ),
-+                              CheckboxListTile(
-+                                key: const ValueKey('login-terms-consent'),
-+                                value: _termsAccepted,
-+                                onChanged: busy
-+                                    ? null
-+                                    : (value) => setState(
-+                                        () => _termsAccepted = value ?? false),
-+                                controlAffinity: ListTileControlAffinity.leading,
-+                                contentPadding: EdgeInsets.zero,
-+                                title: Text(
-+                                  'أوافق على شروط الاستخدام',
-+                                  style: TextStyle(color: _ink),
++                              Material(
++                                color: Colors.transparent,
++                                child: CheckboxListTile(
++                                  key: const ValueKey('login-terms-consent'),
++                                  value: _termsAccepted,
++                                  onChanged: busy
++                                      ? null
++                                      : (value) => setState(
++                                          () => _termsAccepted = value ?? false),
++                                  controlAffinity: ListTileControlAffinity.leading,
++                                  contentPadding: EdgeInsets.zero,
++                                  title: Text(
++                                    'أوافق على شروط الاستخدام',
++                                    style: TextStyle(color: _ink),
++                                  ),
 +                                ),
 +                              ),
                                const SizedBox(height: 6),
@@ -56,7 +59,7 @@
                                    style: FilledButton.styleFrom(
                                      backgroundColor: AppTeal.main,
                                      foregroundColor: Colors.white,
-@@ -3730,7 +3752,8 @@
+@@ -3730,7 +3755,8 @@
                                SizedBox(
                                  height: 50,
                                  child: OutlinedButton(
