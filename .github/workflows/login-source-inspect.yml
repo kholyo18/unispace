@@ -1,0 +1,30 @@
+name: Inspect pinned login source
+on:
+  push:
+    branches: ['work/simple-login-inspect-20260917']
+    paths: ['.github/workflows/login-source-inspect.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 4f588aa2192618c8e8dba5d1f1f779332142340b
+          persist-credentials: false
+      - name: Export only source needed for the login change
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object lib/main.dart)" = 33069d7dca6105b4bea6ded9ecaa10186e28ac9d
+          mkdir -p source-output/lib
+          cp lib/main.dart source-output/lib/main.dart
+          cp pubspec.yaml pubspec.lock README.md analysis_options.yaml source-output/
+          git rev-parse HEAD > source-output/source-commit.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pinned-login-source
+          path: source-output/
+          retention-days: 1
