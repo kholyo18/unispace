@@ -1,0 +1,8 @@
+// REVIEW FRAGMENT ONLY — not a standalone or production-ready ruleset.
+// Place within the complete /databases/{database}/documents match after review.
+// Deny ALL client reads/writes; allow access only through authorized server paths.
+// Remove overlapping broad grants: an explicit false does not override an allow.
+// Merge alongside the prior consent fragment; test the COMPLETE policy in Emulator.
+match /legalEligibilityDeclarations/{document=**} { allow read, write: if false; }
+match /legalRepresentativeApprovals/{document=**} { allow read, write: if false; }
+match /legalEligibilityReceipts/{document=**} { allow read, write: if false; }
