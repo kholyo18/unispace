@@ -1,0 +1,138 @@
+name: Verify terms wording without changing login behavior
+on:
+  push:
+    branches: ['work/terms-copy-checks-20260917']
+    paths: ['.github/workflows/terms-copy-checks.yml']
+permissions:
+  contents: read
+concurrency:
+  group: terms-copy-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  terms-copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the exact proposed source with read-only access
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: bd5ebb6ec9f4451a329ce27b2319fc3426b1911d
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify the text-only scope and record file identities
+        run: |
+          set -euo pipefail
+          mkdir -p verification-output
+          test "$(git rev-parse HEAD)" = bd5ebb6ec9f4451a329ce27b2319fc3426b1911d
+          test "$(git hash-object lib/features/auth/terms_of_use_screen.dart)" = 54049e34056dce1f942dfbbbf90782efa23a1be4
+          test "$(git hash-object test/widgets/terms_of_use_copy_test.dart)" = f4379eda70620fbf3d3e957dbb20957ef30691b6
+          test "$(git hash-object lib/main.dart)" = 45a482913becd25efd79d161596c671e1dd3089c
+          git diff --check 3ea7a987ec68689da9f1350b6f3458bc634f006e HEAD
+          python - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+          base = '3ea7a987ec68689da9f1350b6f3458bc634f006e'
+          path = 'lib/features/auth/terms_of_use_screen.dart'
+          before = subprocess.check_output(['git','show',base+':'+path]).decode()
+          after = Path(path).read_text()
+          changed = set(subprocess.check_output(['git','diff','--name-only',base,'HEAD']).decode().splitlines())
+          assert changed == {path, 'test/widgets/terms_of_use_copy_test.dart'}
+          def shape(text):
+              text = re.sub(r'//[^\n]*', '', text)
+              text = re.sub(r"'(?:\\.|[^'\\])*'", "'TEXT'", text)
+              return re.sub(r'\s+', ' ', text)
+          assert shape(before) == shape(after), 'Reader executable structure changed'
+          assert before.count('  _TermsSection(\n') == after.count('  _TermsSection(\n') == 22
+          Path('verification-output/scope.log').write_text('Only reader literals/comments and new copy tests changed.\nExecutable reader token shape unchanged; 22 sections retained.\n')
+          PY
+          { git rev-parse HEAD; git hash-object lib/main.dart lib/features/auth/terms_of_use_screen.dart test/widgets/simple_login_terms_test.dart test/widgets/terms_of_use_reader_test.dart test/widgets/terms_of_use_copy_test.dart; } > verification-output/source.log
+      - name: Set up checksum-verified Flutter
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 600 --proto '=https' --proto-redir '=https' \
+            https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.9-stable.tar.xz \
+            -o "$RUNNER_TEMP/flutter.tar.xz"
+          echo "a9120fa4a01048bdef438ddc3a2d4b7389662ea98a95db86eeaf10382bc4efcb  $RUNNER_TEMP/flutter.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/flutter.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" config --no-analytics
+          "$RUNNER_TEMP/flutter/bin/flutter" --version > verification-output/flutter-version.log
+      - name: Resolve locked dependencies without editing translation sources
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile 2>&1 | tee verification-output/dependencies.log
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+          if [ ! -f lib/generated/intl/messages_all.dart ]; then
+            generator_root="$RUNNER_TEMP/terms-copy-intl"
+            mkdir -p "$generator_root/lib"
+            cp pubspec.yaml "$generator_root/"
+            cp -R lib/l10n "$generator_root/lib/l10n"
+            dart pub global activate intl_utils 2.8.16
+            (cd "$generator_root" && dart pub global run intl_utils:generate)
+            test -f "$generator_root/lib/generated/intl/messages_all.dart"
+            test ! -e lib/generated/intl
+            cp -R "$generator_root/lib/generated/intl" lib/generated/intl
+          fi
+          git diff --exit-code -- pubspec.yaml pubspec.lock lib/l10n lib/generated/l10n.dart
+      - name: Analyze the revised reader and focused copy tests
+        run: |
+          set -euo pipefail
+          flutter analyze --no-pub lib/features/auth/terms_of_use_screen.dart test/widgets/terms_of_use_copy_test.dart \
+            2>&1 | tee verification-output/copy-analyze.log
+      - name: Demonstrate the four wording regressions on the original text
+        run: |
+          set -euo pipefail
+          file=lib/features/auth/terms_of_use_screen.dart
+          backup="$RUNNER_TEMP/proposed-terms.dart"
+          cp "$file" "$backup"
+          restore() { cp "$backup" "$file"; }
+          trap restore EXIT
+          git show 3ea7a987ec68689da9f1350b6f3458bc634f006e:"$file" > "$file"
+          set +e
+          flutter test --no-pub --reporter=json test/widgets/terms_of_use_copy_test.dart \
+            > verification-output/original-copy-tests.jsonl 2>&1
+          result=$?
+          set -e
+          restore
+          trap - EXIT
+          test "$result" -eq 1
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          events=[]
+          for line in Path('verification-output/original-copy-tests.jsonl').read_text().splitlines():
+              try: events.append(json.loads(line))
+              except ValueError: pass
+          expected = {
+              'copy describes screen-local agreement without claiming a ledger',
+              'age requirements stay distinct from unimplemented procedures',
+              'copy preserves rights without promising unverified services',
+              'revision retains 22 articles and discloses publication blockers',
+          }
+          starts={e['test']['id']:e['test']['name'] for e in events if e.get('type')=='testStart'}
+          selected={key for key,name in starts.items() if name in expected}
+          failed={e['testID'] for e in events if e.get('type')=='testDone' and e.get('result')=='failure'}
+          assert len(selected)==4 and failed==selected, (starts, failed)
+          assert not any(e.get('skipped') for e in events if e.get('type')=='testDone' and e.get('testID') in selected)
+          Path('verification-output/baseline-summary.log').write_text('All four new wording tests fail on the old text for their assertions; no loading/compilation failures.\n')
+          print('Confirmed 4 expected wording assertion failures on the original reader.')
+          PY
+          test "$(git hash-object "$file")" = 54049e34056dce1f942dfbbbf90782efa23a1be4
+      - name: Run all login, reader and revised-copy regressions
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --reporter=expanded test/widgets/simple_login_terms_test.dart \
+            test/widgets/terms_of_use_reader_test.dart test/widgets/terms_of_use_copy_test.dart \
+            2>&1 | tee verification-output/terms-tests.log
+          git diff --exit-code
+      - name: Preserve bounded verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: terms-copy-bd5ebb6
+          path: verification-output/
+          retention-days: 7
+          if-no-files-found: warn
