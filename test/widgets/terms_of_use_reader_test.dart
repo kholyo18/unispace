@@ -102,7 +102,7 @@ void main() {
         darkTheme: ThemeData.dark(),
         themeMode: mode,
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(2.5)),
+          data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2.5)),
           child: child!,
         ),
         home: const TermsOfUseScreen(),
