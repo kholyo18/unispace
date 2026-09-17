@@ -107,17 +107,28 @@ jobs:
               try: events.append(json.loads(line))
               except ValueError: pass
           expected = {
-              'copy describes screen-local agreement without claiming a ledger',
-              'age requirements stay distinct from unimplemented procedures',
-              'copy preserves rights without promising unverified services',
-              'revision retains 22 articles and discloses publication blockers',
+              'copy describes screen-local agreement without claiming a ledger': 'الخانة الحالية لا تحفظ سجلًا مستقلًا',
+              'age requirements stay distinct from unimplemented procedures': 'الحد الأدنى المختار لاستخدام الحساب والمشاركة في المجتمع هو 18 سنة كاملة',
+              'copy preserves rights without promising unverified services': 'يحتفظ المستخدم بالحقوق التي يملكها في محتواه',
+              'revision retains 22 articles and discloses publication blockers': 'الإصدار التحريري 1.1 — 17 سبتمبر 2026',
           }
           starts={e['test']['id']:e['test']['name'] for e in events if e.get('type')=='testStart'}
           selected={key for key,name in starts.items() if name in expected}
-          failed={e['testID'] for e in events if e.get('type')=='testDone' and e.get('result')=='failure'}
+          # Flutter wraps matcher failures as testDone:error. Require the original
+          # printed TestFailure and the precise expected wording, not just an exit code.
+          failed={e['testID'] for e in events if e.get('type')=='testDone' and e.get('result') in ('failure','error')}
           assert len(selected)==4 and failed==selected, (starts, failed)
           assert not any(e.get('skipped') for e in events if e.get('type')=='testDone' and e.get('testID') in selected)
-          Path('verification-output/baseline-summary.log').write_text('All four new wording tests fail on the old text for their assertions; no loading/compilation failures.\n')
+          assert all(e.get('testID') in selected for e in events if e.get('type')=='error')
+          for test_id in selected:
+              reports=[e.get('message','') for e in events if e.get('type')=='print' and e.get('testID')==test_id and 'EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK' in e.get('message','')]
+              assert len(reports)==1, (test_id, len(reports))
+              report=reports[0]
+              assert 'The following TestFailure was thrown running a test:' in report
+              assert "Expected: contains '" + expected[starts[test_id]] + "'" in report
+              assert 'This was caught by the test expectation on the following line:' in report
+          assert events[-1].get('type')=='done' and events[-1].get('success') is False
+          Path('verification-output/baseline-summary.log').write_text('All four new wording tests fail on the old text for their exact assertions; Flutter wrapper errors are checked against their printed TestFailure reports. No loading/compilation failures.\n')
           print('Confirmed 4 expected wording assertion failures on the original reader.')
           PY
           test "$(git hash-object "$file")" = 54049e34056dce1f942dfbbbf90782efa23a1be4
