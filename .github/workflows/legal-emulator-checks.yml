@@ -1,0 +1,101 @@
+name: UniSpace legal Firebase emulator checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, 'feat/legal-*', 'ci/legal-*', 'test/legal-*']
+    paths:
+      - '.github/workflows/legal-emulator-checks.yml'
+      - 'test/emulator/legal/**'
+      - 'functions/legal/**'
+      - 'functions/package.json'
+      - 'functions/package-lock.json'
+      - 'firestore.rules'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legal-emulator-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CI: 'true'
+  UNISPACE_LEGAL_EMULATOR_TEST: '1'
+  GCLOUD_PROJECT: demo-unispace-legal-integration
+  GOOGLE_CLOUD_PROJECT: demo-unispace-legal-integration
+  FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9189
+  FIRESTORE_EMULATOR_HOST: 127.0.0.1:8189
+  UNISPACE_LEGAL_FUNCTIONS_HOST: 127.0.0.1:5189
+  FIREBASE_CLI_DISABLE_UPDATE_CHECK: 'true'
+
+jobs:
+  legal-emulator:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact proposed source without persistent credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up the declared Node major
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Select Java 21 and check isolation guards
+        run: |
+          set -euo pipefail
+          test -x "$JAVA_HOME_21_X64/bin/java"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+          mkdir -p verification-output
+          { git rev-parse HEAD; node --version; "$JAVA_HOME_21_X64/bin/java" -version; } \
+            2>&1 | tee verification-output/environment.log
+          node --test test/emulator/legal/safety.test.cjs \
+            2>&1 | tee verification-output/isolation-tests.tap
+      - name: Prepare disposable sandbox from unchanged repository sources
+        run: |
+          set -euo pipefail
+          sandbox="$RUNNER_TEMP/unispace-legal-emulators"
+          node test/emulator/legal/prepare.cjs "$sandbox"
+          echo "UNISPACE_LEGAL_EMULATOR_ROOT=$sandbox" >> "$GITHUB_ENV"
+          cp "$sandbox/source-manifest.json" verification-output/source-manifest.json
+          npm ci --prefix "$sandbox/functions" --ignore-scripts --no-audit --no-fund \
+            2>&1 | tee verification-output/sdk-install.log
+          git diff --exit-code
+      - name: Install pinned test CLI outside the repository
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/unispace-legal-cli"
+          npm install --prefix "$tools" --ignore-scripts --no-audit --no-fund firebase-tools@15.30.1 \
+            2>&1 | tee verification-output/cli-install.log
+          cli="$tools/node_modules/firebase-tools/lib/bin/firebase.js"
+          node "$cli" --version | tee verification-output/cli-version.log
+          echo "UNISPACE_LEGAL_CLI=$cli" >> "$GITHUB_ENV"
+      - name: Run Auth, Firestore and callable Functions emulators
+        run: |
+          set -euo pipefail
+          # No deploy, login, real project, project credentials or imported data.
+          cd "$UNISPACE_LEGAL_EMULATOR_ROOT"
+          node "$UNISPACE_LEGAL_CLI" emulators:exec \
+            --only auth,firestore,functions \
+            --project demo-unispace-legal-integration --config firebase.json \
+            'node --test --test-concurrency=1 --test-reporter=tap legal.test.cjs' \
+            2>&1 | tee "$GITHUB_WORKSPACE/verification-output/emulator-tests.log"
+      - name: Ensure tracked application files remain unchanged
+        if: always()
+        run: git diff --exit-code
+      - name: Preserve bounded verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: legal-emulator-${{ github.event.pull_request.head.sha }}
+          path: verification-output/
+          retention-days: 7
+          if-no-files-found: warn
