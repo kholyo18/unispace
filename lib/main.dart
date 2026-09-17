@@ -3128,6 +3128,7 @@ class _SignInScreenState extends State<SignInScreen> {
   final GoogleSignIn _googleSignIn = AuthSessionService.googleSignIn;
   bool loading = false;
   bool googleLoading = false;
+  bool _termsAccepted = false;
   bool _obscure = true;
 
   String _mapAuthError(FirebaseAuthException error) {
@@ -3200,6 +3201,9 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _login() async {
+    if (!_termsAccepted) {
+      return;
+    }
     if (loading || googleLoading) {
       if (kDebugMode) {
         debugPrint('[Auth] email login ignored: another auth request is active');
@@ -3347,6 +3351,9 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
+    if (!_termsAccepted) {
+      return;
+    }
     if (googleLoading || loading) {
       if (kDebugMode) {
         debugPrint('[Auth] google login ignored: another auth request is active');
@@ -3676,11 +3683,26 @@ class _SignInScreenState extends State<SignInScreen> {
                                   MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
                                 child: const Text('فقدت تطبيق المصادقة؟'),
                               ),
+                              CheckboxListTile(
+                                key: const ValueKey('login-terms-consent'),
+                                value: _termsAccepted,
+                                onChanged: busy
+                                    ? null
+                                    : (value) => setState(
+                                        () => _termsAccepted = value ?? false),
+                                controlAffinity: ListTileControlAffinity.leading,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  'أوافق على شروط الاستخدام',
+                                  style: TextStyle(color: _ink),
+                                ),
+                              ),
                               const SizedBox(height: 6),
                               SizedBox(
                                 height: 54,
                                 child: FilledButton(
-                                  onPressed: busy ? null : _login,
+                                  key: const ValueKey('login-email-submit'),
+                                  onPressed: busy || !_termsAccepted ? null : _login,
                                   style: FilledButton.styleFrom(
                                     backgroundColor: AppTeal.main,
                                     foregroundColor: Colors.white,
@@ -3730,7 +3752,8 @@ class _SignInScreenState extends State<SignInScreen> {
                               SizedBox(
                                 height: 50,
                                 child: OutlinedButton(
-                                  onPressed: busy ? null : _signInWithGoogle,
+                                  key: const ValueKey('login-google-submit'),
+                                  onPressed: busy || !_termsAccepted ? null : _signInWithGoogle,
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: _ink,
                                     backgroundColor: _dark
