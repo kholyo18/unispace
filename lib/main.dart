@@ -3683,18 +3683,21 @@ class _SignInScreenState extends State<SignInScreen> {
                                   MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
                                 child: const Text('فقدت تطبيق المصادقة؟'),
                               ),
-                              CheckboxListTile(
-                                key: const ValueKey('login-terms-consent'),
-                                value: _termsAccepted,
-                                onChanged: busy
-                                    ? null
-                                    : (value) => setState(
-                                        () => _termsAccepted = value ?? false),
-                                controlAffinity: ListTileControlAffinity.leading,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(
-                                  'أوافق على شروط الاستخدام',
-                                  style: TextStyle(color: _ink),
+                              Material(
+                                color: Colors.transparent,
+                                child: CheckboxListTile(
+                                  key: const ValueKey('login-terms-consent'),
+                                  value: _termsAccepted,
+                                  onChanged: busy
+                                      ? null
+                                      : (value) => setState(
+                                          () => _termsAccepted = value ?? false),
+                                  controlAffinity: ListTileControlAffinity.leading,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    'أوافق على شروط الاستخدام',
+                                    style: TextStyle(color: _ink),
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 6),
