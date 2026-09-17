@@ -1,0 +1,130 @@
+name: Verify login terms reader
+on:
+  push:
+    branches: ['work/read-login-terms-20260917']
+    paths: ['.github/workflows/read-login-terms-check.yml']
+permissions:
+  contents: read
+concurrency:
+  group: read-login-terms-verification
+  cancel-in-progress: true
+jobs:
+  prepare-blob:
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Apply the exact reading-button patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object lib/main.dart)" = 3b972fbc0fa59bff406d5a010eba59bf34b609a3
+          git apply --check tools/read-terms.patch
+          git apply tools/read-terms.patch
+          git diff --check
+          test "$(git hash-object lib/main.dart)" = 45a482913becd25efd79d161596c671e1dd3089c
+          test "$(git diff --name-only)" = lib/main.dart
+          mkdir -p verification-output
+          git diff -- lib/main.dart > verification-output/reader-button.patch
+      - name: Store the verified blob without updating any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import os, json, hashlib, urllib.request
+          from pathlib import Path
+          assert os.environ['GITHUB_REPOSITORY'] == 'kholyo18/unispace'
+          data = Path('lib/main.dart').read_bytes()
+          expected = '45a482913becd25efd79d161596c671e1dd3089c'
+          assert hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest() == expected
+          payload = json.dumps({'encoding':'utf-8','content':data.decode('utf-8')}).encode()
+          req = urllib.request.Request('https://api.github.com/repos/kholyo18/unispace/git/blobs',
+            data=payload, method='POST', headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],
+            'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'})
+          with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.load(response)
+          assert result['sha'] == expected
+          Path('verification-output/blob.json').write_text(json.dumps({
+            'base':'465e42bd9a2eaf82fa969cf5ab5ddd55178d55e3',
+            'inputBlob':'3b972fbc0fa59bff406d5a010eba59bf34b609a3',
+            'outputBlob':expected},indent=2))
+          print('Verified source blob:',expected)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: terms-reader-blob
+          path: verification-output/
+          retention-days: 1
+  widget-checks:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Apply exact login-only candidate and record source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object lib/main.dart)" = 3b972fbc0fa59bff406d5a010eba59bf34b609a3
+          git apply --check tools/read-terms.patch
+          git apply tools/read-terms.patch
+          test "$(git hash-object lib/main.dart)" = 45a482913becd25efd79d161596c671e1dd3089c
+          mkdir -p verification-output
+          { git rev-parse HEAD; git hash-object lib/main.dart lib/features/auth/terms_of_use_screen.dart test/widgets/simple_login_terms_test.dart test/widgets/terms_of_use_reader_test.dart; } > verification-output/source.log
+      - name: Set up checksum-verified Flutter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 600 --proto '=https' --proto-redir '=https' \
+            https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.9-stable.tar.xz \
+            -o "$RUNNER_TEMP/flutter.tar.xz"
+          echo "a9120fa4a01048bdef438ddc3a2d4b7389662ea98a95db86eeaf10382bc4efcb  $RUNNER_TEMP/flutter.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/flutter.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" config --no-analytics
+          "$RUNNER_TEMP/flutter/bin/flutter" --version > verification-output/flutter-version.log
+      - name: Resolve locked dependencies without editing translations
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile 2>&1 | tee verification-output/dependencies.log
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+          if [ ! -f lib/generated/intl/messages_all.dart ]; then
+            generator_root="$RUNNER_TEMP/reader-intl"
+            mkdir -p "$generator_root/lib"
+            cp pubspec.yaml "$generator_root/"
+            cp -R lib/l10n "$generator_root/lib/l10n"
+            dart pub global activate intl_utils 2.8.16
+            (cd "$generator_root" && dart pub global run intl_utils:generate)
+            test -f "$generator_root/lib/generated/intl/messages_all.dart"
+            test ! -e lib/generated/intl
+            cp -R "$generator_root/lib/generated/intl" lib/generated/intl
+          fi
+          git diff --exit-code -- pubspec.yaml pubspec.lock lib/l10n lib/generated/l10n.dart
+      - name: Analyze the new reader and its tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter analyze --no-pub lib/features/auth/terms_of_use_screen.dart test/widgets/terms_of_use_reader_test.dart \
+            2>&1 | tee verification-output/reader-analyze.log
+      - name: Run unchanged login regressions and new reading tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --reporter=expanded test/widgets/simple_login_terms_test.dart test/widgets/terms_of_use_reader_test.dart \
+            2>&1 | tee verification-output/reader-tests.log
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: terms-reader-tests
+          path: verification-output/
+          retention-days: 7
