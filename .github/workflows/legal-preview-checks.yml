@@ -1,0 +1,153 @@
+name: UniSpace legal preview checks
+
+# Preview validation only. No push, deployment, secrets or privileged PR trigger.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+      - 'feat/legal-*'
+    paths:
+      - '.github/workflows/legal-preview-checks.yml'
+      - 'lib/features/legal/**'
+      - 'lib/features/settings/privacy/privacy_policy_screen.dart'
+      - 'lib/ui/auth/auth_security_check.dart'
+      - 'test/legal/**'
+      - 'test/support/legal_eligibility_fixtures.dart'
+      - 'test/widgets/legal_*'
+      - 'test/widgets/privacy_policy_screen_test.dart'
+      - 'functions/legal/**'
+      - 'functions/test/legal-*.cjs'
+      - 'functions/index.js'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'l10n.yaml'
+      - 'analysis_options.yaml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legal-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CI: 'true'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+  GCLOUD_PROJECT: demo-unispace-legal-ci
+  FIRESTORE_EMULATOR_HOST: 127.0.0.1:8088
+  FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+
+jobs:
+  backend-unit:
+    # Do not expose repository context to fork submissions in this preview.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the exact proposed commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up the project's Node major version
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Record environment and check syntax
+        run: |
+          set -euo pipefail
+          mkdir -p verification-output
+          { git rev-parse HEAD; node --version; uname -srm; } | tee verification-output/backend-environment.log
+          node --check functions/index.js
+          for file in functions/legal/*.js; do node --check "$file"; done
+      - name: Run existing consent and eligibility unit tests
+        run: |
+          set -euo pipefail
+          # No npm install or Firebase credentials: these suites use injected fakes.
+          node --test --test-concurrency=1 --test-reporter=tap \
+            functions/test/legal-consent.test.cjs \
+            functions/test/legal-eligibility.test.cjs \
+            2>&1 | tee verification-output/backend-tests.tap
+      - name: Preserve backend evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: legal-backend-${{ github.event.pull_request.head.sha }}
+          path: verification-output/
+          if-no-files-found: warn
+          retention-days: 7
+
+  flutter-focused:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out the exact proposed commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install verified Flutter SDK for this validation
+        id: sdk
+        env:
+          FLUTTER_VERSION: '3.44.9'
+          FLUTTER_ARCHIVE_SHA256: a9120fa4a01048bdef438ddc3a2d4b7389662ea98a95db86eeaf10382bc4efcb
+        run: |
+          set -euo pipefail
+          mkdir -p verification-output "$RUNNER_TEMP/legal-flutter"
+          archive="$RUNNER_TEMP/legal-flutter/flutter.tar.xz"
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 600 \
+            --proto '=https' --proto-redir '=https' \
+            "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+            --output "$archive"
+          printf '%s  %s\n' "$FLUTTER_ARCHIVE_SHA256" "$archive" | sha256sum --check
+          tar -xJf "$archive" -C "$RUNNER_TEMP/legal-flutter"
+          sdk="$RUNNER_TEMP/legal-flutter/flutter/bin"
+          echo "$sdk" >> "$GITHUB_PATH"
+          "$sdk/flutter" config --no-analytics
+          { git rev-parse HEAD; "$sdk/flutter" --version; "$sdk/dart" --version; } \
+            2>&1 | tee verification-output/flutter-environment.log
+      - name: Resolve only the committed dependency lock
+        id: dependencies
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile 2>&1 | tee verification-output/pub-get.log
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+      - name: Analyze the legal preview surface
+        id: analyze
+        run: |
+          set -euo pipefail
+          flutter analyze --no-pub \
+            lib/features/legal \
+            lib/features/settings/privacy/privacy_policy_screen.dart \
+            lib/ui/auth/auth_security_check.dart \
+            test/legal/legal_eligibility_contract_test.dart \
+            test/support/legal_eligibility_fixtures.dart \
+            test/widgets/legal_eligibility_gate_test.dart \
+            test/widgets/legal_consent_gate_test.dart \
+            test/widgets/privacy_policy_screen_test.dart \
+            2>&1 | tee verification-output/flutter-analyze.log
+      - name: Run existing contract and widget tests
+        # Still gather test evidence when analysis reports a defect; do not mask it.
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --concurrency=2 --reporter=expanded \
+            test/legal/legal_eligibility_contract_test.dart \
+            test/widgets/legal_eligibility_gate_test.dart \
+            test/widgets/legal_consent_gate_test.dart \
+            test/widgets/privacy_policy_screen_test.dart \
+            2>&1 | tee verification-output/flutter-tests.log
+      - name: Preserve Flutter evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: legal-flutter-${{ github.event.pull_request.head.sha }}
+          path: verification-output/
+          if-no-files-found: warn
+          retention-days: 7
