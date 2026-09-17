@@ -114,7 +114,9 @@ class _LegalEligibilityGateState extends State<LegalEligibilityGate>
   Future<void> _write(Future<void> Function() action, {bool birthDate = false}) async {
     final status = _status;
     if (_busy || _loading || _suspended || status == null ||
-        status.uid != _client.currentUserId) return;
+        status.uid != _client.currentUserId) {
+      return;
+    }
     final generation = _generation;
     setState(() { _busy = true; _error = null; });
     try {

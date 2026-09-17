@@ -135,7 +135,9 @@ String? legalBirthDateFromFields({
   }));
   final y = normalize(year), m = normalize(month), d = normalize(day);
   if (y.length != 4 || m.isEmpty || m.length > 2 || d.isEmpty || d.length > 2 ||
-      !RegExp(r'^[0-9]+$').hasMatch(y + m + d)) return null;
+      !RegExp(r'^[0-9]+$').hasMatch(y + m + d)) {
+    return null;
+  }
   final yy = int.parse(y), mm = int.parse(m), dd = int.parse(d);
   if (yy < 1900 || yy > 9999 || mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
   final date = DateTime.utc(yy, mm, dd);
