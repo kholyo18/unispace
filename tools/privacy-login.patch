@@ -1,0 +1,29 @@
+--- a/lib/main.dart
++++ b/lib/main.dart
+@@ -9,6 +9,7 @@ import 'ui/settings/profile_privacy.dart';
+ import 'ui/auth/account_recovery_screen.dart';
+ import 'ui/auth/auth_security_check.dart';
+ import 'features/auth/terms_of_use_screen.dart';
++import 'features/settings/privacy/privacy_policy_screen.dart';
+ // ============================================================================
+ // UniSpace — main.dart (UPDATED: BottomBar + Notes + Campus Community + Table)
+ // PART 1/3
+@@ -3696,6 +3697,18 @@ class _SignInScreenState extends State<SignInScreen> {
+                                 icon: const Icon(Icons.description_outlined),
+                                 label: const Text('قراءة شروط الاستخدام'),
+                               ),
++                              TextButton.icon(
++                                key: const ValueKey('login-read-privacy'),
++                                onPressed: busy
++                                    ? null
++                                    : () => Navigator.of(context).push<void>(
++                                          MaterialPageRoute<void>(
++                                            builder: (_) => const PrivacyPolicyScreen(),
++                                          ),
++                                        ),
++                                icon: const Icon(Icons.privacy_tip_outlined),
++                                label: const Text('قراءة سياسة الخصوصية'),
++                              ),
+                               Material(
+                                 color: Colors.transparent,
+                                 child: CheckboxListTile(
