@@ -8,6 +8,7 @@ import 'ui/settings/public_profile_service.dart';
 import 'ui/settings/profile_privacy.dart';
 import 'ui/auth/account_recovery_screen.dart';
 import 'ui/auth/auth_security_check.dart';
+import 'features/auth/terms_of_use_screen.dart';
 // ============================================================================
 // UniSpace — main.dart (UPDATED: BottomBar + Notes + Campus Community + Table)
 // PART 1/3
@@ -3682,6 +3683,18 @@ class _SignInScreenState extends State<SignInScreen> {
                                 onPressed: busy ? null : () => Navigator.of(context).push(
                                   MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
                                 child: const Text('فقدت تطبيق المصادقة؟'),
+                              ),
+                              TextButton.icon(
+                                key: const ValueKey('login-read-terms'),
+                                onPressed: busy
+                                    ? null
+                                    : () => Navigator.of(context).push<void>(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => const TermsOfUseScreen(),
+                                          ),
+                                        ),
+                                icon: const Icon(Icons.description_outlined),
+                                label: const Text('قراءة شروط الاستخدام'),
                               ),
                               Material(
                                 color: Colors.transparent,
