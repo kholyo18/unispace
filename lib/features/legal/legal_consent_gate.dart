@@ -102,7 +102,9 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
   Future<void> _accept() async {
     final status = _status;
     if (_busy || !_terms || !_community || !_privacy || status == null || !status.required ||
-        status.uid != _client.currentUserId) return;
+        status.uid != _client.currentUserId) {
+      return;
+    }
     final generation = _generation;
     setState(() { _busy = true; _error = null; });
     try {

@@ -206,9 +206,17 @@ void main() {
   testWidgets('resume rechecks independent consent rather than keeping an old ready result', (tester) async {
     final client = FakeEligibilityClient()..status = response('ready');
     await mount(tester, client); expect(find.text('protected-eligibility-child'), findsOneWidget);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused); await tester.pump();
+    // Follow Flutter's actual lifecycle graph, not a paused -> resumed shortcut.
+    for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pump();
+    expect(find.text('protected-eligibility-child'), findsNothing);
     client.status = response('independent_consent_required');
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed); await tester.pumpAndSettle();
+    for (final state in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pumpAndSettle();
     expect(find.text('protected-eligibility-child'), findsNothing); expectUnchecked(tester);
   });
   testWidgets('narrow RTL and large text remain scrollable without overflow', (tester) async {

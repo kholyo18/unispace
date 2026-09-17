@@ -118,6 +118,26 @@ jobs:
           set -euo pipefail
           flutter pub get --enforce-lockfile 2>&1 | tee verification-output/pub-get.log
           git diff --exit-code -- pubspec.yaml pubspec.lock
+      - name: Generate missing Flutter Intl messages without changing tracked sources
+        id: localizations
+        run: |
+          set -euo pipefail
+          # S is tracked, but its imported intl/messages_all.dart is not.
+          # Generate only from the existing ARB data in a temporary directory.
+          # Copy no newly generated S implementation over the committed source.
+          if [ ! -f lib/generated/intl/messages_all.dart ]; then
+            generator_root="$RUNNER_TEMP/legal-intl-generation"
+            mkdir -p "$generator_root/lib"
+            cp pubspec.yaml "$generator_root/pubspec.yaml"
+            cp -R lib/l10n "$generator_root/lib/l10n"
+            dart pub global activate intl_utils 2.8.16 2>&1 | tee verification-output/intl-tool.log
+            (cd "$generator_root" && dart pub global run intl_utils:generate) \
+              2>&1 | tee verification-output/intl-generate.log
+            test -f "$generator_root/lib/generated/intl/messages_all.dart"
+            test ! -e lib/generated/intl
+            cp -R "$generator_root/lib/generated/intl" lib/generated/intl
+          fi
+          git diff --exit-code -- pubspec.yaml pubspec.lock lib/l10n lib/generated/l10n.dart
       - name: Analyze the legal preview surface
         id: analyze
         run: |
@@ -134,7 +154,7 @@ jobs:
             2>&1 | tee verification-output/flutter-analyze.log
       - name: Run existing contract and widget tests
         # Still gather test evidence when analysis reports a defect; do not mask it.
-        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.localizations.outcome == 'success' }}
         run: |
           set -euo pipefail
           flutter test --no-pub --concurrency=2 --reporter=expanded \
