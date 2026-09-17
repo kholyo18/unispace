@@ -13,7 +13,7 @@ if (!output) throw new Error('Pass a new sandbox directory inside the runner tem
 const temp = fs.realpathSync(process.env.RUNNER_TEMP || os.tmpdir());
 const target = path.resolve(output);
 if (!target.startsWith(`${temp}${path.sep}`) || fs.existsSync(target)) throw new Error('Sandbox must be new and inside the temporary directory.');
-const sourceFiles = ['consent.js', 'eligibility.js', 'eligibility-consent.js', 'register-eligibility.js'];
+const sourceFiles = ['consent.js', 'eligibility.js', 'eligibility-consent.js', 'register-eligibility.js', 'post-enforcement.js'];
 const sha = execFileSync('git', ['rev-parse', 'HEAD'], {cwd: root, encoding: 'utf8'}).trim();
 if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid source commit.');
 const before = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], {cwd: root, encoding: 'utf8'});
@@ -26,6 +26,10 @@ function copy(source, destination) {
   hashes[path.relative(root, source)] = createHash('sha256').update(bytes).digest('hex');
 }
 for (const file of sourceFiles) copy(path.join(root, 'functions/legal', file), path.join(target, 'functions/legal', file));
+fs.mkdirSync(path.join(target, 'functions/security'), {recursive: true});
+for (const file of ['create-post.js', 'edit-post.js', 'new-post-notifications.js']) {
+  copy(path.join(root, 'functions/security', file), path.join(target, 'functions/security', file));
+}
 for (const file of ['package.json', 'package-lock.json']) copy(path.join(root, 'functions', file), path.join(target, 'functions', file));
 const manifest = JSON.parse(fs.readFileSync(path.join(target, 'functions/package.json')));
 if (manifest.main !== 'index.js' || manifest.engines?.node !== '24') throw new Error('Unexpected runtime contract; review rather than rewriting dependencies.');
@@ -37,7 +41,7 @@ copy(path.join(__dirname, 'runtime.cjs'), path.join(target, 'functions/index.js'
 fs.writeFileSync(path.join(target, 'functions/.env.local'),
   `UNISPACE_LEGAL_EMULATOR_TEST=1\nUNISPACE_LEGAL_FUNCTIONS_HOST=${HOSTS.UNISPACE_LEGAL_FUNCTIONS_HOST}\n`);
 copy(path.join(root, 'firestore.rules'), path.join(target, 'firestore.rules'));
-for (const file of ['safety.cjs', 'legal.test.cjs']) copy(path.join(__dirname, file), path.join(target, file));
+for (const file of ['safety.cjs', 'legal.test.cjs', 'posts.test.cjs']) copy(path.join(__dirname, file), path.join(target, file));
 const host = key => ({host: '127.0.0.1', port: Number(HOSTS[key].split(':')[1])});
 fs.writeFileSync(path.join(target, 'firebase.json'), JSON.stringify({
   functions: [{source: 'functions', codebase: 'legal-emulator-only'}],

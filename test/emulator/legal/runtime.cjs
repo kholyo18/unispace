@@ -14,3 +14,13 @@ const consent = createConsentHandlers(dependencies);
 exports.readLegalConsentStatus = onCall({region: 'europe-west1'}, consent.status);
 exports.acceptLegalDocuments = onCall({region: 'europe-west1'}, consent.accept);
 require('./legal/register-eligibility')(exports);
+
+// Exercise the application's exact post handler, with text-only content in this suite.
+// No Storage SDK, real media or notification/email triggers are initialized.
+const {createPostHandler} = require('./security/create-post');
+const postDependencies = {...dependencies, bucket: () => ({
+  name: `${PROJECT}.test-only`,
+  file() { throw new Error('Media access is outside this emulator suite.'); },
+})};
+exports.reserveOwnPost = onCall({region: 'europe-west1'}, createPostHandler(postDependencies));
+exports.publishOwnPost = onCall({region: 'europe-west1'}, createPostHandler(postDependencies, true));

@@ -8,6 +8,10 @@ on:
       - '.github/workflows/legal-emulator-checks.yml'
       - 'test/emulator/legal/**'
       - 'functions/legal/**'
+      - 'functions/security/create-post.js'
+      - 'functions/security/edit-post.js'
+      - 'functions/security/new-post-notifications.js'
+      - 'functions/test/legal-*.cjs'
       - 'functions/package.json'
       - 'functions/package-lock.json'
       - 'firestore.rules'
@@ -59,6 +63,16 @@ jobs:
             2>&1 | tee verification-output/environment.log
           node --test test/emulator/legal/safety.test.cjs \
             2>&1 | tee verification-output/isolation-tests.tap
+      - name: Check legal and post source syntax and run focused unit suites
+        run: |
+          set -euo pipefail
+          for file in functions/legal/*.js functions/security/create-post.js test/emulator/legal/*.cjs; do
+            node --check "$file"
+          done
+          node --test --test-concurrency=1 --test-reporter=tap \
+            functions/test/legal-consent.test.cjs functions/test/legal-eligibility.test.cjs \
+            functions/test/legal-post-enforcement.test.cjs \
+            2>&1 | tee verification-output/legal-unit-tests.tap
       - name: Prepare disposable sandbox from unchanged repository sources
         run: |
           set -euo pipefail
@@ -86,7 +100,7 @@ jobs:
           node "$UNISPACE_LEGAL_CLI" emulators:exec \
             --only auth,firestore,functions \
             --project demo-unispace-legal-integration --config firebase.json \
-            'node --test --test-concurrency=1 --test-reporter=tap legal.test.cjs' \
+            'node --test --test-concurrency=1 --test-reporter=tap legal.test.cjs posts.test.cjs' \
             2>&1 | tee "$GITHUB_WORKSPACE/verification-output/emulator-tests.log"
       - name: Ensure tracked application files remain unchanged
         if: always()

@@ -2,12 +2,15 @@ const { HttpsError } = require('firebase-functions/v2/https');
 const { createHash } = require('crypto');
 const { createNewPostNotifications } = require('./new-post-notifications');
 const { validateContent, mediaUrls, searchKeywords } = require('./edit-post');
+const { createEligibilityConsentHandlers } = require('../legal/eligibility-consent');
+const { POST_ENFORCEMENT_PATH, postCreationEnforced } = require('../legal/post-enforcement');
 const id = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && !v.includes('/') && !['.','..'].includes(v);
 const text = v => typeof v === 'string' ? v.trim() : '';
 const canonical = v => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object'
   ? Object.fromEntries(Object.keys(v).sort().map(k => [k,canonical(v[k])])) : v;
 
 function createPostHandler({ auth, db, FieldValue, bucket }, publish = false) {
+  const eligibility = createEligibilityConsentHandlers({auth, db, FieldValue, HttpsError});
   return async request => {
     const uid = request.auth?.uid, header = request.rawRequest?.headers?.authorization || '';
     if (!uid || !header.startsWith('Bearer ')) throw new HttpsError('unauthenticated','Sign in first.');
@@ -71,6 +74,12 @@ function createPostHandler({ auth, db, FieldValue, bucket }, publish = false) {
       }
     }
     return db.runTransaction(async tx => {
+      // Recheck rollout and eligibility before ALL writes, notifications and retry acknowledgments.
+      // A successful reservation or a client status response is not a publication authorization.
+      const enforcement = await tx.get(db.doc(POST_ENFORCEMENT_PATH));
+      if (postCreationEnforced(enforcement, HttpsError)) {
+        await eligibility.assertInTransaction(tx, request);
+      }
       const snapshots = await tx.getAll(...refs);
       check(...snapshots);
       const [post, receipt, , , actor] = snapshots;
