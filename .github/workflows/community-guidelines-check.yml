@@ -1,3 +1,4 @@
+# Rerun after keeping the existing terms checkbox position stable.
 name: Verify community guidelines reader
 on:
   push:
