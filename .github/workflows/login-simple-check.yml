@@ -24,7 +24,7 @@ jobs:
           git apply --check tools/simple-login.patch
           git apply tools/simple-login.patch
           git diff --check
-          test "$(git hash-object lib/main.dart)" = ac5ecf9d1661516f4489dbac4c06a7632149b75c
+          test "$(git hash-object lib/main.dart)" = 3b972fbc0fa59bff406d5a010eba59bf34b609a3
           test "$(git diff --name-only)" = lib/main.dart
           mkdir -p verification-output
           git diff -- lib/main.dart > verification-output/login.patch
@@ -37,7 +37,7 @@ jobs:
           from pathlib import Path
           assert os.environ['GITHUB_REPOSITORY'] == 'kholyo18/unispace'
           data = Path('lib/main.dart').read_bytes()
-          expected = 'ac5ecf9d1661516f4489dbac4c06a7632149b75c'
+          expected = '3b972fbc0fa59bff406d5a010eba59bf34b609a3'
           assert hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest() == expected
           payload = json.dumps({'encoding':'utf-8','content':data.decode('utf-8')}).encode()
           req = urllib.request.Request('https://api.github.com/repos/kholyo18/unispace/git/blobs',
@@ -70,7 +70,7 @@ jobs:
           test "$(git hash-object lib/main.dart)" = 33069d7dca6105b4bea6ded9ecaa10186e28ac9d
           git apply --check tools/simple-login.patch
           git apply tools/simple-login.patch
-          test "$(git hash-object lib/main.dart)" = ac5ecf9d1661516f4489dbac4c06a7632149b75c
+          test "$(git hash-object lib/main.dart)" = 3b972fbc0fa59bff406d5a010eba59bf34b609a3
           mkdir -p verification-output
           { git rev-parse HEAD; git hash-object lib/main.dart test/widgets/simple_login_terms_test.dart; } > verification-output/source.log
       - name: Set up verified Flutter
