@@ -1,119 +1,173 @@
 import 'package:flutter/material.dart';
 
-import '../../../generated/l10n.dart';
-
+/// Arabic privacy-policy review draft aligned with the current UniSpace app.
+/// Reading this page does not record consent or change login state.
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final s = S.of(context);
-    final theme = Theme.of(context);
-    final bodyStyle = theme.textTheme.bodyMedium?.copyWith(height: 1.5);
-    final headingStyle = theme.textTheme.titleSmall?.copyWith(
-      fontWeight: FontWeight.w600,
-      height: 1.4,
-    );
-    final titleStyle = theme.textTheme.headlineSmall?.copyWith(
-      fontWeight: FontWeight.w700,
-    );
-    final sections = _buildPolicySections(
-      s.privacyPolicyBody,
-      bodyStyle: bodyStyle,
-      headingStyle: headingStyle,
-    );
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(s.privacyPolicy),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                s.privacyPolicyTitle,
-                textAlign: TextAlign.start,
-                style: titleStyle,
-              ),
-              const SizedBox(height: 16),
-              ...sections,
-            ],
-          ),
+    final textTheme = Theme.of(context).textTheme;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('سياسة الخصوصية'),
+          centerTitle: true,
+          leading: const BackButton(key: ValueKey('privacy-reader-back')),
         ),
-      ),
-    );
-  }
-
-  List<Widget> _buildPolicySections(
-    String body, {
-    required TextStyle? bodyStyle,
-    required TextStyle? headingStyle,
-  }) {
-    final widgets = <Widget>[];
-    final lines = body.split('\n');
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) {
-        widgets.add(const SizedBox(height: 12));
-        continue;
-      }
-
-      if (_isNumberedHeading(trimmed)) {
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              trimmed,
-              textAlign: TextAlign.start,
-              style: headingStyle,
-            ),
-          ),
-        );
-        continue;
-      }
-
-      if (trimmed.startsWith('- ')) {
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('•', style: bodyStyle),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    trimmed.substring(2),
-                    textAlign: TextAlign.start,
-                    style: bodyStyle,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            key: const ValueKey('privacy-reader-scroll'),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 20, 20, 32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 840),
+                child: SelectionArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'سياسة الخصوصية – UniSpace',
+                        key: const ValueKey('privacy-reader-title'),
+                        style: textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('نسخة عربية للمراجعة — 17 سبتمبر 2026'),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'هذه نسخة منقحة للمراجعة قبل النشر. تصف معالجة البيانات التي '
+                        'حددناها في النسخة الحالية قدر الإمكان، ولا تعني وحدها أن جميع '
+                        'إجراءات الحذف والاحتفاظ أو المتطلبات القانونية قد اكتملت. قراءة '
+                        'السياسة لا تحدد خانة الموافقة على شروط الاستخدام.',
+                        key: ValueKey('privacy-reader-review-notice'),
+                      ),
+                      const SizedBox(height: 24),
+                      for (var i = 0; i < _privacySections.length; i++) ...[
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            _privacySections[i].heading,
+                            key: ValueKey('privacy-heading-${i + 1}'),
+                            style: textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _privacySections[i].body,
+                          style: textTheme.bodyMedium?.copyWith(height: 1.7),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
-        );
-        continue;
-      }
-
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            trimmed,
-            textAlign: TextAlign.start,
-            style: bodyStyle,
-          ),
         ),
-      );
-    }
-    return widgets;
-  }
-
-  bool _isNumberedHeading(String line) {
-    return RegExp(r'^\d+\)').hasMatch(line);
+      ),
+    );
   }
 }
+
+class _PrivacySection {
+  const _PrivacySection(this.heading, this.body);
+
+  final String heading;
+  final String body;
+}
+
+const _privacySections = <_PrivacySection>[
+  _PrivacySection(
+    '1. من نحن وكيف تتواصل معنا',
+    'UniSpace مشروع رقمي مستقل لخدمة المجتمع الجامعي في الجزائر. لا تقدّم هذه '
+        'النسخة المشروع على أنه مؤسسة مسجلة أو جهة رسمية تابعة لجامعة أو وزارة. '
+        'بريد التواصل لمسائل الخصوصية والدعم والحقوق هو '
+        'unispace.0.1.0@gmail.com. قبل اعتماد السياسة كوثيقة نهائية يجب استكمال '
+        'هوية الشخص أو الجهة المسؤولة فعليًا عن تشغيل الخدمة ووسيلة المراسلات المهنية.',
+  ),
+  _PrivacySection(
+    '2. البيانات التي قد يعالجها UniSpace',
+    'بحسب الوظائف التي يستخدمها صاحب الحساب، قد تشمل البيانات: البريد ومعرّف '
+        'الحساب ومزوّد تسجيل الدخول؛ الاسم واسم المستخدم والصورة والغلاف؛ تاريخ '
+        'الميلاد والجنس والكلية والقسم والتخصص والمستوى والحقول الاختيارية في الملف؛ '
+        'المنشورات والتعليقات والتفاعلات والمتابعات والحظر والحفظ؛ الرسائل ومرفقاتها '
+        'وبيانات القراءة والكتابة؛ رموز الإشعارات وبيانات الجلسة والجهاز الضرورية '
+        'للأمان؛ وطلبات الدعم والبلاغات والبيانات التقنية المرتبطة بها. لا يعني وجود '
+        'حقل في التطبيق أنه إلزامي لكل مستخدم.',
+  ),
+  _PrivacySection(
+    '3. البيانات الدراسية المحلية',
+    'المسارات التي راجعناها في حاسبة المعدل تحفظ العلامات وبيانات الحساب محليًا '
+        'على الجهاز باستخدام التخزين المحلي. لا نعمم هذا الوصف على بقية وظائف '
+        'UniSpace؛ فالملفات الشخصية والمحتوى الاجتماعي والمراسلة والإشعارات تعتمد '
+        'على خدمات سحابية عند استخدام النسخة المتصلة.',
+  ),
+  _PrivacySection(
+    '4. لماذا نستخدم البيانات',
+    'نستخدم البيانات بالقدر المرتبط بالوظيفة التي يطلبها المستخدم: إنشاء الحساب '
+        'وتسجيل الدخول، عرض الملف الشخصي، تشغيل المجتمع والمراسلة، حفظ المحتوى '
+        'والمرفقات، إرسال الإشعارات، حماية الحساب وإدارة الجلسات، تنفيذ إعدادات '
+        'الخصوصية، معالجة البلاغات، وتقديم الدعم. لا تُستخدم الرسائل الخاصة أو '
+        'العلامات أو طلبات الدعم للتدريب على نموذج ذكاء اصطناعي بموجب هذه النسخة.',
+  ),
+  _PrivacySection(
+    '5. Firebase والخدمات المستعان بها',
+    'يستخدم UniSpace خدمات من Google Firebase، ومنها Authentication وFirestore '
+        'وStorage وCloud Functions وCloud Messaging بحسب الوظيفة. بعض موارد المشروع '
+        'مهيأة في مناطق أوروبية، لكن موقع المعالجة يختلف باختلاف خدمة Firebase؛ لذلك '
+        'لا ندّعي أن كل البيانات تبقى داخل أوروبا. كما تمر المراسلات المرسلة إلى بريد '
+        'الدعم عبر خدمة البريد المستخدمة لاستقبالها.',
+  ),
+  _PrivacySection(
+    '6. مشاركة البيانات',
+    'لا تعني الاستعانة بمقدمي البنية التقنية بيع بيانات المستخدمين. قد تُعالج '
+        'البيانات لدى مقدمي الخدمات اللازمين لتشغيل الوظيفة، وبحسب إعداداتها. وقد '
+        'نكشف معلومات عندما يكون ذلك مطلوبًا وفق التزام قانوني واجب أو لحماية أمن '
+        'الخدمة والحقوق ضمن الحدود المناسبة. لا نمنح المعلنين قوائم طلاب شخصية خامًا '
+        'ولا نبيع البيانات الشخصية كمنتج.',
+  ),
+  _PrivacySection(
+    '7. أمان البيانات',
+    'نستخدم وسائل تقنية وتنظيمية تهدف إلى الحد من الوصول أو الاستخدام غير المصرح '
+        'بهما، ومنها مصادقة الحساب وقواعد الوصول وإجراءات حماية الجلسات. لا توجد '
+        'منظومة يمكن وصفها بأنها آمنة بنسبة 100٪؛ لذلك لا نقدم وعدًا مطلقًا بأن '
+        'جميع البيانات محمية من كل خطر. لا ترسل كلمة المرور أو رموز التحقق إلى الدعم.',
+  ),
+  _PrivacySection(
+    '8. الاحتفاظ والحذف',
+    'لا نعد بمدة حذف أو احتفاظ آلية لم يتم تنفيذها والتحقق منها. يمكن للمستخدم طلب '
+        'حذف الحساب والبيانات المرتبطة به عبر المسار المتاح داخل التطبيق أو عبر بريد '
+        'التواصل عند الحاجة. قد تتطلب بعض البيانات وقتًا تقنيًا للإزالة من أنظمة '
+        'مقدمي الخدمة أو الاحتفاظ المحدود عندما يوجد سبب قانوني أو أمني مشروع. يجب '
+        'استكمال واختبار سياسة الاحتفاظ والحذف الفعلية قبل نشر هذه النسخة كسياسة نهائية.',
+  ),
+  _PrivacySection(
+    '9. العمر والبيانات المرتبطة بالأهلية',
+    'الحد الأدنى الذي اختاره المشروع لاستخدام الحساب والمشاركة في المجتمع هو 18 '
+        'سنة. قد يُستخدم تاريخ الميلاد لتطبيق متطلبات العمر عند تنفيذ هذا المسار. '
+        'لا تدّعي هذه السياسة أن التحقق من الممثل القانوني للفئة التي تحتاج إليه '
+        'مطبق حاليًا؛ ويجب حسم هذا الجانب قبل اعتماد السياسة والشروط كنسخة نافذة.',
+  ),
+  _PrivacySection(
+    '10. حقوق المستخدم والتواصل',
+    'يمكن للمستخدم التواصل لطلب معلومات عن بياناته أو تصحيح ما يمكن تصحيحه أو '
+        'الاعتراض أو الحذف أو ممارسة حق آخر متاح وفق القانون المطبق. قد نطلب تحققًا '
+        'متناسبًا لحماية الحساب من طلبات شخص آخر. بريد التواصل هو '
+        'unispace.0.1.0@gmail.com، ولا ينبغي إرسال كلمات المرور أو رموز الدخول أو '
+        'الوثائق الحساسة الكاملة عبر البريد من دون مسار آمن ومبرر.',
+  ),
+  _PrivacySection(
+    '11. التغييرات على السياسة',
+    'قد تتغير السياسة عندما تتغير وظائف UniSpace أو طريقة معالجة البيانات أو '
+        'المتطلبات المطبقة. عند وجود تغيير جوهري سنعرض نسخة محدثة بوضوح قبل تقديمها '
+        'كسياسة نافذة. قبول شروط الاستخدام لا يعد موافقة مسبقة على معالجة اختيارية '
+        'جديدة مثل التسويق أو تدريب الذكاء الاصطناعي.',
+  ),
+];
