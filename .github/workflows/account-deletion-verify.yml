@@ -38,3 +38,7 @@ jobs:
           node --test --test-concurrency=1
           test/account-deletion-request.test.cjs
           test/account-deletion-worker.test.cjs
+      - name: Verify deletion hosting resource
+        run: |
+          node -e "const fs=require('fs');const f=JSON.parse(fs.readFileSync('../firebase.json','utf8'));if(f.hosting?.public!=='deletion-site'||f.hosting?.cleanUrls!==true)process.exit(1)"
+          node -e "const fs=require('fs');const h=fs.readFileSync('../deletion-site/delete-account.html','utf8');if(!h.includes('mailto:unispace.0.1.0@gmail.com')||!h.includes('حذف حساب UniSpace'))process.exit(1)"
