@@ -15,11 +15,15 @@
     .notice { background:#fff7e6; border:1px solid #f1d28b; border-radius:14px; padding:14px 16px; }
     .button { display:inline-block; margin-top:12px; padding:12px 18px; border-radius:12px; background:#b42318; color:white; text-decoration:none; font-weight:700; }
     .muted { color:#667085; font-size:14px; }
+    .links { margin-top:24px; padding-top:18px; border-top:1px solid #e5e9f0; display:flex; gap:12px; flex-wrap:wrap; }
+    .links a { color:#1565c0; }
     @media (prefers-color-scheme: dark) {
       body { background:#10151f; color:#eef2f8; }
       .card { background:#171e2a; border-color:#2b3545; box-shadow:none; }
       .notice { background:#332a16; border-color:#6e5723; }
       .muted { color:#aab4c3; }
+      .links { border-top-color:#2b3545; }
+      .links a { color:#8ab4f8; }
     }
   </style>
 </head>
@@ -66,6 +70,12 @@
       <p class="muted">
         هذه الصفحة هي مورد UniSpace الخارجي لبدء طلب حذف الحساب عند تعذر الدخول إلى التطبيق.
       </p>
+
+      <nav class="links" aria-label="وثائق UniSpace">
+        <a href="/privacy-policy">سياسة الخصوصية</a>
+        <a href="/terms-of-use">شروط الاستخدام</a>
+        <a href="/community-guidelines">قواعد المجتمع</a>
+      </nav>
     </section>
   </main>
 </body>

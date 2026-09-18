@@ -1,0 +1,100 @@
+name: Legal docs verification
+
+on:
+  pull_request:
+    paths:
+      - 'lib/features/auth/terms_of_use_screen.dart'
+      - 'lib/features/settings/privacy/privacy_policy_screen.dart'
+      - 'lib/features/legal/community_guidelines_screen.dart'
+      - 'test/widgets/privacy_login_reader_test.dart'
+      - 'test/widgets/privacy_policy_copy_test.dart'
+      - 'test/widgets/terms_of_use_copy_test.dart'
+      - 'test/widgets/terms_of_use_reader_test.dart'
+      - 'test/widgets/community_guidelines_reader_test.dart'
+      - 'test/widgets/community_guidelines_copy_test.dart'
+      - 'deletion-site/*.html'
+      - '.github/workflows/legal-docs-verify.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/features/auth/terms_of_use_screen.dart'
+      - 'lib/features/settings/privacy/privacy_policy_screen.dart'
+      - 'lib/features/legal/community_guidelines_screen.dart'
+      - 'deletion-site/*.html'
+      - '.github/workflows/legal-docs-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Run isolated legal document widget tests
+        run: >-
+          flutter test
+          test/widgets/privacy_policy_copy_test.dart
+          test/widgets/terms_of_use_copy_test.dart
+          test/widgets/community_guidelines_copy_test.dart
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Verify published legal pages
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const read = name => fs.readFileSync('deletion-site/' + name, 'utf8');
+          const privacy = read('privacy-policy.html');
+          const terms = read('terms-of-use.html');
+          const community = read('community-guidelines.html');
+          const deletion = read('delete-account.html');
+
+          const forbidden = ['نسخة للمراجعة', 'غير نافذة', 'قبل اعتمادها للنشر'];
+          for (const [name, html] of Object.entries({privacy, terms, community})) {
+            if (!html.includes('نافذ من 18 سبتمبر 2026')) {
+              throw new Error(name + ': missing effective date');
+            }
+            if (!html.includes('unispace.0.1.0@gmail.com')) {
+              throw new Error(name + ': missing support email');
+            }
+            for (const phrase of forbidden) {
+              if (html.includes(phrase)) throw new Error(name + ': stale draft phrase: ' + phrase);
+            }
+          }
+
+          const countH2 = html => (html.match(/<h2>/g) || []).length;
+          if (countH2(privacy) !== 11) throw new Error('privacy section count mismatch');
+          if (countH2(terms) !== 22) throw new Error('terms section count mismatch');
+          if (countH2(community) !== 12) throw new Error('community section count mismatch');
+
+          for (const token of [
+            'https://fachub-c631c.web.app/delete-account',
+            '30 يومًا',
+            '90 يومًا',
+            '180 يومًا',
+          ]) {
+            if (!privacy.includes(token)) throw new Error('privacy missing: ' + token);
+          }
+
+          for (const href of ['/privacy-policy', '/terms-of-use', '/community-guidelines']) {
+            if (!deletion.includes('href="' + href + '"')) {
+              throw new Error('deletion page missing link ' + href);
+            }
+          }
+          NODE

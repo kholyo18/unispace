@@ -26,7 +26,7 @@ void main() {
     await openPrivacy(tester);
     expect(find.byType(PrivacyPolicyScreen), findsOneWidget);
     expect(find.byKey(const ValueKey('privacy-reader-title')), findsOneWidget);
-    expect(find.byKey(const ValueKey('privacy-reader-review-notice')), findsOneWidget);
+    expect(find.byKey(const ValueKey('privacy-reader-policy-notice')), findsOneWidget);
 
     await closePrivacy(tester);
     expect(tester.widget<CheckboxListTile>(control('terms-consent')).value, false);
@@ -43,6 +43,12 @@ void main() {
     }
     expect(find.byType(SelectionArea), findsOneWidget);
     expect(find.text('1. من نحن وكيف تتواصل معنا'), findsOneWidget);
+    expect(find.textContaining('نافذ من 18 سبتمبر 2026'), findsOneWidget);
+    expect(find.textContaining('https://fachub-c631c.web.app/delete-account'), findsOneWidget);
+    expect(find.textContaining('30 يومًا'), findsWidgets);
+    expect(find.textContaining('90 يومًا'), findsWidgets);
+    expect(find.textContaining('180 يومًا'), findsWidgets);
+    expect(find.textContaining('نسخة منقحة للمراجعة'), findsNothing);
 
     final last = find.byKey(const ValueKey('privacy-heading-11'));
     await tester.ensureVisible(last);

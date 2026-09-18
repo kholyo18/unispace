@@ -24,7 +24,7 @@ void main() {
     expectLoginEnabled(tester, false);
     await openTerms(tester);
     expect(find.byType(TermsOfUseScreen), findsOneWidget);
-    expect(find.byKey(const ValueKey('terms-reader-draft-notice')), findsOneWidget);
+    expect(find.byKey(const ValueKey('terms-reader-version-notice')), findsOneWidget);
     expect(find.text('شروط استخدام UniSpace'), findsOneWidget);
     await closeTerms(tester);
     expect(tester.widget<CheckboxListTile>(control('terms-consent')).value, false);

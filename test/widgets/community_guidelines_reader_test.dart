@@ -27,7 +27,7 @@ void main() {
     expect(find.byType(CommunityGuidelinesScreen), findsOneWidget);
     expect(find.byKey(const ValueKey('community-reader-title')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('community-reader-review-notice')),
+      find.byKey(const ValueKey('community-reader-policy-notice')),
       findsOneWidget,
     );
 
@@ -46,6 +46,11 @@ void main() {
     }
     expect(find.byType(SelectionArea), findsOneWidget);
     expect(find.text('1. الهدف والنطاق'), findsOneWidget);
+    expect(find.textContaining('نافذ من 18 سبتمبر 2026'), findsOneWidget);
+    expect(find.textContaining('نسخة للمراجعة'), findsNothing);
+    expect(find.textContaining('غير نافذة'), findsNothing);
+    expect(find.textContaining('تتوفر أدوات للإبلاغ'), findsOneWidget);
+    expect(find.textContaining('الحسابات المحظورة'), findsOneWidget);
 
     final last = find.byKey(const ValueKey('community-heading-12'));
     await tester.ensureVisible(last);
