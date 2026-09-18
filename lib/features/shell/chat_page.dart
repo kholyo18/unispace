@@ -15,7 +15,6 @@ import '../../core/branding.dart';
 import '../../ui/settings/public_profile_service.dart';
 import 'package:UniSpace/main.dart';
 import 'package:flutter/services.dart';
-import 'package:translator/translator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:math' as math;
@@ -249,8 +248,6 @@ class _ChatDetailsPage extends StatefulWidget {
     required this.nickname,
     required this.wallpaper,
     required this.bubbleColor,
-    required this.autoTranslate,
-    required this.autoTranslateLang,
     required this.startedAt,
     required this.messages,
     required this.onSearch,
@@ -271,8 +268,6 @@ class _ChatDetailsPage extends StatefulWidget {
   final String nickname;
   final String wallpaper;
   final int bubbleColor;
-  final bool autoTranslate;
-  final String autoTranslateLang;
   final DateTime? startedAt;
   final List<types.Message> messages;
   final VoidCallback onSearch;
@@ -291,8 +286,6 @@ class _ChatDetailsPage extends StatefulWidget {
 class _ChatDetailsPageState extends State<_ChatDetailsPage> {
   late final TextEditingController _nick;
   late bool _muted;
-  late bool _auto;
-  late String _lang;
   late String _wallpaper;
   late int _bubble;
   String? _wallpaperUrl;
@@ -309,8 +302,6 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
     super.initState();
     _nick = TextEditingController(text: widget.nickname);
     _muted = widget.muted;
-    _auto = widget.autoTranslate;
-    _lang = widget.autoTranslateLang;
     _wallpaper = widget.wallpaper;
     _bubble = widget.bubbleColor;
   }
@@ -1088,7 +1079,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                       const SizedBox(height: 18),
 
                       _SimpleSettingsGroup(
-                        title: 'الإشعارات والترجمة',
+                        title: 'الإشعارات',
                         children: [
                           SwitchListTile(
                             contentPadding: const EdgeInsets.symmetric(
@@ -1112,29 +1103,6 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                             },
                           ),
 
-                          const Divider(height: 1, indent: 72),
-
-                          SwitchListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                            ),
-                            secondary: const Icon(
-                              Icons.translate_outlined,
-                            ),
-                            title: const Text('ترجمة تلقائية'),
-                            subtitle: Text(
-                              _auto
-                                  ? 'تتم ترجمة الرسائل تلقائياً'
-                                  : 'الترجمة التلقائية متوقفة',
-                            ),
-                            value: _auto,
-                            onChanged: (value) async {
-                              setState(() => _auto = value);
-                              await _patch({
-                                'autoTranslate.$_uid': value,
-                              });
-                            },
-                          ),
                         ],
                       ),
 
@@ -3078,7 +3046,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _searching = false;
   final _searchCtrl = TextEditingController();
   final _inputCtrl = TextEditingController();
-  final _translator = GoogleTranslator();
   bool _sending = false;
   bool _hasText = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _chatSub;
@@ -3117,8 +3084,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   String _wallpaper = 'default';
   int _bubbleColor = 0xFF0D9488;
   List<Color>? _bubbleGradient;
-  bool _autoTranslate = false;
-  String _autoTranslateLang = 'ar';
   DateTime? _chatStartedAt;
 
 
@@ -3185,8 +3150,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         final nick = Map<String, dynamic>.from(data['nicknames'] ?? {});
         final themeMap = Map<String, dynamic>.from(data['theme'] ?? {});
         final mineTheme = Map<String, dynamic>.from(themeMap[_me.id] ?? {});
-        final autoMap = Map<String, dynamic>.from(data['autoTranslate'] ?? {});
-        final langMap = Map<String, dynamic>.from(data['autoTranslateLang'] ?? {});
         final started = data['createdAt'];
         _nickname = (nick[_me.id] ?? '').toString();
         _wallpaper = (mineTheme['wallpaper'] ?? 'default').toString();
@@ -3200,8 +3163,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         } else {
           _bubbleGradient = null;
         }
-        _autoTranslate = autoMap[_me.id] == true;
-        _autoTranslateLang = (langMap[_me.id] ?? 'ar').toString();
         _chatStartedAt = started is Timestamp ? started.toDate() : null;
         _clearedAt = cr is Timestamp ? cr.toDate() : null;
       });
@@ -3794,8 +3755,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم النسخ')),
         );
-      case 'translate':
-        await _translate(text);
       case 'star':
         await _toggleStar(message);
       case 'edit':
@@ -3902,20 +3861,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
-  }
-
-  Future<void> _translate(String text) async {
-    if (text.trim().isEmpty) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (_) => _ChatTranslateSheet(text: text),
-    );
   }
 
   void _showInfo(types.Message message) {
@@ -4472,8 +4417,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     nickname: _nickname,
                     wallpaper: _wallpaper,
                     bubbleColor: _bubbleColor,
-                    autoTranslate: _autoTranslate,
-                    autoTranslateLang: _autoTranslateLang,
                     startedAt: _chatStartedAt,
                     messages: _messages,
                     onSearch: () {
@@ -8945,8 +8888,6 @@ class _ModernMessageActionsSheetState extends State<_ModernMessageActionsSheet>
     final actions = <_MsgAction>[
       _MsgAction('reply', 'رد', Icons.reply_rounded),
       if (widget.isText) _MsgAction('copy', 'نسخ', Icons.content_copy_rounded),
-      if (widget.isText)
-        _MsgAction('translate', 'ترجمة', Icons.translate_rounded),
       _MsgAction(
         'star',
         widget.starred ? 'إلغاء التمييز' : 'تمييز',
@@ -9493,8 +9434,6 @@ class _PinnedMessageActionsOverlayState extends State<_PinnedMessageActionsOverl
     final actions = <_MsgAction>[
       _MsgAction('reply', 'رد', Icons.reply_rounded),
       if (widget.isText) _MsgAction('copy', 'نسخ', Icons.content_copy_rounded),
-      if (widget.isText)
-        _MsgAction('translate', 'ترجمة', Icons.translate_rounded),
       _MsgAction(
         'star',
         widget.starred ? 'إلغاء التمييز' : 'تمييز',
@@ -9771,188 +9710,6 @@ class _EditPreview extends StatelessWidget {
     );
   }
 }
-
-class _ChatTranslateSheet extends StatefulWidget {
-  const _ChatTranslateSheet({required this.text});
-  final String text;
-
-  @override
-  State<_ChatTranslateSheet> createState() => _ChatTranslateSheetState();
-}
-
-class _ChatTranslateSheetState extends State<_ChatTranslateSheet> {
-  static const _langs = <(String, String)>[
-    ('auto', 'كشف تلقائي'),
-    ('ar', 'العربية'),
-    ('fr', 'Français'),
-    ('en', 'English'),
-    ('es', 'Español'),
-    ('de', 'Deutsch'),
-    ('tr', 'Türkçe'),
-    ('it', 'Italiano'),
-  ];
-
-  String _from = 'auto';
-  String _to = 'ar';
-  bool _loading = false;
-  String? _result;
-  String? _error;
-
-  String _label(String code) =>
-      _langs.firstWhere((e) => e.$1 == code, orElse: () => (code, code)).$2;
-
-  Future<void> _pick(bool source) async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        final items = source ? _langs : _langs.where((e) => e.$1 != 'auto');
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final e in items)
-                ListTile(
-                  title: Text(e.$2),
-                  trailing: (source ? _from : _to) == e.$1
-                      ? const Icon(Icons.check_rounded)
-                      : null,
-                  onTap: () => Navigator.pop(ctx, e.$1),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-    if (selected == null) return;
-    setState(() {
-      if (source) {
-        _from = selected;
-      } else {
-        _to = selected;
-      }
-      _result = null;
-    });
-  }
-
-  Future<void> _run() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final tr = GoogleTranslator();
-      final out = await tr.translate(
-        widget.text,
-        from: _from,
-        to: _to,
-      );
-      if (!mounted) return;
-      setState(() {
-        _result = out.text;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'تعذر الترجمة';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'ترجمة',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _pick(true),
-                  child: Text(_label(_from), overflow: TextOverflow.ellipsis),
-                ),
-              ),
-              IconButton(
-                onPressed: _from == 'auto'
-                    ? null
-                    : () => setState(() {
-                  final a = _from;
-                  _from = _to;
-                  _to = a;
-                  _result = null;
-                }),
-                icon: const Icon(Icons.swap_horiz_rounded),
-              ),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _pick(false),
-                  child: Text(_label(_to), overflow: TextOverflow.ellipsis),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
-                  .withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(widget.text, maxLines: 6, overflow: TextOverflow.ellipsis),
-          ),
-          if (_result != null) ...[
-            const SizedBox(height: 10),
-            Text(_result!, style: const TextStyle(fontSize: 16, height: 1.45)),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: Color(0xFFDC2626))),
-          ],
-          const SizedBox(height: 14),
-          FilledButton(
-            onPressed: _loading ? null : _run,
-            style: FilledButton.styleFrom(backgroundColor: AppTeal.main),
-            child: _loading
-                ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-                : const Text('ترجمة'),
-          ),
-          if (_result != null) ...[
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: _result!));
-                Navigator.pop(context);
-              },
-              child: const Text('نسخ الترجمة'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 
 const int kVoiceBarCount = 40;
 const Duration kVoiceHoldDelay = Duration(milliseconds: 180);
