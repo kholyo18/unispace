@@ -3,7 +3,9 @@ name: Verify community guidelines reader
 on:
   push:
     branches: ['work/community-guidelines-20260918']
-    paths:\n      - '.github/workflows/community-guidelines-check.yml'\n      - 'tools/community-guidelines-main.patch'
+    paths:
+      - '.github/workflows/community-guidelines-check.yml'
+      - 'tools/community-guidelines-main.patch'
 
 permissions:
   contents: read
