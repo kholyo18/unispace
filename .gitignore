@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/release
 # Generated localization files
 lib/generated/
+
+# Temporary Firebase production index export used for reconciliation
+firestore.indexes.current.json

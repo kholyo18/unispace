@@ -72,20 +72,43 @@ The worker uses filtered collection-group queries. Firestore does not maintain f
 - `notifications.actorIds`: array-contains, collection-group scope.
 - `revocations.expiresAt`: ascending, collection-group scope.
 
-Export/reconcile the project's existing production index configuration before adding these entries. Do not replace an existing production index file with a deletion-only file, because unrelated application indexes may already exist outside this repository snapshot.
+The repository keeps two index files:
+
+- `firestore.indexes.required.json`: UniSpace requirements known from code review, including the deletion worker.
+- `firestore.indexes.json`: the deployable file. It must be reconciled with the live project before production index deployment.
+
+Before the first production index deployment, export the live configuration and merge it rather than replacing it:
+
+```sh
+npx --yes firebase-tools@latest firestore:indexes --project fachub-c631c > firestore.indexes.current.json
+node scripts/reconcile-firestore-indexes.cjs firestore.indexes.current.json firestore.indexes.json
+git diff -- firestore.indexes.json
+```
+
+The reconciliation helper preserves live composite indexes, existing field overrides and TTL flags, then adds the repository requirements. `firestore.indexes.current.json` is intentionally ignored by Git.
+
+Do **not** use `--force` for this reconciliation/deploy step. Review the generated diff first.
 
 ## Deployment and verification
+
+Deploy the reconciled Firestore indexes first:
+
+```sh
+npx --yes firebase-tools@latest deploy --only firestore:indexes --project fachub-c631c
+```
+
+Wait until the required collection-group indexes report ready in Firebase before enabling the worker in production.
 
 Backend:
 
 ```sh
-firebase deploy --only functions:requestAccountDeletion,functions:processAccountDeletions
+npx --yes firebase-tools@latest deploy --only functions:requestAccountDeletion,functions:processAccountDeletions --project fachub-c631c
 ```
 
 External deletion page:
 
 ```sh
-firebase deploy --only hosting
+npx --yes firebase-tools@latest deploy --only hosting --project fachub-c631c
 ```
 
 After deployment:
