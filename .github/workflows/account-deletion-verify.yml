@@ -1,0 +1,37 @@
+name: Account deletion verification
+
+on:
+  push:
+    branches:
+      - feat/account-deletion-worker-20260918
+  pull_request:
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - '.github/workflows/account-deletion-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+      - name: Syntax check deletion modules
+        run: |
+          node --check security/account-deletion-request.js
+          node --check security/account-deletion-worker.js
+          node --check index.js
+      - name: Run server tests
+        run: node --test --test-concurrency=1 test/*.test.cjs
