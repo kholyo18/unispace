@@ -722,6 +722,13 @@
   "sessionLoginDateLabel": "Date de connexion",
   "sessionLastActivityLabel": "Dernière activité",
   "sessionNetworkLabel": "Réseau",
+  "editWeights": "Modifier les pondérations",
+  "activeSessionNow": "À l’instant",
+  "sessionSignedOutSuccess": "Session déconnectée avec succès.",
+  "sessionSignOutFailed": "Impossible de déconnecter cette session.",
+  "otherSessionsSignedOutSuccess": "Déconnexion des autres appareils effectuée.",
+  "logoutAllOtherDevices": "Déconnecter les autres appareils",
+  "sessionUnknownDevice": "Appareil inconnu",
   "dangerZone": "Zone de danger",
   "gpu": "Calcul de la moyenne scolaire"
 }
