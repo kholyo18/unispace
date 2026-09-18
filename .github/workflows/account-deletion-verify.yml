@@ -40,6 +40,18 @@ jobs:
           node --test --test-concurrency=1
           test/account-deletion-request.test.cjs
           test/account-deletion-worker.test.cjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run deletion worker against Firestore emulator
+        run: >-
+          npx --yes firebase-tools
+          emulators:exec
+          --only firestore
+          --project demo-unispace-deletion
+          --config ../firebase.json
+          "node --test --test-concurrency=1 test/account-deletion-worker.integration.test.cjs"
       - name: Verify deletion hosting resource
         run: |
           node -e "const fs=require('fs');const f=JSON.parse(fs.readFileSync('../firebase.json','utf8'));if(f.hosting?.public!=='deletion-site'||f.hosting?.cleanUrls!==true)process.exit(1)"
