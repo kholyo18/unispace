@@ -120,7 +120,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
               const SizedBox(height: 22),
               const _InfoCard(
                 title: 'ماذا يحدث بعد الطلب؟',
-                children: const [
+                children: [
                   'يُسجّل الطلب باسم الحساب الذي أنت مسجل الدخول إليه فقط.',
                   'تُلغى جلسات الحساب ويُطلب منك تسجيل الخروج من التطبيق.',
                   'نستهدف إكمال حذف بيانات الحساب التشغيلية خلال مدة لا تتجاوز 30 يومًا.',
@@ -130,7 +130,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
               const SizedBox(height: 14),
               const _InfoCard(
                 title: 'الاحتفاظ المحدود',
-                children: const [
+                children: [
                   'طلبات الدعم: حتى 180 يومًا بعد إغلاق الطلب عند الحاجة للمتابعة.',
                   'البلاغات وقرارات الإشراف: حتى 180 يومًا بعد الإغلاق أو آخر اعتراض.',
                   'سجلات الأمان التشغيلية المعتادة: حتى 90 يومًا.',
@@ -140,7 +140,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
               const SizedBox(height: 14),
               const _InfoCard(
                 title: 'قبل أن تطلب الحذف',
-                children: const [
+                children: [
                   'إذا أردت نسخة من بياناتك، اطلبها قبل حذف الحساب.',
                   'لا ترسل كلمة المرور أو رموز المصادقة أو مفاتيح الاستعادة عبر البريد.',
                   'للمساعدة: unispace.0.1.0@gmail.com',
