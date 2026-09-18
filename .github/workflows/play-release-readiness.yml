@@ -7,6 +7,7 @@ on:
       - 'android/app/src/main/AndroidManifest.xml'
       - 'android/key.properties.example'
       - 'android/PLAY_RELEASE_READINESS.md'
+      - 'pubspec.yaml'
       - '.gitignore'
       - '.github/workflows/play-release-readiness.yml'
   push:
@@ -16,6 +17,7 @@ on:
       - 'android/app/build.gradle.kts'
       - 'android/app/src/main/AndroidManifest.xml'
       - 'android/key.properties.example'
+      - 'pubspec.yaml'
       - '.gitignore'
       - '.github/workflows/play-release-readiness.yml'
 
@@ -69,5 +71,18 @@ jobs:
           const duplicates = permissions.filter((value, index) => permissions.indexOf(value) !== index);
           if (duplicates.length) {
             throw new Error('duplicate Android permissions: ' + [...new Set(duplicates)].join(', '));
+          }
+
+          const forbiddenMediaPermissions = [
+            'android.permission.READ_MEDIA_IMAGES',
+            'android.permission.READ_MEDIA_VIDEO',
+          ];
+          const forbiddenPresent = forbiddenMediaPermissions.filter(permission =>
+            permissions.includes(permission)
+          );
+          if (forbiddenPresent.length) {
+            throw new Error(
+              'broad photo/video permissions are not allowed: ' + forbiddenPresent.join(', ')
+            );
           }
           NODE
