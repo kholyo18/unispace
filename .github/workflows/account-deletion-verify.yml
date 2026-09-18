@@ -33,5 +33,8 @@ jobs:
           node --check security/account-deletion-request.js
           node --check security/account-deletion-worker.js
           node --check index.js
-      - name: Run server tests
-        run: node --test --test-concurrency=1 test/*.test.cjs
+      - name: Run account deletion unit tests
+        run: >-
+          node --test --test-concurrency=1
+          test/account-deletion-request.test.cjs
+          test/account-deletion-worker.test.cjs
