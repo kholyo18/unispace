@@ -33,6 +33,8 @@ jobs:
           node --check security/account-deletion-request.js
           node --check security/account-deletion-worker.js
           node --check index.js
+      - name: Smoke load Functions entry point
+        run: node -e "require('./index.js')"
       - name: Run account deletion unit tests
         run: >-
           node --test --test-concurrency=1
