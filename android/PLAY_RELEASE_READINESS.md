@@ -21,6 +21,10 @@ The Firebase Android client uses the same package name. Do not change it casuall
 5. Register the Google Play app-signing SHA fingerprints with Firebase/Google Sign-In after Play provides them.
 6. Complete Play Console declarations, including Data safety and account deletion/privacy links.
 
+Use `android/GOOGLE_PLAY_DATA_SAFETY.md` as the working checklist for the Data Safety form. Re-check it against the exact release build before submission.
+
+Repository-side legal/account deletion resources are implemented and verified by CI. The hosted production URLs still need a final reachability check from a normal browser before Play submission.
+
 ## Photo/video access
 
 Completed:
