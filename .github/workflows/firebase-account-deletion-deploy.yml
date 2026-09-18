@@ -1,0 +1,90 @@
+name: Deploy account deletion production slice
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Production component to deploy
+        required: true
+        type: choice
+        options:
+          - indexes
+          - backend
+          - hosting
+      confirmation:
+        description: Type DEPLOY_FACHUB_C631C
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-account-deletion-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate explicit production confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [ "$CONFIRMATION" != "DEPLOY_FACHUB_C631C" ]; then
+            echo "Production confirmation text did not match."
+            exit 1
+          fi
+
+      - name: Require Firebase service account secret
+        env:
+          FIREBASE_GOOGLE_CREDENTIALS: ${{ secrets.FIREBASE_GOOGLE_CREDENTIALS }}
+        run: |
+          if [ -z "$FIREBASE_GOOGLE_CREDENTIALS" ]; then
+            echo "Missing FIREBASE_GOOGLE_CREDENTIALS repository/environment secret."
+            exit 1
+          fi
+
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: fachub-c631c
+          credentials_json: ${{ secrets.FIREBASE_GOOGLE_CREDENTIALS }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Export, reconcile and deploy Firestore indexes
+        if: ${{ inputs.target == 'indexes' }}
+        run: |
+          npx --yes firebase-tools@latest firestore:indexes \
+            --project fachub-c631c > firestore.indexes.current.json
+          node scripts/reconcile-firestore-indexes.cjs \
+            firestore.indexes.current.json firestore.indexes.json
+          node --test scripts/reconcile-firestore-indexes.test.cjs
+          git diff -- firestore.indexes.json
+          npx --yes firebase-tools@latest deploy \
+            --only firestore:indexes \
+            --project fachub-c631c
+
+      - name: Deploy account deletion Functions
+        if: ${{ inputs.target == 'backend' }}
+        run: |
+          npx --yes firebase-tools@latest deploy \
+            --only functions:requestAccountDeletion,functions:processAccountDeletions \
+            --project fachub-c631c
+
+      - name: Deploy external account deletion page
+        if: ${{ inputs.target == 'hosting' }}
+        run: |
+          npx --yes firebase-tools@latest deploy \
+            --only hosting \
+            --project fachub-c631c
+          npx --yes firebase-tools@latest hosting:sites:list \
+            --project fachub-c631c
