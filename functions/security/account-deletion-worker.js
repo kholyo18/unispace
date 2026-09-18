@@ -600,6 +600,13 @@ async function deleteExpired(query, db) {
   }
 }
 
+function reportRetentionDeletable(data, nowMs) {
+  const value = map(data);
+  const holdUntil = typeof value.legalHoldUntil?.toMillis === 'function'
+    ? value.legalHoldUntil.toMillis() : 0;
+  return value.legalHold !== true && holdUntil <= nowMs;
+}
+
 async function cleanupExpiredReports({ db, Timestamp, nowMs }) {
   const cutoff = Timestamp.fromMillis(nowMs);
   let cursor = null;
@@ -615,10 +622,7 @@ async function cleanupExpiredReports({ db, Timestamp, nowMs }) {
     const batch = db.batch();
     let deletions = 0;
     for (const doc of snapshot.docs) {
-      const data = doc.data();
-      const holdUntil = typeof data.legalHoldUntil?.toMillis === 'function'
-        ? data.legalHoldUntil.toMillis() : 0;
-      if (data.legalHold === true || holdUntil > nowMs) continue;
+      if (!reportRetentionDeletable(doc.data(), nowMs)) continue;
       batch.delete(doc.ref);
       deletions++;
     }
@@ -758,5 +762,6 @@ module.exports = {
   scrubNotification,
   scrubReport,
   storageObjectFromUrl,
+  reportRetentionDeletable,
   createAccountDeletionWorker,
 };
