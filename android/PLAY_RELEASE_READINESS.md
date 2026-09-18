@@ -34,4 +34,4 @@ Completed:
 - `READ_MEDIA_IMAGES` and `READ_MEDIA_VIDEO` were removed from the main Android manifest.
 - CI rejects either broad media permission if it is reintroduced.
 
-Legacy `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` entries remain limited to Android 12L/API 32 and lower. They were not changed in this migration because other legacy save/download flows must be reviewed separately before removing them.
+`READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` were also removed after repository review found no remaining app code that depends on broad external-storage access. CI now rejects all four broad media/storage permissions if they are reintroduced.
