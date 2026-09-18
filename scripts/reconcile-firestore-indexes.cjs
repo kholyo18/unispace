@@ -82,30 +82,32 @@ function reconcile(current, required) {
   };
 }
 
-const [, , currentPath, outputPath = 'firestore.indexes.json',
-  requiredPath = 'firestore.indexes.required.json'] = process.argv;
+if (require.main === module) {
+  const [, , currentPath, outputPath = 'firestore.indexes.json',
+    requiredPath = 'firestore.indexes.required.json'] = process.argv;
 
-if (!currentPath) {
-  fail(
-    'Usage: node scripts/reconcile-firestore-indexes.cjs ' +
-    '<firebase-export.json> [output.json] [required.json]',
+  if (!currentPath) {
+    fail(
+      'Usage: node scripts/reconcile-firestore-indexes.cjs ' +
+      '<firebase-export.json> [output.json] [required.json]',
+    );
+  }
+
+  const current = readJson(currentPath);
+  const required = readJson(requiredPath);
+  const merged = reconcile(current, required);
+
+  fs.writeFileSync(
+    outputPath,
+    JSON.stringify(merged, null, 2) + '\n',
+    'utf8',
+  );
+
+  console.log(
+    `Wrote ${path.resolve(outputPath)} with ` +
+    `${merged.indexes.length} composite indexes and ` +
+    `${merged.fieldOverrides.length} field overrides.`,
   );
 }
-
-const current = readJson(currentPath);
-const required = readJson(requiredPath);
-const merged = reconcile(current, required);
-
-fs.writeFileSync(
-  outputPath,
-  JSON.stringify(merged, null, 2) + '\n',
-  'utf8',
-);
-
-console.log(
-  `Wrote ${path.resolve(outputPath)} with ` +
-  `${merged.indexes.length} composite indexes and ` +
-  `${merged.fieldOverrides.length} field overrides.`,
-);
 
 module.exports = { reconcile };
