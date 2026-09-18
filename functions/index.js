@@ -205,3 +205,14 @@ exports.completeSignupProfile = onCall({region:'europe-west1',timeoutSeconds:60}
 const { createSessionBootstrapHandler } = require('./security/session-bootstrap');
 exports.markCurrentSession = onCall({region:'europe-west1',timeoutSeconds:60},
   createSessionBootstrapHandler({auth:getAuth(),db:getFirestore()}));
+
+
+const { createAccountDeletionRequestHandler } = require('./security/account-deletion-request');
+exports.requestAccountDeletion = onCall(
+  { region: 'europe-west1', timeoutSeconds: 60 },
+  createAccountDeletionRequestHandler({
+    auth: getAuth(),
+    db: getFirestore(),
+    FieldValue,
+  }),
+);
