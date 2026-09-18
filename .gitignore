@@ -48,3 +48,6 @@ lib/generated/
 
 # Temporary Firebase production index export used for reconciliation
 firestore.indexes.current.json
+
+# Firebase CLI local cache
+.firebase/
