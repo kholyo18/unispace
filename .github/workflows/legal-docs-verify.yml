@@ -7,9 +7,11 @@ on:
       - 'lib/features/settings/privacy/privacy_policy_screen.dart'
       - 'lib/features/legal/community_guidelines_screen.dart'
       - 'test/widgets/privacy_login_reader_test.dart'
+      - 'test/widgets/privacy_policy_copy_test.dart'
       - 'test/widgets/terms_of_use_copy_test.dart'
       - 'test/widgets/terms_of_use_reader_test.dart'
       - 'test/widgets/community_guidelines_reader_test.dart'
+      - 'test/widgets/community_guidelines_copy_test.dart'
       - 'deletion-site/*.html'
       - '.github/workflows/legal-docs-verify.yml'
   push:
@@ -41,14 +43,12 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
-      - name: Run legal document widget tests
+      - name: Run isolated legal document widget tests
         run: >-
           flutter test
-          test/widgets/simple_login_terms_test.dart
-          test/widgets/privacy_login_reader_test.dart
+          test/widgets/privacy_policy_copy_test.dart
           test/widgets/terms_of_use_copy_test.dart
-          test/widgets/terms_of_use_reader_test.dart
-          test/widgets/community_guidelines_reader_test.dart
+          test/widgets/community_guidelines_copy_test.dart
 
       - uses: actions/setup-node@v4
         with:
