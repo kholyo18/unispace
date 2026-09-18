@@ -1,4 +1,5 @@
 name: Verify account deletion request and retention UI
+# rerun after confirmation-flow fix
 
 on:
   push:
