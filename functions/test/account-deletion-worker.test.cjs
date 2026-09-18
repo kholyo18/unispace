@@ -8,6 +8,7 @@ const {
   scrubNotification,
   scrubReport,
   storageObjectFromUrl,
+  reportRetentionDeletable,
 } = require('../security/account-deletion-worker');
 
 test('removes a deleted author comment while preserving and promoting other replies', () => {
@@ -175,4 +176,18 @@ test('accepts only Firebase Storage URLs for the configured bucket', () => {
     null,
   );
   assert.equal(storageObjectFromUrl('https://example.com/file', 'demo'), null);
+});
+
+test('does not purge moderation evidence while an explicit legal hold is active', () => {
+  const now = 2_000_000_000_000;
+  assert.equal(reportRetentionDeletable({ legalHold: true }, now), false);
+  assert.equal(
+    reportRetentionDeletable({ legalHoldUntil: { toMillis: () => now + 60_000 } }, now),
+    false,
+  );
+  assert.equal(
+    reportRetentionDeletable({ legalHoldUntil: { toMillis: () => now - 1 } }, now),
+    true,
+  );
+  assert.equal(reportRetentionDeletable({}, now), true);
 });
