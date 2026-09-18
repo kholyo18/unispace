@@ -34,7 +34,7 @@ UniSpace stores account/profile information, social/community content, chat cont
 
 Firebase documents HTTPS encryption in transit for the Firebase SDK data it handles.
 
-Before selecting **Yes** in Play Console, verify every non-Firebase network path in the release build as well. In particular, review any translation/network helper that can send user text to an external service.
+Before selecting **Yes** in Play Console, verify every non-Firebase network path in the release build as well. The unofficial external chat-translation dependency was removed from the Play release on 18 September 2026 so selected message text is no longer sent through that package.
 
 ### Can users request deletion of their data?
 
@@ -90,7 +90,7 @@ Before selecting the final “shared” answers, verify:
 
 1. every third-party SDK in the exact release dependency graph;
 2. whether any SDK uses collected data for its own independent purposes;
-3. whether any external translation/API feature sends user content outside Firebase;
+3. whether any future external translation/API feature sends user content outside Firebase;
 4. whether any advertising, analytics, attribution, or profiling SDK is added later.
 
 No Firebase Analytics or Firebase Crashlytics direct dependency is present in the current `pubspec.yaml`, but the final release dependency graph must still be checked.
@@ -114,7 +114,7 @@ Before submitting the Data Safety form:
 - [ ] Run `flutter pub get` using the exact release branch.
 - [ ] Export/review the final dependency graph and check every third-party SDK.
 - [ ] Confirm no Firebase Analytics or Crashlytics SDK was added indirectly by a new feature/configuration.
-- [ ] Review the `translator` package usage and its external network behavior if message/content translation remains enabled.
+- [x] Remove the unofficial `translator` package and external chat-translation flow from the Play release — completed 18 September 2026.
 - [ ] Confirm the privacy policy describes all data categories actually present in the release.
 - [x] Confirm the external account-deletion URL is publicly reachable without login — verified 18 September 2026 (HTTP 200).
 - [x] Confirm the privacy-policy URL is publicly reachable without login and is non-editable by visitors — verified 18 September 2026 (HTTP 200).
