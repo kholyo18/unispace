@@ -1,0 +1,73 @@
+name: Play release readiness
+
+on:
+  pull_request:
+    paths:
+      - 'android/app/build.gradle.kts'
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'android/key.properties.example'
+      - 'android/PLAY_RELEASE_READINESS.md'
+      - '.gitignore'
+      - '.github/workflows/play-release-readiness.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'android/app/build.gradle.kts'
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'android/key.properties.example'
+      - '.gitignore'
+      - '.github/workflows/play-release-readiness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Verify Play release configuration
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const gradle = fs.readFileSync('android/app/build.gradle.kts', 'utf8');
+          const manifest = fs.readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8');
+          const gitignore = fs.readFileSync('.gitignore', 'utf8');
+
+          if (!gradle.includes('targetSdk = 36')) {
+            throw new Error('targetSdk must remain API 36');
+          }
+          if (!gradle.includes('signingConfigs.getByName("release")')) {
+            throw new Error('release build is not using the release signing config');
+          }
+          const releaseBlock = gradle.match(/buildTypes\s*\{[\s\S]*?release\s*\{[\s\S]*?\n\s*\}/)?.[0] || '';
+          if (releaseBlock.includes('signingConfigs.getByName("debug")')) {
+            throw new Error('release build must never use the debug signing key');
+          }
+          if (!gradle.includes('rootProject.file("key.properties")')) {
+            throw new Error('private key.properties loading is missing');
+          }
+          if (!gitignore.includes('android/key.properties')) {
+            throw new Error('android/key.properties must be ignored');
+          }
+          if (!gitignore.includes('*.jks') || !gitignore.includes('*.keystore')) {
+            throw new Error('keystore files must be ignored');
+          }
+          if (!fs.existsSync('android/key.properties.example')) {
+            throw new Error('signing configuration example is missing');
+          }
+
+          const permissions = [...manifest.matchAll(/<uses-permission\s+android:name="([^"]+)"/g)]
+            .map(match => match[1]);
+          const duplicates = permissions.filter((value, index) => permissions.indexOf(value) !== index);
+          if (duplicates.length) {
+            throw new Error('duplicate Android permissions: ' + [...new Set(duplicates)].join(', '));
+          }
+          NODE
