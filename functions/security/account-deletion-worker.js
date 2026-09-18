@@ -411,7 +411,6 @@ async function scrubNotifications({ db, FieldValue, uid }) {
 }
 
 async function scrubReports({ db, Timestamp, uid, tombstoneId, nowMs }) {
-  const seen = new Set();
   for (const base of [
     db.collection('community_reports').where('reporterId', '==', uid),
     db.collection('community_reports').where('ownerId', '==', uid),
@@ -422,12 +421,15 @@ async function scrubReports({ db, Timestamp, uid, tombstoneId, nowMs }) {
       if (snapshot.empty) break;
       let changed = 0;
       for (const doc of snapshot.docs) {
-        if (seen.has(doc.ref.path)) continue;
-        const result = scrubReport(doc.data(), uid, tombstoneId, Timestamp, nowMs);
-        if (!result.changed) continue;
-        await doc.ref.update(result.patch);
-        seen.add(doc.ref.path);
-        changed++;
+        const didChange = await db.runTransaction(async tx => {
+          const fresh = await tx.get(doc.ref);
+          if (!fresh.exists) return false;
+          const result = scrubReport(fresh.data(), uid, tombstoneId, Timestamp, nowMs);
+          if (!result.changed) return false;
+          tx.update(doc.ref, result.patch);
+          return true;
+        });
+        if (didChange) changed++;
       }
       if (!changed || snapshot.size < PAGE_SIZE) break;
     }
@@ -598,9 +600,37 @@ async function deleteExpired(query, db) {
   }
 }
 
+async function cleanupExpiredReports({ db, Timestamp, nowMs }) {
+  const cutoff = Timestamp.fromMillis(nowMs);
+  let cursor = null;
+  while (true) {
+    let query = db.collection('community_reports')
+      .where('retentionDeleteAt', '<=', cutoff)
+      .orderBy('retentionDeleteAt')
+      .limit(PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    if (snapshot.empty) return;
+
+    const batch = db.batch();
+    let deletions = 0;
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const holdUntil = typeof data.legalHoldUntil?.toMillis === 'function'
+        ? data.legalHoldUntil.toMillis() : 0;
+      if (data.legalHold === true || holdUntil > nowMs) continue;
+      batch.delete(doc.ref);
+      deletions++;
+    }
+    if (deletions) await batch.commit();
+    cursor = snapshot.docs[snapshot.docs.length - 1];
+    if (snapshot.size < PAGE_SIZE) return;
+  }
+}
+
 async function cleanupRetention({ db, Timestamp, nowMs }) {
   const cutoff = Timestamp.fromMillis(nowMs);
-  await deleteExpired(db.collection('community_reports').where('retentionDeleteAt', '<=', cutoff), db);
+  await cleanupExpiredReports({ db, Timestamp, nowMs });
   await deleteExpired(db.collection('authRevocations').where('expiresAt', '<=', cutoff), db);
   await deleteExpired(db.collection('account_deletion_requests').where('auditDeleteAt', '<=', cutoff), db);
   await deleteExpired(db.collectionGroup('revocations').where('expiresAt', '<=', cutoff), db);
