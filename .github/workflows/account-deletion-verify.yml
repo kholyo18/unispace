@@ -1,0 +1,58 @@
+name: Account deletion verification
+
+on:
+  push:
+    branches:
+      - feat/account-deletion-worker-20260918
+  pull_request:
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - '.github/workflows/account-deletion-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+      - name: Syntax check deletion modules
+        run: |
+          node --check security/account-deletion-request.js
+          node --check security/account-deletion-worker.js
+          node --check index.js
+      - name: Smoke load Functions entry point
+        run: node -e "require('./index.js')"
+      - name: Run account deletion unit tests
+        run: >-
+          node --test --test-concurrency=1
+          test/account-deletion-request.test.cjs
+          test/account-deletion-worker.test.cjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run deletion worker against Firestore emulator
+        run: >-
+          npx --yes firebase-tools
+          emulators:exec
+          --only firestore
+          --project demo-unispace-deletion
+          --config ../firebase.json
+          "node --test --test-concurrency=1 test/account-deletion-worker.integration.test.cjs"
+      - name: Verify deletion hosting resource
+        run: |
+          node -e "const fs=require('fs');const f=JSON.parse(fs.readFileSync('../firebase.json','utf8'));if(f.hosting?.public!=='deletion-site'||f.hosting?.cleanUrls!==true)process.exit(1)"
+          node -e "const fs=require('fs');const h=fs.readFileSync('../deletion-site/delete-account.html','utf8');if(!h.includes('mailto:unispace.0.1.0@gmail.com')||!h.includes('حذف حساب UniSpace'))process.exit(1)"

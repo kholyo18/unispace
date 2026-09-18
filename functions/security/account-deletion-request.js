@@ -64,6 +64,9 @@ function createAccountDeletionRequestHandler({
         deletionStatus: 'pending',
         deletionRequestedAt: FieldValue.serverTimestamp(),
         deletionDeleteBy: deleteBy,
+        accountStatus: 'deleted',
+        isDeleted: true,
+        deletedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
     });
 
@@ -71,6 +74,15 @@ function createAccountDeletionRequestHandler({
       ...request,
       data: {},
     });
+
+    // Remove the Firebase Authentication account immediately after the durable
+    // deletion request and revocation cutoff exist. The scheduled purge remains
+    // idempotent and removes Firestore/Storage data even if it runs later.
+    try {
+      await auth.deleteUser(uid);
+    } catch (error) {
+      if (error?.code !== 'auth/user-not-found') throw error;
+    }
 
     return {
       status: 'pending',
