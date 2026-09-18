@@ -1,0 +1,92 @@
+name: Verify final account deletion flow
+
+on:
+  push:
+    branches: ['work/account-deletion-final-check-20260918b']
+    paths: ['.github/workflows/account-deletion-final-check.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - name: Install locked functions dependencies
+        working-directory: functions
+        run: npm ci
+      - name: Check account deletion function syntax
+        run: node --check functions/security/account-deletion-request.js
+      - name: Run account deletion handler tests
+        working-directory: functions
+        run: node --test test/account-deletion-request.test.cjs
+
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up checksum-verified Flutter
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 600 --proto '=https' --proto-redir '=https' \
+            https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.9-stable.tar.xz \
+            -o "$RUNNER_TEMP/flutter.tar.xz"
+          echo "a9120fa4a01048bdef438ddc3a2d4b7389662ea98a95db86eeaf10382bc4efcb  $RUNNER_TEMP/flutter.tar.xz" | sha256sum --check
+          tar -xJf "$RUNNER_TEMP/flutter.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" config --no-analytics
+      - name: Resolve locked dependencies and missing generated messages
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+          if [ ! -f lib/generated/intl/messages_all.dart ]; then
+            generator_root="$RUNNER_TEMP/account-deletion-intl"
+            mkdir -p "$generator_root/lib"
+            cp pubspec.yaml "$generator_root/"
+            cp -R lib/l10n "$generator_root/lib/l10n"
+            dart pub global activate intl_utils 2.8.16
+            (cd "$generator_root" && dart pub global run intl_utils:generate)
+            cp -R "$generator_root/lib/generated/intl" lib/generated/intl
+          fi
+      - name: Analyze new deletion surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter analyze --no-pub \
+            lib/features/settings/privacy/account_deletion_screen.dart \
+            lib/features/settings/privacy/privacy_policy_screen.dart \
+            test/widgets/account_deletion_screen_test.dart
+      - name: Run deletion and policy widget tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --reporter=expanded \
+            test/widgets/account_deletion_screen_test.dart \
+            test/widgets/privacy_login_reader_test.dart \
+            test/widgets/community_guidelines_reader_test.dart \
+            test/widgets/simple_login_terms_test.dart
+      - name: Validate external deletion resource
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "طلب حذف حساب UniSpace" web/delete-account.html
+          grep -q "unispace.0.1.0@gmail.com" web/delete-account.html
+          grep -q "30 يوم" web/delete-account.html
+          grep -q "180 يوم" web/delete-account.html
+          grep -q "90 يوم" web/delete-account.html
