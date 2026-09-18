@@ -10,6 +10,7 @@ import 'ui/auth/account_recovery_screen.dart';
 import 'ui/auth/auth_security_check.dart';
 import 'features/auth/terms_of_use_screen.dart';
 import 'features/settings/privacy/privacy_policy_screen.dart';
+import 'features/legal/community_guidelines_screen.dart';
 // ============================================================================
 // UniSpace — main.dart (UPDATED: BottomBar + Notes + Campus Community + Table)
 // PART 1/3
@@ -3708,6 +3709,19 @@ class _SignInScreenState extends State<SignInScreen> {
                                         ),
                                 icon: const Icon(Icons.privacy_tip_outlined),
                                 label: const Text('قراءة سياسة الخصوصية'),
+                              ),
+                              TextButton.icon(
+                                key: const ValueKey('login-read-community'),
+                                onPressed: busy
+                                    ? null
+                                    : () => Navigator.of(context).push<void>(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                const CommunityGuidelinesScreen(),
+                                          ),
+                                        ),
+                                icon: const Icon(Icons.groups_2_outlined),
+                                label: const Text('قراءة قواعد المجتمع'),
                               ),
                               Material(
                                 color: Colors.transparent,
