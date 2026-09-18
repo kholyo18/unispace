@@ -23,7 +23,7 @@ The Firebase Android client uses the same package name. Do not change it casuall
 
 Use `android/GOOGLE_PLAY_DATA_SAFETY.md` as the working checklist for the Data Safety form. Re-check it against the exact release build before submission.
 
-Repository-side legal/account deletion resources are implemented and verified by CI. The hosted production URLs still need a final reachability check from a normal browser before Play submission.
+Repository-side legal/account deletion resources are implemented and verified by CI. On 18 September 2026, the published deletion, privacy-policy, and terms URLs were independently checked and each returned HTTP 200 with the expected public content. Re-check them once more immediately before the final Play submission.
 
 ## Photo/video access
 

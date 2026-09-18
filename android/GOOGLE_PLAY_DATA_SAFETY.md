@@ -52,7 +52,7 @@ Privacy policy:
 Terms:
 `https://fachub-c631c.web.app/terms-of-use`
 
-The repository contains the account-deletion client flow, deletion Cloud Functions, hosting page, tests, and verification workflows. Confirm the production URLs are reachable from a normal browser immediately before Play submission.
+The repository contains the account-deletion client flow, deletion Cloud Functions, hosting page, tests, and verification workflows. The three published URLs above were checked on 18 September 2026 and returned HTTP 200 with the expected public content. Re-check them immediately before final Play submission.
 
 ## Data-type mapping draft
 
@@ -116,8 +116,8 @@ Before submitting the Data Safety form:
 - [ ] Confirm no Firebase Analytics or Crashlytics SDK was added indirectly by a new feature/configuration.
 - [ ] Review the `translator` package usage and its external network behavior if message/content translation remains enabled.
 - [ ] Confirm the privacy policy describes all data categories actually present in the release.
-- [ ] Confirm the external account-deletion URL is publicly reachable without login.
-- [ ] Confirm the privacy-policy URL is publicly reachable without login and is non-editable by visitors.
+- [x] Confirm the external account-deletion URL is publicly reachable without login — verified 18 September 2026 (HTTP 200).
+- [x] Confirm the privacy-policy URL is publicly reachable without login and is non-editable by visitors — verified 18 September 2026 (HTTP 200).
 - [ ] Confirm account deletion can be initiated from inside the app.
 - [ ] Confirm the Data Safety answers remain consistent with the privacy policy.
 - [ ] Update this file whenever a new SDK, permission, account field, payment feature, analytics SDK, ads SDK, location feature, or contacts feature is added.
@@ -125,6 +125,6 @@ Before submitting the Data Safety form:
 ## Current open items
 
 1. Upload keystore creation and signed AAB generation were intentionally deferred.
-2. Legacy `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` declarations are still under separate review for older Android versions; do not remove them until their remaining runtime use is confirmed.
-3. Production availability of the hosted legal/deletion URLs should be checked from Play submission environment/browser.
+2. Broad media/storage permissions (`READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`) have been removed from the main manifest and are blocked by Play readiness CI.
+3. Hosted deletion/privacy/terms URLs were verified reachable on 18 September 2026; re-check immediately before the final Play submission.
 4. Final “shared” selections require verification of all non-Firebase SDK network behavior.
