@@ -1,0 +1,50 @@
+name: Android compile verification
+
+on:
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/android-compile-verification.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/android-compile-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate Flutter Intl files
+        run: |
+          dart pub global activate intl_utils 2.8.11
+          dart pub global run intl_utils:generate
+
+      - name: Analyze compile errors
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug
