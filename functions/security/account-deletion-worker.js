@@ -481,7 +481,9 @@ async function scrubChats({ db, bucket, FieldValue, uid, tombstoneId }) {
         if (!result.changed) return;
         const patch = { ...result.patch };
         for (const field of result.deleteFields) patch[field] = FieldValue.delete();
-        tx.set(chat.ref, patch, { merge: true });
+        // update() replaces top-level map fields such as members/unread rather
+        // than recursively merging them and accidentally retaining the deleted UID.
+        tx.update(chat.ref, patch);
       });
     }
   }
