@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:UniSpace/features/settings/privacy/privacy_policy_screen.dart';
+import 'package:UniSpace/features/settings/privacy/account_deletion_screen.dart';
+import 'package:UniSpace/features/settings/privacy/data_retention_policy_screen.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -726,12 +728,38 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
                 Navigator.of(context).push(MaterialPageRoute(builder: go));
               },
             ),
-            // _navTile(
-            //   icon: Icons.download_outlined,
-            //   title: 'تنزيل بياناتي',
-            //   subtitle: 'نسخة من منشوراتك وإعداداتك.',
-            //   onTap: _downloadMyData,
-            // ),
+            _navTile(
+              icon: Icons.download_outlined,
+              title: 'تنزيل بياناتي',
+              subtitle: _exporting
+                  ? 'جارٍ تجهيز النسخة...'
+                  : 'نسخة من البيانات التي يدعمها مسار التصدير الحالي.',
+              onTap: _exporting ? null : _downloadMyData,
+            ),
+            _navTile(
+              icon: Icons.delete_outline_rounded,
+              title: 'حذف الحساب والبيانات',
+              subtitle: 'تقديم طلب حذف مرتبط بالحساب الحالي.',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AccountDeletionScreen(),
+                  ),
+                );
+              },
+            ),
+            _navTile(
+              icon: Icons.policy_outlined,
+              title: 'سياسة الحذف والاحتفاظ',
+              subtitle: 'المدد المستهدفة وحدود الاحتفاظ.',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DataRetentionPolicyScreen(),
+                  ),
+                );
+              },
+            ),
             _navTile(
               icon: Icons.privacy_tip_outlined,
               title: 'سياسة الخصوصية',
