@@ -111,6 +111,29 @@ External deletion page:
 npx --yes firebase-tools@latest deploy --only hosting --project fachub-c631c
 ```
 
+### GitHub Actions production deployment
+
+The repository includes `.github/workflows/firebase-account-deletion-deploy.yml` as a manual-only production workflow.
+
+Before the first run, configure a GitHub repository or `production` environment secret named:
+
+`FIREBASE_GOOGLE_CREDENTIALS`
+
+Its value must be a Google Cloud service-account key JSON with only the IAM permissions required to deploy the selected Firebase resources. Treat the value like a password and never paste it into source code, PR comments, logs, or chat.
+
+Run the workflow from **Actions → Deploy account deletion production slice** and type the exact confirmation:
+
+`DEPLOY_FACHUB_C631C`
+
+Use the targets in this order:
+
+1. `indexes` — exports the live Firestore indexes, reconciles them with repository requirements, and deploys the merged index configuration without `--force`.
+2. Wait in Firebase Console until the required collection-group indexes are ready.
+3. `backend` — deploys only `requestAccountDeletion` and `processAccountDeletions`.
+4. `hosting` — deploys only the external deletion page and lists Hosting sites afterward.
+
+The workflow uses `google-github-actions/auth@v3` with the service-account JSON secret and never performs an automatic production deploy on push or merge.
+
 After deployment:
 
 - open the public `/delete-account` page over HTTPS;
