@@ -3686,42 +3686,60 @@ class _SignInScreenState extends State<SignInScreen> {
                                   MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
                                 child: const Text('فقدت تطبيق المصادقة؟'),
                               ),
-                              TextButton.icon(
-                                key: const ValueKey('login-read-terms'),
-                                onPressed: busy
-                                    ? null
-                                    : () => Navigator.of(context).push<void>(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) => const TermsOfUseScreen(),
-                                          ),
-                                        ),
-                                icon: const Icon(Icons.description_outlined),
-                                label: const Text('قراءة شروط الاستخدام'),
-                              ),
-                              TextButton.icon(
-                                key: const ValueKey('login-read-privacy'),
-                                onPressed: busy
-                                    ? null
-                                    : () => Navigator.of(context).push<void>(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) => const PrivacyPolicyScreen(),
-                                          ),
-                                        ),
-                                icon: const Icon(Icons.privacy_tip_outlined),
-                                label: const Text('قراءة سياسة الخصوصية'),
-                              ),
-                              TextButton.icon(
-                                key: const ValueKey('login-read-community'),
-                                onPressed: busy
-                                    ? null
-                                    : () => Navigator.of(context).push<void>(
-                                          MaterialPageRoute<void>(
-                                            builder: (_) =>
-                                                const CommunityGuidelinesScreen(),
-                                          ),
-                                        ),
-                                icon: const Icon(Icons.groups_2_outlined),
-                                label: const Text('قراءة قواعد المجتمع'),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      key: const ValueKey('login-read-terms'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context).push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const TermsOfUseScreen(),
+                                                ),
+                                              ),
+                                      child: const Text(
+                                        'قراءة شروط الاستخدام',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: TextButton(
+                                      key: const ValueKey('login-read-privacy'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context).push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const PrivacyPolicyScreen(),
+                                                ),
+                                              ),
+                                      child: const Text(
+                                        'قراءة سياسة الخصوصية',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: TextButton(
+                                      key: const ValueKey('login-read-community'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context).push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const CommunityGuidelinesScreen(),
+                                                ),
+                                              ),
+                                      child: const Text(
+                                        'قراءة قواعد المجتمع',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               Material(
                                 color: Colors.transparent,
