@@ -21,16 +21,13 @@ The Firebase Android client uses the same package name. Do not change it casuall
 5. Register the Google Play app-signing SHA fingerprints with Firebase/Google Sign-In after Play provides them.
 6. Complete Play Console declarations, including Data safety and account deletion/privacy links.
 
-## Open policy item: photo/video access
+## Photo/video access
 
-The current chat gallery uses `photo_manager` and requests broad device photo/video access through:
+Completed:
 
-- `READ_MEDIA_IMAGES`
-- `READ_MEDIA_VIDEO`
+- Chat media selection no longer reads the device library through `photo_manager`.
+- Gallery selection now uses `image_picker` mixed-media selection. On Android 13+ this uses the Android system Photo Picker.
+- `READ_MEDIA_IMAGES` and `READ_MEDIA_VIDEO` were removed from the main Android manifest.
+- CI rejects either broad media permission if it is reintroduced.
 
-Before Play submission, either:
-
-- migrate chat media selection to the Android system photo picker and remove broad permissions; or
-- retain broad access only if the app can legitimately satisfy Google Play's restricted Photo & Video Permissions policy and declaration.
-
-Do not remove these permissions without changing the custom chat gallery code first, because the current `PhotoManager` flow depends on them.
+Legacy `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` entries remain limited to Android 12L/API 32 and lower. They were not changed in this migration because other legacy save/download flows must be reviewed separately before removing them.
