@@ -19,7 +19,7 @@ void main() {
 
     expect(text, contains('الإصدار 1.0 — نافذ من 18 سبتمبر 2026'));
     expect(text, contains('تتوفر أدوات للإبلاغ'));
-    expect(text, contains('الحسابات المحظورة'));
+    expect(text, contains('إدارة للحسابات المحظورة'));
     expect(text, contains('unispace.0.1.0@gmail.com'));
     expect(text, isNot(contains('نسخة للمراجعة')));
     expect(text, isNot(contains('غير نافذة')));
