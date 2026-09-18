@@ -100,10 +100,12 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
           title: const Text('حذف الحساب والبيانات'),
         ),
         body: SafeArea(
-          child: ListView(
+          child: SingleChildScrollView(
             key: const ValueKey('account-delete-scroll'),
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-            children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               Text(
                 'طلب حذف حساب UniSpace',
                 key: const ValueKey('account-delete-title'),
@@ -184,7 +186,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
