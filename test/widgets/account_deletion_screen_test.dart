@@ -15,6 +15,11 @@ Future<void> showDeletion(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> revealDeletionControls(WidgetTester tester) async {
+  await tester.ensureVisible(deletionControl('understood'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('deletion request starts disabled until explicit understanding',
       (tester) async {
@@ -25,6 +30,7 @@ void main() {
     expect(find.textContaining('180 يومًا'), findsWidgets);
     expect(find.textContaining('90 يومًا'), findsWidgets);
 
+    await revealDeletionControls(tester);
     final submit =
         tester.widget<FilledButton>(deletionControl('submit'));
     expect(submit.onPressed, isNull);
@@ -45,6 +51,7 @@ void main() {
   testWidgets('unchecking understanding disables deletion request again',
       (tester) async {
     await showDeletion(tester);
+    await revealDeletionControls(tester);
 
     await tester.tap(deletionControl('understood'));
     await tester.pumpAndSettle();
