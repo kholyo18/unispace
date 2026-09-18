@@ -119,3 +119,64 @@ test('deduplicates indexes and override modes', () => {
   assert.equal(merged.fieldOverrides.length, 1);
   assert.equal(merged.fieldOverrides[0].indexes.length, 1);
 });
+
+
+test('keeps live Firebase index when only exported density differs', () => {
+  const live = {
+    collectionGroup: 'community_posts',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'authorId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+      { fieldPath: '__name__', order: 'DESCENDING' },
+    ],
+    density: 'SPARSE_ALL',
+  };
+
+  const required = {
+    collectionGroup: 'community_posts',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'authorId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+      { fieldPath: '__name__', order: 'DESCENDING' },
+    ],
+  };
+
+  const merged = reconcile(
+    { indexes: [live], fieldOverrides: [] },
+    { indexes: [required], fieldOverrides: [] },
+  );
+
+  assert.equal(merged.indexes.length, 1);
+  assert.deepEqual(merged.indexes[0], live);
+});
+
+test('does not collapse explicitly different density requirements', () => {
+  const live = {
+    collectionGroup: 'community_posts',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'authorId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+    density: 'SPARSE_ALL',
+  };
+
+  const required = {
+    collectionGroup: 'community_posts',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'authorId', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'DESCENDING' },
+    ],
+    density: 'DENSE',
+  };
+
+  const merged = reconcile(
+    { indexes: [live], fieldOverrides: [] },
+    { indexes: [required], fieldOverrides: [] },
+  );
+
+  assert.equal(merged.indexes.length, 2);
+});
