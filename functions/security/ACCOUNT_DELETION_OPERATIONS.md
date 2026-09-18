@@ -64,6 +64,16 @@ The external page starts the request through the support email. When a user cann
 
 The client application must never receive an admin function that accepts an arbitrary UID for deletion.
 
+## Firestore collection-group index prerequisite
+
+The worker uses filtered collection-group queries. Firestore does not maintain filtered collection-group indexes by default, so production must have these three single-field collection-group indexes before enabling the scheduled worker:
+
+- `notifications.actorId`: ascending, collection-group scope.
+- `notifications.actorIds`: array-contains, collection-group scope.
+- `revocations.expiresAt`: ascending, collection-group scope.
+
+Export/reconcile the project's existing production index configuration before adding these entries. Do not replace an existing production index file with a deletion-only file, because unrelated application indexes may already exist outside this repository snapshot.
+
 ## Deployment and verification
 
 Backend:
