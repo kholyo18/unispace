@@ -7,6 +7,7 @@ on:
       - 'android/app/src/main/AndroidManifest.xml'
       - 'android/key.properties.example'
       - 'android/PLAY_RELEASE_READINESS.md'
+      - 'android/GOOGLE_PLAY_DATA_SAFETY.md'
       - 'pubspec.yaml'
       - '.gitignore'
       - '.github/workflows/play-release-readiness.yml'
@@ -64,6 +65,10 @@ jobs:
           }
           if (!fs.existsSync('android/key.properties.example')) {
             throw new Error('signing configuration example is missing');
+          }
+
+          if (!fs.existsSync('android/GOOGLE_PLAY_DATA_SAFETY.md')) {
+            throw new Error('Google Play Data Safety worksheet is missing');
           }
 
           const permissions = [...manifest.matchAll(/<uses-permission\s+android:name="([^"]+)"/g)]
