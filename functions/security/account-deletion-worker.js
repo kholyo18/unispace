@@ -434,7 +434,7 @@ async function scrubReports({ db, Timestamp, uid, tombstoneId, nowMs }) {
   }
 }
 
-async function scrubChatMessages({ db, bucket, chatRef, uid, tombstoneId }) {
+async function scrubChatMessages({ db, bucket, FieldValue, chatRef, uid, tombstoneId }) {
   let cursor = null;
   while (true) {
     let query = chatRef.collection('messages').orderBy(FieldPath.documentId()).limit(PAGE_SIZE);
@@ -449,7 +449,7 @@ async function scrubChatMessages({ db, bucket, chatRef, uid, tombstoneId }) {
       const result = scrubChatMessage(doc.data(), uid, tombstoneId);
       if (!result.changed) continue;
       const update = { ...result.patch };
-      for (const field of result.deleteFields) update[field] = FieldValueSentinel.delete;
+      for (const field of result.deleteFields) update[field] = FieldValue.delete();
       batch.update(doc.ref, update, { lastUpdateTime: doc.updateTime });
       for (const url of result.storageUrls) {
         const objectPath = storageObjectFromUrl(url, bucket.name);
@@ -465,17 +465,12 @@ async function scrubChatMessages({ db, bucket, chatRef, uid, tombstoneId }) {
   }
 }
 
-const FieldValueSentinel = {
-  delete: null,
-};
-
 async function scrubChats({ db, bucket, FieldValue, uid, tombstoneId }) {
-  FieldValueSentinel.delete = FieldValue.delete();
   while (true) {
     const snapshot = await db.collection('chats').where('memberIds', 'array-contains', uid).limit(25).get();
     if (snapshot.empty) return;
     for (const chat of snapshot.docs) {
-      await scrubChatMessages({ db, bucket, chatRef: chat.ref, uid, tombstoneId });
+      await scrubChatMessages({ db, bucket, FieldValue, chatRef: chat.ref, uid, tombstoneId });
       await deleteExactStorageObject(bucket, 'chats/' + chat.id + '/wallpaper/' + uid + '.jpg');
       await db.runTransaction(async tx => {
         const fresh = await tx.get(chat.ref);
