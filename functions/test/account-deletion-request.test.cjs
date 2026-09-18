@@ -48,11 +48,15 @@ function fakeDb() {
 function backend({ uid='alice', tokenUid='alice', authTime=100, now=1_800_000_000_000 }={}) {
   const db = fakeDb();
   const revoked = [];
+  const deletedUsers = [];
   const auth = {
     async verifyIdToken(token, checkRevoked) {
       assert.equal(token, 'test-token');
       assert.equal(checkRevoked, true);
       return { uid: tokenUid, auth_time: authTime };
+    },
+    async deleteUser(deletedUid) {
+      deletedUsers.push(deletedUid);
     },
   };
   const FieldValue = {
@@ -78,7 +82,7 @@ function backend({ uid='alice', tokenUid='alice', authTime=100, now=1_800_000_00
     data,
     rawRequest: { headers: { authorization: 'Bearer test-token' } },
   });
-  return { handler, request, db, revoked, now };
+  return { handler, request, db, revoked, deletedUsers, now };
 }
 
 test('requires authenticated user and explicit confirmation only', async () => {
@@ -110,7 +114,7 @@ test('rejects a credential that does not belong to the authenticated user', asyn
 });
 
 test('records one pending deletion request and revokes only that signed-in account', async () => {
-  const { handler, request, db, revoked, now } = backend();
+  const { handler, request, db, revoked, deletedUsers, now } = backend();
   const result = await handler(request());
 
   assert.deepEqual(result, {
@@ -130,15 +134,18 @@ test('records one pending deletion request and revokes only that signed-in accou
 
   const userDoc = db.docs.get('users/alice');
   assert.equal(userDoc.deletionStatus, 'pending');
+  assert.equal(userDoc.accountStatus, 'deleted');
+  assert.equal(userDoc.isDeleted, true);
   assert.equal(userDoc.deletionDeleteBy.millis, requestDoc.deleteBy.millis);
 
   assert.equal(revoked.length, 1);
   assert.equal(revoked[0].auth.uid, 'alice');
   assert.deepEqual(revoked[0].data, {});
+  assert.deepEqual(deletedUsers, ['alice']);
 });
 
 test('a repeated pending request is idempotent but revokes sessions again', async () => {
-  const { handler, request, db, revoked } = backend();
+  const { handler, request, db, revoked, deletedUsers } = backend();
   await handler(request());
   const first = db.docs.get('account_deletion_requests/alice');
   const firstWriteCount = db.writes.length;
@@ -150,4 +157,5 @@ test('a repeated pending request is idempotent but revokes sessions again', asyn
   assert.equal(db.writes.length, firstWriteCount);
   assert.strictEqual(db.docs.get('account_deletion_requests/alice'), first);
   assert.equal(revoked.length, 2);
+  assert.deepEqual(deletedUsers, ['alice', 'alice']);
 });
