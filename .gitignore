@@ -51,3 +51,9 @@ firestore.indexes.current.json
 
 # Firebase CLI local cache
 .firebase/
+
+
+# Android release signing secrets
+android/key.properties
+*.jks
+*.keystore
