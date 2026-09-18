@@ -118,7 +118,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                 style: theme.textTheme.bodyLarge?.copyWith(height: 1.6),
               ),
               const SizedBox(height: 22),
-              _InfoCard(
+              const _InfoCard(
                 title: 'ماذا يحدث بعد الطلب؟',
                 children: const [
                   'يُسجّل الطلب باسم الحساب الذي أنت مسجل الدخول إليه فقط.',
@@ -128,7 +128,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              _InfoCard(
+              const _InfoCard(
                 title: 'الاحتفاظ المحدود',
                 children: const [
                   'طلبات الدعم: حتى 180 يومًا بعد إغلاق الطلب عند الحاجة للمتابعة.',
@@ -138,7 +138,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              _InfoCard(
+              const _InfoCard(
                 title: 'قبل أن تطلب الحذف',
                 children: const [
                   'إذا أردت نسخة من بياناتك، اطلبها قبل حذف الحساب.',
