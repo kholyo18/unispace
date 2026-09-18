@@ -5,7 +5,8 @@ on:
     branches: ['work/community-guidelines-20260918']
     paths:
       - '.github/workflows/community-guidelines-check.yml'
-      - 'tools/community-guidelines-main.patch'
+      - 'lib/features/legal/community_guidelines_screen.dart'
+      - 'test/widgets/community_guidelines_reader_test.dart'
 
 permissions:
   contents: read
@@ -22,18 +23,125 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Apply only the community login patch
-        shell: bash
+      - name: Apply exact compact policy-links change
+        shell: python
         run: |
-          set -euo pipefail
-          test "$(git hash-object lib/main.dart)" = f6d7d32ec0a943eb03e9bc9083a552a3ce8e1407
-          git apply --check tools/community-guidelines-main.patch
-          git apply tools/community-guidelines-main.patch
-          git diff --check
-          test "$(git diff --name-only)" = lib/main.dart
-          mkdir -p verification-output
-          git hash-object lib/main.dart > verification-output/patched-main-blob.txt
-          git diff -- lib/main.dart > verification-output/main.patch
+          from pathlib import Path
+          import subprocess
+
+          path = Path('lib/main.dart')
+          data = path.read_text(encoding='utf-8')
+          current = subprocess.check_output(['git', 'hash-object', str(path)], text=True).strip()
+          assert current == 'f6d7d32ec0a943eb03e9bc9083a552a3ce8e1407', current
+
+          import_needle = (
+              "import 'features/auth/terms_of_use_screen.dart';\n"
+              "import 'features/settings/privacy/privacy_policy_screen.dart';\n"
+          )
+          assert data.count(import_needle) == 1
+          data = data.replace(
+              import_needle,
+              import_needle + "import 'features/legal/community_guidelines_screen.dart';\n",
+          )
+
+          old = """                              TextButton.icon(
+                                key: const ValueKey('login-read-terms'),
+                                onPressed: busy
+                                    ? null
+                                    : () => Navigator.of(context).push<void>(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => const TermsOfUseScreen(),
+                                          ),
+                                        ),
+                                icon: const Icon(Icons.description_outlined),
+                                label: const Text('قراءة شروط الاستخدام'),
+                              ),
+                              TextButton.icon(
+                                key: const ValueKey('login-read-privacy'),
+                                onPressed: busy
+                                    ? null
+                                    : () => Navigator.of(context).push<void>(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => const PrivacyPolicyScreen(),
+                                          ),
+                                        ),
+                                icon: const Icon(Icons.privacy_tip_outlined),
+                                label: const Text('قراءة سياسة الخصوصية'),
+                              ),
+"""
+          new = """                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      key: const ValueKey('login-read-terms'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context).push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const TermsOfUseScreen(),
+                                                ),
+                                              ),
+                                      child: const Text(
+                                        'قراءة شروط الاستخدام',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: TextButton(
+                                      key: const ValueKey('login-read-privacy'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context).push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const PrivacyPolicyScreen(),
+                                                ),
+                                              ),
+                                      child: const Text(
+                                        'قراءة سياسة الخصوصية',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: TextButton(
+                                      key: const ValueKey('login-read-community'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context).push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const CommunityGuidelinesScreen(),
+                                                ),
+                                              ),
+                                      child: const Text(
+                                        'قراءة قواعد المجتمع',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+"""
+          assert data.count(old) == 1
+          data = data.replace(old, new)
+          path.write_text(data, encoding='utf-8')
+
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          changed = subprocess.check_output(['git', 'diff', '--name-only'], text=True).strip()
+          assert changed == 'lib/main.dart', changed
+
+          Path('verification-output').mkdir(exist_ok=True)
+          Path('verification-output/patched-main-blob.txt').write_text(
+              subprocess.check_output(['git', 'hash-object', str(path)], text=True),
+              encoding='utf-8',
+          )
+          Path('verification-output/main.patch').write_text(
+              subprocess.check_output(['git', 'diff', '--', 'lib/main.dart'], text=True),
+              encoding='utf-8',
+          )
 
       - name: Store patched main as a Git blob without updating any branch
         env:
