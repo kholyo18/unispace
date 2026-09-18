@@ -18,14 +18,6 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
   Future<void> _requestDeletion() async {
     if (_submitting || _requested) return;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
-      );
-      return;
-    }
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -48,6 +40,14 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
