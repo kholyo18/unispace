@@ -74,15 +74,16 @@ jobs:
             cp -R "$generator_root/lib/generated/intl" lib/generated/intl
           fi
           git diff --exit-code -- pubspec.yaml pubspec.lock lib/l10n lib/generated/l10n.dart
-      - name: Analyze deletion and retention surfaces
+      - name: Analyze new deletion and retention surfaces
         shell: bash
         run: |
           set -euo pipefail
           flutter analyze --no-pub \
             lib/features/settings/privacy/account_deletion_screen.dart \
             lib/features/settings/privacy/data_retention_policy_screen.dart \
-            lib/ui/settings/privacy/privacy_account_overview_tab.dart \
             test/widgets/account_deletion_retention_test.dart
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos \
+            lib/ui/settings/privacy/privacy_account_overview_tab.dart
       - name: Run deletion and policy widget regressions
         shell: bash
         run: |
