@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:UniSpace/features/settings/privacy/privacy_policy_screen.dart';
+import 'package:UniSpace/features/settings/privacy/account_deletion_screen.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -732,6 +733,18 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             //   subtitle: 'نسخة من منشوراتك وإعداداتك.',
             //   onTap: _downloadMyData,
             // ),
+            _navTile(
+              icon: Icons.delete_forever_outlined,
+              title: 'حذف الحساب والبيانات',
+              subtitle: 'طلب حذف حسابك والبيانات المرتبطة به.',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AccountDeletionScreen(),
+                  ),
+                );
+              },
+            ),
             _navTile(
               icon: Icons.privacy_tip_outlined,
               title: 'سياسة الخصوصية',
