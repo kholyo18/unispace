@@ -31,7 +31,6 @@ import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
-import 'package:photo_manager/photo_manager.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:emojis/emoji.dart' as ue;
 import 'package:flutter/gestures.dart';
@@ -4196,6 +4195,63 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       if (mounted) setState(() => _sending = false);
     }
   }
+  bool _isVideoMediaFile(File file) {
+    final path = file.path.toLowerCase();
+    return path.endsWith('.mp4') ||
+        path.endsWith('.mov') ||
+        path.endsWith('.m4v') ||
+        path.endsWith('.3gp') ||
+        path.endsWith('.webm') ||
+        path.endsWith('.mkv');
+  }
+
+  Future<void> _sendPickedMediaFiles(
+    List<File> files, {
+    String caption = '',
+  }) async {
+    for (final file in files) {
+      if (_isVideoMediaFile(file)) {
+        setState(() => _sending = true);
+        try {
+          final id = DateTime.now().millisecondsSinceEpoch.toString();
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('chats/${widget.chatId}/videos/$id.mp4');
+          await ref.putFile(
+            file,
+            SettableMetadata(contentType: 'video/mp4'),
+          );
+          final url = await ref.getDownloadURL();
+          final size = await file.length();
+          await _msgs.add({
+            'authorId': _me.id,
+            'type': 'video',
+            'videoUrl': url,
+            'size': size,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          await FirebaseFirestore.instance
+              .collection('chats')
+              .doc(widget.chatId)
+              .set({
+            'lastMessage': '🎬 فيديو',
+            'lastMessageAt': FieldValue.serverTimestamp(),
+            'lastSenderId': _me.id,
+            'unread.${widget.peerId}': FieldValue.increment(1),
+          }, SetOptions(merge: true));
+          _touchMyPresence();
+        } finally {
+          if (mounted) setState(() => _sending = false);
+        }
+      } else {
+        await _uploadAndSendImage(XFile(file.path));
+      }
+    }
+
+    final text = caption.trim();
+    if (text.isNotEmpty) await _send(text);
+  }
+
   Future<void> _openWhatsAppGallery() async {
     if (_me.id.isEmpty || _sending) return;
 
@@ -4206,70 +4262,39 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       return;
     }
 
-    await Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.black54,
-        pageBuilder: (ctx, __, ___) => _WhatsAppGalleryPage(
-          onOpenCamera: () async {
-            Navigator.of(ctx).pop();
-            final shot = await ImagePicker().pickImage(
-              source: ImageSource.camera,
-              imageQuality: 88,
-            );
-            if (shot == null || !mounted) return;
-            await _uploadAndSendImage(shot);
-          },
-          onSend: (files, caption) async {
-            for (final file in files) {
-              final path = file.path.toLowerCase();
-              final isVideo = path.endsWith('.mp4') ||
-                  path.endsWith('.mov') ||
-                  path.endsWith('.m4v');
-              if (isVideo) {
-                setState(() => _sending = true);
-                try {
-                  final id = DateTime.now().millisecondsSinceEpoch.toString();
-                  final ref = FirebaseStorage.instance
-                      .ref()
-                      .child('chats/${widget.chatId}/videos/$id.mp4');
-                  await ref.putFile(
-                    file,
-                    SettableMetadata(contentType: 'video/mp4'),
-                  );
-                  final url = await ref.getDownloadURL();
-                  final size = await file.length();
-                  await _msgs.add({
-                    'authorId': _me.id,
-                    'type': 'video',
-                    'videoUrl': url,
-                    'size': size,
-                    'createdAt': FieldValue.serverTimestamp(),
-                  });
-                  await FirebaseFirestore.instance
-                      .collection('chats')
-                      .doc(widget.chatId)
-                      .set({
-                    'lastMessage': '🎬 فيديو',
-                    'lastMessageAt': FieldValue.serverTimestamp(),
-                    'lastSenderId': _me.id,
-                    'unread.${widget.peerId}': FieldValue.increment(1),
-                  }, SetOptions(merge: true));
-                  _touchMyPresence();
-                } finally {
-                  if (mounted) setState(() => _sending = false);
-                }
-              } else {
-                await _uploadAndSendImage(XFile(file.path));
-              }
-            }
-            final t = caption.trim();
-            if (t.isNotEmpty) await _send(t);
-          },
-        ),
-      ),
-    );
+    try {
+      final picked = await ImagePicker().pickMultipleMedia();
+      if (picked.isEmpty || !mounted) return;
+
+      final files = picked.map((item) => File(item.path)).toList(growable: false);
+      final allImages = files.every((file) => !_isVideoMediaFile(file));
+
+      if (allImages) {
+        final result = await Navigator.of(context).push<_EditorResult>(
+          MaterialPageRoute(
+            builder: (_) => _WhatsAppImageEditorPage(
+              files: files,
+              initialIndex: 0,
+              caption: '',
+            ),
+          ),
+        );
+        if (result == null || !result.send) return;
+        await _sendPickedMediaFiles(result.files, caption: result.caption);
+        return;
+      }
+
+      await _sendPickedMediaFiles(files);
+    } catch (e, st) {
+      debugPrint('system photo picker failed: $e');
+      debugPrintStack(stackTrace: st);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر فتح أداة اختيار الصور والفيديو')),
+      );
+    }
   }
+
   Future<void> _insertLink() async {
     if (_me.id.isEmpty || _sending) return;
 
@@ -4595,21 +4620,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
             onSend: _send,
             onChanged: _onComposerChanged,
 
-            onSendMedia: (files, caption) async {
-              for (final file in files) {
-                final path = file.path.toLowerCase();
-                final isVideo = path.endsWith('.mp4') ||
-                    path.endsWith('.mov') ||
-                    path.endsWith('.m4v');
-                if (isVideo) {
-                  // نفس منطق الفيديو عندك في _openWhatsAppGallery
-                } else {
-                  await _uploadAndSendImage(XFile(file.path));
-                }
-              }
-              final t = caption.trim();
-              if (t.isNotEmpty) await _send(t);
-            },
+            onSendMedia: (files, caption) =>
+                _sendPickedMediaFiles(files, caption: caption),
             onPickImage: () => unawaited(_openWhatsAppGallery()),
             onPickVideo: () => unawaited(_pickVideo()),
             onPickFile: () => unawaited(_pickFile()),
@@ -8063,595 +8075,210 @@ class _WhatsAppAttachTray extends StatefulWidget {
 }
 
 class _WhatsAppAttachTrayState extends State<_WhatsAppAttachTray> {
-  final _captionCtrl = TextEditingController();
-  final List<AssetEntity> _assets = [];
-  final List<AssetEntity> _selected = [];
-  final Map<String, File> _edited = {};
+  bool _pickingMedia = false;
 
-  AssetPathEntity? _album;
-  bool _loading = true;
-  bool _loadingMore = false;
-  bool _hasMore = true;
-  bool _sending = false;
-  double _extent = 0.46;
-
-  /// 0 = ورقة صغيرة (الأزرار) ، 1 = شاشة كاملة (المعرض)
-  double get _t {
-    const minE = 0.46;
-    const maxE = 0.90;
-    final raw = ((_extent - minE) / (maxE - minE)).clamp(0.0, 1.0);
-    return Curves.easeInOutCubic.transform(raw);
+  bool _isVideo(File file) {
+    final path = file.path.toLowerCase();
+    return path.endsWith('.mp4') ||
+        path.endsWith('.mov') ||
+        path.endsWith('.m4v') ||
+        path.endsWith('.3gp') ||
+        path.endsWith('.webm') ||
+        path.endsWith('.mkv');
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _boot();
-    widget.scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    widget.scrollController.removeListener(_onScroll);
-    _captionCtrl.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    final c = widget.scrollController;
-    if (!c.hasClients || !_hasMore || _loadingMore) return;
-    if (c.position.pixels > c.position.maxScrollExtent - 500) {
-      _loadMore();
-    }
-  }
-
-  Future<void> _boot() async {
-    try {
-      final perm = await PhotoManager.requestPermissionExtend();
-      if (!perm.hasAccess) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
-
-      final filter = FilterOptionGroup(
-        imageOption: const FilterOption(
-          sizeConstraint: SizeConstraint(ignoreSize: true),
-        ),
-        videoOption: const FilterOption(
-          sizeConstraint: SizeConstraint(ignoreSize: true),
-        ),
-      );
-
-      final paths = await PhotoManager.getAssetPathList(
-        type: RequestType.common,
-        onlyAll: true,
-        filterOption: filter,
-      );
-      if (paths.isEmpty) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
-      _album = paths.first;
-      await _loadMore(reset: true);
-    } catch (e) {
-      debugPrint('attach recents failed: $e');
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadMore({bool reset = false}) async {
-    final album = _album;
-    if (album == null) return;
-    if (_loadingMore) return;
-    _loadingMore = true;
+  Future<void> _pickGallery() async {
+    if (_pickingMedia) return;
+    setState(() => _pickingMedia = true);
 
     try {
-      if (reset) _assets.clear();
-      final start = _assets.length;
-      final next = await album.getAssetListRange(
-        start: start,
-        end: start + 80,
-      );
+      final picked = await ImagePicker().pickMultipleMedia();
+      if (picked.isEmpty || !mounted) return;
+
+      final files = picked.map((item) => File(item.path)).toList(growable: false);
+      final allImages = files.every((file) => !_isVideo(file));
+      var outputFiles = files;
+      var caption = '';
+
+      if (allImages) {
+        final result = await Navigator.of(context).push<_EditorResult>(
+          MaterialPageRoute(
+            builder: (_) => _WhatsAppImageEditorPage(
+              files: files,
+              initialIndex: 0,
+              caption: '',
+            ),
+          ),
+        );
+        if (result == null || !result.send) return;
+        outputFiles = result.files;
+        caption = result.caption;
+      }
+
+      await widget.onSend(outputFiles, caption);
+    } catch (e, st) {
+      debugPrint('attachment photo picker failed: $e');
+      debugPrintStack(stackTrace: st);
       if (!mounted) return;
-      setState(() {
-        _assets.addAll(next);
-        _hasMore = next.length >= 80;
-        _loading = false;
-        _loadingMore = false;
-      });
-    } catch (e) {
-      debugPrint('load more failed: $e');
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _loadingMore = false;
-        });
-      }
-    }
-  }
-
-  void _toggle(AssetEntity asset) {
-    setState(() {
-      final i = _selected.indexWhere((e) => e.id == asset.id);
-      if (i >= 0) {
-        _selected.removeAt(i);
-      } else {
-        _selected.add(asset);
-      }
-    });
-  }
-
-  int _selIndex(AssetEntity a) =>
-      _selected.indexWhere((e) => e.id == a.id);
-
-  Future<void> _openEditor() async {
-    if (_selected.isEmpty) return;
-
-    final files = <File>[];
-    for (final a in _selected) {
-      final edited = _edited[a.id];
-      if (edited != null) {
-        files.add(edited);
-        continue;
-      }
-      final f = await a.file;
-      if (f != null) files.add(f);
-    }
-    if (files.isEmpty || !mounted) return;
-
-    final result = await Navigator.of(context).push<_EditorResult>(
-      MaterialPageRoute(
-        builder: (_) => _WhatsAppImageEditorPage(
-          files: files,
-          initialIndex: files.length - 1,
-          caption: _captionCtrl.text,
-        ),
-      ),
-    );
-    if (result == null) return;
-
-    _captionCtrl.text = result.caption;
-    for (var i = 0; i < _selected.length && i < result.files.length; i++) {
-      _edited[_selected[i].id] = result.files[i];
-    }
-    setState(() {});
-
-    if (result.send) await _send();
-  }
-
-  Future<void> _send() async {
-    if (_selected.isEmpty || _sending) return;
-    setState(() => _sending = true);
-    try {
-      final files = <File>[];
-      for (final a in _selected) {
-        files.add(_edited[a.id] ?? (await a.file)!);
-      }
-      await widget.onSend(files, _captionCtrl.text);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر فتح أداة اختيار الصور والفيديو')),
+      );
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) setState(() => _pickingMedia = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
-    final t = _t;
-    final inv = 1.0 - t;
-
-    final sheet = Color.lerp(
-      isDark ? const Color(0xFF1C1C1E) : Colors.white,
-      isDark ? const Color(0xFF111111) : Colors.white,
-      t,
-    )!;
+    final sheet = isDark ? const Color(0xFF1C1C1E) : Colors.white;
     final pill = isDark ? const Color(0xFF2C2C2E) : Colors.white;
     final label = isDark ? Colors.white70 : const Color(0xFF3C3C43);
     final handle = isDark ? Colors.white24 : const Color(0xFFC7C7CC);
 
     final actions = <_AttachAction>[
-      _AttachAction('Gallery', Icons.photo_outlined, const Color(0xFF3478F6), () {}),
-      _AttachAction('Location', Icons.location_on_rounded, const Color(0xFF34C759), widget.onLocation),
-      _AttachAction('Document', Icons.insert_drive_file_rounded, const Color(0xFFAF52DE), widget.onDocument),
-      _AttachAction('Poll', Icons.poll_rounded, const Color(0xFFFF9F0A), widget.onPoll),
-
+      _AttachAction(
+        'Gallery',
+        Icons.photo_outlined,
+        const Color(0xFF3478F6),
+        () => unawaited(_pickGallery()),
+      ),
+      _AttachAction(
+        'Camera',
+        Icons.photo_camera_rounded,
+        const Color(0xFF34C759),
+        widget.onCamera,
+      ),
+      _AttachAction(
+        'Document',
+        Icons.insert_drive_file_rounded,
+        const Color(0xFFAF52DE),
+        widget.onDocument,
+      ),
+      _AttachAction(
+        'Location',
+        Icons.location_on_rounded,
+        const Color(0xFF34C759),
+        widget.onLocation,
+      ),
+      _AttachAction(
+        'Contact',
+        Icons.person_outline_rounded,
+        const Color(0xFF0A84FF),
+        widget.onContact,
+      ),
+      _AttachAction(
+        'Poll',
+        Icons.poll_rounded,
+        const Color(0xFFFF9F0A),
+        widget.onPoll,
+      ),
+      _AttachAction(
+        'Event',
+        Icons.event_outlined,
+        const Color(0xFFFF375F),
+        widget.onEvent,
+      ),
     ];
 
-    final radius = 22.0 * inv;
-
-    return NotificationListener<DraggableScrollableNotification>(
-      onNotification: (n) {
-        if ((_extent - n.extent).abs() > 0.002) {
-          setState(() => _extent = n.extent);
-        }
-        return false;
-      },
-      child: Material(
-        color: sheet,
-        elevation: 12 * inv,
-        shadowColor: Colors.black26,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            Transform.scale(
-              scale: 1.0 + (0.15 * t),
-              child: Container(
-                width: 36 + (8 * t),
-                height: 4,
-                decoration: BoxDecoration(
-                  color: handle,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ),
-
-            // رأس Recents يظهر تدريجيًا
-            ClipRect(
-              child: Align(
-                alignment: Alignment.topCenter,
-                heightFactor: t,
-                child: Opacity(
-                  opacity: t,
-                  child: Transform.translate(
-                    offset: Offset(0, 12 * inv),
-                    child: SizedBox(
-                      height: 48,
-                      child: Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                          const Expanded(
-                            child: Center(
-                              child: Text(
-                                'Recents',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: const Color(0xFF111111)),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text(
-                                'HD',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+    return Material(
+      color: sheet,
+      elevation: 12,
+      shadowColor: Colors.black26,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          ListView(
+            controller: widget.scrollController,
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: handle,
+                    borderRadius: BorderRadius.circular(4),
                   ),
                 ),
               ),
-            ),
-
-            // شبكة الأزرار تختفي وتنكمش سينمائيًا
-            ClipRect(
-              child: Align(
-                alignment: Alignment.topCenter,
-                heightFactor: inv,
-                child: Opacity(
-                  opacity: (1.0 - t * 1.35).clamp(0.0, 1.0),
-                  child: Transform.translate(
-                    offset: Offset(0, -18 * t),
-                    child: Transform.scale(
-                      scale: 1.0 - (0.06 * t),
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                        child: GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: actions.length,
-                          gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 8,
-                            mainAxisExtent: 84,
-                          ),
-                          itemBuilder: (_, i) {
-                            final a = actions[i];
-                            return GestureDetector(
-                              onTap: a.label == 'Gallery' ? null : a.onTap,
-                              behavior: HitTestBehavior.opaque,
-                              child: Column(
-                                children: [
-                                  Container(
-                                    width: 64,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      color: pill,
-                                      borderRadius: BorderRadius.circular(22),
-                                      border: Border.all(
-                                        color: isDark
-                                            ? Colors.white.withValues(alpha: 0.08)
-                                            : const Color(0xFFE5E5EA),
-                                      ),
-                                    ),
-                                    child: Icon(a.icon, color: a.color, size: 24),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    a.label,
-                                    style: TextStyle(
-                                      color: label,
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
+              const SizedBox(height: 18),
+              Text(
+                'إرفاق',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF111111),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
-
-            // شبكة كل الصور — تكبر مع السحب
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : GridView.builder(
-                controller: widget.scrollController,
-                padding: EdgeInsets.fromLTRB(2 * t, 0, 2 * t, 8),
-                itemCount: _assets.length + 1,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              const SizedBox(height: 8),
+              Text(
+                'اختيار الصور والفيديو يتم عبر أداة النظام لحماية خصوصيتك.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: label,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: actions.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 4,
-                  mainAxisSpacing: 1.5 + (4.5 * inv),
-                  crossAxisSpacing: 1.5 + (4.5 * inv),
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 8,
+                  mainAxisExtent: 86,
                 ),
                 itemBuilder: (_, i) {
-                  if (i == 0) {
-                    return GestureDetector(
-                      onTap: widget.onCamera,
-                      child: ColoredBox(
-                        color: isDark
-                            ? const Color(0xFF2C2C2E)
-                            : const Color(0xFFE5E5EA),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.photo_camera_rounded,
-                              color: isDark ? Colors.white : const Color(0xFF111111),
-                              size: 28,
+                  final action = actions[i];
+                  return GestureDetector(
+                    onTap: _pickingMedia && action.label == 'Gallery'
+                        ? null
+                        : action.onTap,
+                    behavior: HitTestBehavior.opaque,
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: pill,
+                            borderRadius: BorderRadius.circular(23),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : const Color(0xFFE5E5EA),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Camera',
-                              style: TextStyle(
-                                color: label,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                          ),
+                          child: Icon(action.icon, color: action.color, size: 24),
                         ),
-                      ),
-                    );
-                  }
-                  final asset = _assets[i - 1];
-                  return _AttachPhotoCell(
-                    asset: asset,
-                    selectedIndex: _selIndex(asset),
-                    onTap: () => _toggle(asset),
+                        const SizedBox(height: 8),
+                        Text(
+                          action.label,
+                          style: TextStyle(
+                            color: label,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
-            ),
-
-            // شريط التسمية يظهر مع التمدد أو عند وجود اختيار
-            ClipRect(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                heightFactor: (_selected.isNotEmpty ? 1.0 : t).clamp(0.0, 1.0),
-                child: Opacity(
-                  opacity: (_selected.isNotEmpty ? 1.0 : t).clamp(0.0, 1.0),
-                  child: _AttachCaptionBar(
-                    selected: _selected,
-                    captionCtrl: _captionCtrl,
-                    sending: _sending,
-                    onEdit: _openEditor,
-                    onSend: _send,
-                  ),
-                ),
+            ],
+          ),
+          if (_pickingMedia)
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: Center(child: CircularProgressIndicator()),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AttachPhotoCell extends StatelessWidget {
-  const _AttachPhotoCell({
-    required this.asset,
-    required this.selectedIndex,
-    required this.onTap,
-  });
-
-  final AssetEntity asset;
-  final int selectedIndex;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = selectedIndex >= 0;
-    return GestureDetector(
-      onTap: onTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          FutureBuilder<Uint8List?>(
-            future: asset.thumbnailDataWithSize(const ThumbnailSize(300, 300)),
-            builder: (_, snap) {
-              if (!snap.hasData || snap.data == null) {
-                return const ColoredBox(color: Color(0xFFE5E5EA));
-              }
-              return Image.memory(
-                snap.data!,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-              );
-            },
-          ),
-          if (asset.type == AssetType.video)
-            const Positioned(
-              left: 6,
-              bottom: 6,
-              child: Icon(Icons.videocam, color: Colors.white, size: 16),
-            ),
-          Positioned(
-            top: 6,
-            right: 6,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFF25D366)
-                    : Colors.black.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.6),
-              ),
-              child: selected
-                  ? Text(
-                '${selectedIndex + 1}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              )
-                  : null,
-            ),
-          ),
         ],
-      ),
-    );
-  }
-}
-
-class _AttachCaptionBar extends StatelessWidget {
-  const _AttachCaptionBar({
-    required this.selected,
-    required this.captionCtrl,
-    required this.sending,
-    required this.onEdit,
-    required this.onSend,
-  });
-
-  final List<AssetEntity> selected;
-  final TextEditingController captionCtrl;
-  final bool sending;
-  final VoidCallback onEdit;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-        child: Row(
-          children: [
-            GestureDetector(
-              onTap: selected.isEmpty ? null : onEdit,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: selected.isEmpty
-                      ? const ColoredBox(
-                    color: Color(0xFFF2F2F7),
-                    child: Icon(Icons.image_outlined,
-                        color: Color(0xFF8E8E93)),
-                  )
-                      : FutureBuilder<Uint8List?>(
-                    future: selected.last.thumbnailDataWithSize(
-                      const ThumbnailSize(120, 120),
-                    ),
-                    builder: (_, snap) {
-                      if (!snap.hasData || snap.data == null) {
-                        return const ColoredBox(color: Color(0xFFE5E5EA));
-                      }
-                      return Image.memory(snap.data!, fit: BoxFit.cover);
-                    },
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF2F2F7),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: TextField(
-                  controller: captionCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Add a caption...',
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: selected.isEmpty || sending ? null : onSend,
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: selected.isEmpty
-                      ? const Color(0xFFB9E6C9)
-                      : const Color(0xFF25D366),
-                  shape: BoxShape.circle,
-                ),
-                child: sending
-                    ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-                    : const Icon(Icons.send_rounded,
-                    color: Colors.white, size: 22),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -8664,618 +8291,6 @@ class _AttachAction {
   final Color color;
   final VoidCallback onTap;
 }
-class _WhatsAppGalleryPage extends StatefulWidget {
-  const _WhatsAppGalleryPage({
-    required this.onSend,
-    this.onOpenCamera,
-  });
-
-  final Future<void> Function(List<File> files, String caption) onSend;
-  final VoidCallback? onOpenCamera;
-
-  @override
-  State<_WhatsAppGalleryPage> createState() => _WhatsAppGalleryPageState();
-}
-
-class _WhatsAppGalleryPageState extends State<_WhatsAppGalleryPage> {
-  final _captionCtrl = TextEditingController();
-  final _scroll = ScrollController();
-
-  List<AssetPathEntity> _albums = [];
-  AssetPathEntity? _album;
-  List<AssetEntity> _assets = [];
-  final List<AssetEntity> _selected = [];
-  bool _loading = true;
-  bool _hd = true;
-  bool _sending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _boot();
-    _scroll.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _captionCtrl.dispose();
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  bool _loadingMore = false;
-
-  Future<void> _boot() async {
-    final perm = await PhotoManager.requestPermissionExtend();
-    if (!perm.hasAccess) {
-      if (mounted) {
-        setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('يلزم السماح بالوصول للصور')),
-        );
-      }
-      return;
-    }
-
-    // مهم: ignoreSize وإلا كثير من الصور تُستبعد
-    final filter = FilterOptionGroup(
-      imageOption: const FilterOption(
-        sizeConstraint: SizeConstraint(ignoreSize: true),
-      ),
-      videoOption: const FilterOption(
-        sizeConstraint: SizeConstraint(ignoreSize: true),
-      ),
-    );
-
-    // onlyAll: true = ألبوم Recents / كل الصور
-    final all = await PhotoManager.getAssetPathList(
-      type: RequestType.common,
-      onlyAll: true,
-      filterOption: filter,
-    );
-
-    final rest = await PhotoManager.getAssetPathList(
-      type: RequestType.common,
-      onlyAll: false,
-      filterOption: filter,
-    );
-
-    if (!mounted) return;
-
-    _albums = [
-      ...all,
-      ...rest.where((a) => all.every((b) => b.id != a.id)),
-    ];
-
-    if (_albums.isEmpty) {
-      setState(() => _loading = false);
-      return;
-    }
-
-    _album = _albums.first;
-    await _loadPage(reset: true);
-  }
-
-  Future<void> _loadPage({bool reset = false}) async {
-    final album = _album;
-    if (album == null) return;
-    if (_loadingMore) return;
-
-    if (reset) {
-      _assets = [];
-      if (mounted) setState(() => _loading = true);
-    } else {
-      _loadingMore = true;
-    }
-
-    try {
-      final start = _assets.length;
-      final next = await album.getAssetListRange(
-        start: start,
-        end: start + 80,
-      );
-      if (!mounted) return;
-      setState(() {
-        if (reset) _assets = next;
-        else _assets.addAll(next);
-        _loading = false;
-        _loadingMore = false;
-      });
-    } catch (e) {
-      debugPrint('gallery load failed: $e');
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _loadingMore = false;
-        });
-      }
-    }
-  }
-
-
-
-  void _onScroll() {
-    if (_scroll.position.pixels >
-        _scroll.position.maxScrollExtent - 400) {
-      _loadPage();
-    }
-  }
-
-  void _toggle(AssetEntity asset) {
-    setState(() {
-      final i = _selected.indexWhere((e) => e.id == asset.id);
-      if (i >= 0) {
-        _selected.removeAt(i);
-      } else {
-        _selected.add(asset);
-      }
-    });
-  }
-
-  int _indexOf(AssetEntity asset) =>
-      _selected.indexWhere((e) => e.id == asset.id);
-
-  Future<void> _pickAlbum() async {
-    final chosen = await showModalBottomSheet<AssetPathEntity>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        return ListView.builder(
-          itemCount: _albums.length,
-          itemBuilder: (_, i) {
-            final a = _albums[i];
-            return ListTile(
-              title: Text(a.name.isEmpty ? 'Recents' : a.name),
-              trailing: FutureBuilder<int>(
-                future: a.assetCountAsync,
-                builder: (_, snap) => Text('${snap.data ?? ''}'),
-              ),
-              onTap: () => Navigator.pop(ctx, a),
-            );
-          },
-        );
-      },
-    );
-    if (chosen == null) return;
-    setState(() => _album = chosen);
-    await _loadPage(reset: true);
-  }
-
-  Future<void> _openEditor() async {
-    if (_selected.isEmpty) return;
-
-    final files = <File>[];
-    for (final a in _selected) {
-      final edited = _editedReplacements[a.id]; // أو _edited في الـ tray
-      if (edited != null) {
-        files.add(edited);
-        continue;
-      }
-      final f = await a.file;
-      if (f != null) files.add(f);
-    }
-    if (files.isEmpty || !mounted) return;
-
-    final result = await Navigator.of(context).push<_EditorResult>(
-      MaterialPageRoute(
-        builder: (_) => _WhatsAppImageEditorPage(
-          files: files,
-          initialIndex: files.length - 1,
-          caption: _captionCtrl.text,
-        ),
-      ),
-    );
-    if (result == null) return;
-
-    _captionCtrl.text = result.caption;
-    for (var i = 0; i < _selected.length && i < result.files.length; i++) {
-      _editedReplacements[_selected[i].id] = result.files[i];
-    }
-    setState(() {});
-
-    if (result.send) await _send();
-  }
-
-  final Map<String, File> _editedReplacements = {};
-
-  Future<void> _send() async {
-    if (_selected.isEmpty || _sending) return;
-    setState(() => _sending = true);
-    try {
-      final files = <File>[];
-      for (final a in _selected) {
-        final edited = _editedReplacements[a.id];
-        if (edited != null) {
-          files.add(edited);
-          continue;
-        }
-        final f = await a.file;
-        if (f != null) files.add(f);
-      }
-      if (files.isEmpty) return;
-      Navigator.of(context).pop();
-      await widget.onSend(files, _captionCtrl.text);
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final name = _album == null
-        ? 'Recents'
-        : (_album!.name.isEmpty ? 'Recents' : _album!.name);
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            SizedBox(
-              height: 52,
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, size: 26),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _pickAlbum,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const Icon(Icons.expand_more_rounded),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _hd = !_hd),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: _hd
-                                ? const Color(0xFF111111)
-                                : const Color(0xFFC7C7CC),
-                          ),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'HD',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                            color: _hd
-                                ? const Color(0xFF111111)
-                                : const Color(0xFF8E8E93),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: _loading && _assets.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : _assets.isEmpty
-                  ? const Center(
-                child: Text(
-                  'لا توجد صور في المعرض',
-                  style: TextStyle(color: Color(0xFF8E8E93)),
-                ),
-              )
-                  : GridView.builder(
-                controller: _scroll,
-                padding: EdgeInsets.zero,
-                gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  mainAxisSpacing: 1.5,
-                  crossAxisSpacing: 1.5,
-                ),
-                itemCount: _assets.length + 1,
-                itemBuilder: (_, i) {
-                  if (i == 0) {
-                    return GestureDetector(
-                      onTap: widget.onOpenCamera,
-                      child: const ColoredBox(
-                        color: Color(0xFFE5E5EA),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.photo_camera_rounded, size: 28),
-                            SizedBox(height: 4),
-                            Text('Camera', style: TextStyle(fontSize: 11)),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-                  final asset = _assets[i - 1];
-                  return _GalleryCell(
-                    asset: asset,
-                    selectedIndex: _indexOf(asset),
-                    onTap: () => _toggle(asset),
-                  );
-                },
-              ),
-            ),
-            _GalleryCaptionBar(
-              selected: _selected,
-              captionCtrl: _captionCtrl,
-              sending: _sending,
-              onEdit: _openEditor,
-              onSend: _send,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GalleryCell extends StatelessWidget {
-  const _GalleryCell({
-    required this.asset,
-    required this.selectedIndex,
-    required this.onTap,
-  });
-
-  final AssetEntity asset;
-  final int selectedIndex;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = selectedIndex >= 0;
-    return GestureDetector(
-      onTap: onTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          FutureBuilder<Uint8List?>(
-            future: asset.thumbnailDataWithSize(
-              const ThumbnailSize(300, 300),
-            ),
-            builder: (context, snap) {
-              if (!snap.hasData || snap.data == null) {
-                return const ColoredBox(color: Color(0xFFE5E5EA));
-              }
-              return Image.memory(snap.data!, fit: BoxFit.cover);
-            },
-          ),
-          if (asset.type == AssetType.video)
-            Positioned(
-              left: 6,
-              bottom: 6,
-              child: Row(
-                children: [
-                  const Icon(Icons.videocam, color: Colors.white, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    _fmt(asset.videoDuration),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      shadows: [Shadow(blurRadius: 4, color: Colors.black)],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          Positioned(
-            top: 6,
-            right: 6,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: selected
-                    ? const Color(0xFF25D366)
-                    : Colors.black.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.6),
-              ),
-              child: selected
-                  ? Text(
-                '${selectedIndex + 1}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              )
-                  : null,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _fmt(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(1, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-}
-
-class _GalleryCaptionBar extends StatelessWidget {
-  const _GalleryCaptionBar({
-    required this.selected,
-    required this.captionCtrl,
-    required this.sending,
-    required this.onEdit,
-    required this.onSend,
-  });
-
-  final List<AssetEntity> selected;
-  final TextEditingController captionCtrl;
-  final bool sending;
-  final VoidCallback onEdit;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-      color: Colors.white,
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: selected.isEmpty ? null : onEdit,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _ThumbStack(selected: selected),
-                if (selected.isNotEmpty)
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.edit, size: 13),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF2F2F7),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: TextField(
-                controller: captionCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'Add a caption...',
-                  border: InputBorder.none,
-                  isDense: true,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: selected.isEmpty || sending ? null : onSend,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: selected.isEmpty
-                        ? const Color(0xFFB9E6C9)
-                        : const Color(0xFF25D366),
-                    shape: BoxShape.circle,
-                  ),
-                  child: sending
-                      ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                      : const Icon(Icons.send_rounded,
-                      color: Colors.white, size: 22),
-                ),
-                if (selected.isNotEmpty)
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF111111),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                      child: Text(
-                        '${selected.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ThumbStack extends StatelessWidget {
-  const _ThumbStack({required this.selected});
-  final List<AssetEntity> selected;
-
-  @override
-  Widget build(BuildContext context) {
-    if (selected.isEmpty) {
-      return Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF2F2F7),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Icon(Icons.image_outlined, color: Color(0xFF8E8E93)),
-      );
-    }
-    final last = selected.last;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: 44,
-        height: 44,
-        child: FutureBuilder<Uint8List?>(
-          future: last.thumbnailDataWithSize(const ThumbnailSize(120, 120)),
-          builder: (_, snap) {
-            if (!snap.hasData || snap.data == null) {
-              return const ColoredBox(color: Color(0xFFE5E5EA));
-            }
-            return Image.memory(snap.data!, fit: BoxFit.cover);
-          },
-        ),
-      ),
-    );
-  }
-}
-
 /// واجهة تعديل الصورة (تدوير + فلاتر) — زر القلم يفتحها
 class _EditorResult {
   const _EditorResult({
