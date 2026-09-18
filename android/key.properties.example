@@ -1,0 +1,7 @@
+# Copy this file to android/key.properties and replace the placeholders.
+# Never commit android/key.properties or the keystore itself.
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=upload
+storeFile=C:\\Users\\YOUR_WINDOWS_USER\\upload-keystore.jks
