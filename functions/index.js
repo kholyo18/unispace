@@ -14,6 +14,7 @@ exports.pushOnNotification = onDocumentCreated(
 );
 // Keep session security in the configured CommonJS entry point.
 const { onCall } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { getAuth } = require('firebase-admin/auth');
 const { FieldValue } = require('firebase-admin/firestore');
 const { createRevokeAllSessionsHandler } = require('./security/revoke-all-sessions');
@@ -221,4 +222,23 @@ const accountDeletionRequestHandler = createAccountDeletionRequestHandler({
 exports.requestAccountDeletion = onCall(
   { region: 'europe-west1', timeoutSeconds: 60 },
   accountDeletionRequestHandler,
+);
+
+const { createAccountDeletionWorker } = require('./security/account-deletion-worker');
+exports.processAccountDeletions = onSchedule(
+  {
+    region: 'europe-west1',
+    schedule: 'every 15 minutes',
+    timeZone: 'Etc/UTC',
+    timeoutSeconds: 540,
+    memory: '1GiB',
+    maxInstances: 1,
+  },
+  createAccountDeletionWorker({
+    auth: getAuth(),
+    db: getFirestore(),
+    bucket: () => getStorage().bucket(commentMediaBucket.value()),
+    FieldValue,
+    Timestamp,
+  }),
 );
