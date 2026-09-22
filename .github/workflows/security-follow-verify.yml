@@ -1,0 +1,46 @@
+name: Follow authorization review
+
+on:
+  push:
+    branches: ['audit/security-follow-boundaries-20260922']
+  pull_request:
+    paths:
+      - 'firestore.rules'
+      - 'security/rules-review/**'
+      - 'functions/security/**'
+      - 'functions/test/**'
+      - 'lib/**'
+      - '.github/workflows/security-follow-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  source-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record tracked source revision and relationship access sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          git status --porcelain
+          git ls-files '*AGENTS.md' '*CLAUDE.md'
+          git grep -n -E "followers|following|follow_requests|blocked_accounts|blocked_by|blocked_users|manageFollow|readPublicProfile" -- lib > relationship-access-sites.txt
+          wc -l relationship-access-sites.txt
+          cat relationship-access-sites.txt
+          git archive --format=zip --output=source-review.zip HEAD \
+            lib test functions security scripts firestore.rules firebase.json \
+            firebase.security-test.json pubspec.yaml pubspec.lock README.md .github
+      - uses: actions/upload-artifact@v4
+        with:
+          name: follow-source-review
+          path: |
+            source-review.zip
+            relationship-access-sites.txt
+          retention-days: 1
+          if-no-files-found: error
