@@ -1,5 +1,6 @@
 const { HttpsError } = require('firebase-functions/v2/https');
 const { createHash } = require('crypto');
+const { validAuthTime, cutoffAllows } = require('./push-session-policy');
 const validSessionId = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && !v.includes('/') && !['.','..'].includes(v);
 const preferenceKeys = ['enabled','community','announcements','exams'];
 function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
@@ -17,12 +18,13 @@ function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
     let token;
     try { token = await auth.verifyIdToken(header.slice(7),true); }
     catch (_) { throw new HttpsError('unauthenticated','Sign in again.'); }
-    if (token.uid !== uid || !Number.isFinite(token.auth_time) || token.firebase?.tenant) throw new HttpsError('unauthenticated','Invalid session.');
+    if (token.uid !== uid || !validAuthTime(token.auth_time) || token.firebase?.tenant) throw new HttpsError('unauthenticated','Invalid session.');
     const deviceId = createHash('sha256').update(i.token).digest('hex');
     return db.runTransaction(async tx => {
       const [cutoff,profile] = await tx.getAll(db.doc(`authRevocations/${uid}`),db.doc(`users/${uid}`));
-      if (cutoff.exists && token.auth_time <= cutoff.data().revokedBefore) throw new HttpsError('unauthenticated','Session revoked.');
-      if (!profile.exists || ['disabled','deleted'].includes(profile.data().accountStatus)) throw new HttpsError('permission-denied','Account unavailable.');
+      if (!cutoffAllows(token.auth_time, cutoff.exists ? cutoff.data() : null)) throw new HttpsError('unauthenticated','Session revoked.');
+      if (!profile.exists || ['disabled','deleted'].includes(profile.data().accountStatus) ||
+          (!detach && profile.data().security?.frozen === true)) throw new HttpsError('permission-denied','Account unavailable.');
       let session;
       if (!detach) {
         session = await tx.get(db.doc('users/' + uid + '/sessions/' + i.sessionId));
@@ -34,15 +36,15 @@ function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
       const bindingRef = db.doc('pushTokenOwners/' + deviceId);
       const revokedRef = bindingRef.collection('revocations').doc(uid);
       const [binding,revoked] = await tx.getAll(bindingRef,revokedRef);
-      if (!detach && ((revoked.exists && token.auth_time <= revoked.data().authTime) ||
-          (binding.data()?.ownerId === uid && token.auth_time < binding.data().authTime))) {
+      if (!detach && ((revoked.exists && (!validAuthTime(revoked.data().authTime) || token.auth_time <= revoked.data().authTime)) ||
+          (binding.data()?.ownerId === uid && (!validAuthTime(binding.data().authTime) || token.auth_time < binding.data().authTime)))) {
         throw new HttpsError('unauthenticated','Sign in again to register this device.');
       }
       const collection = db.collection(`users/${uid}/fcm_tokens`);
       const duplicates = await tx.get(collection.where('token','==',i.token).limit(401));
       if (duplicates.size > 400) throw new HttpsError('resource-exhausted','Registration cleanup required.');
       if (detach) {
-        tx.set(revokedRef,{authTime:Math.max(token.auth_time,revoked.data()?.authTime || 0)});
+        tx.set(revokedRef,{authTime:Math.max(token.auth_time,validAuthTime(revoked.data()?.authTime) ? revoked.data().authTime : 0)});
         if (!binding.exists || (binding.data()?.ownerId === uid && binding.data().authTime <= token.auth_time)) {
           tx.set(bindingRef,{ownerId:null,authTime:token.auth_time,updatedAt:FieldValue.serverTimestamp()});
         }
@@ -52,10 +54,16 @@ function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
         return {detached:true};
       }
       const previous = binding.data();
+      if (previous?.ownerId && (!validSessionId(previous.ownerId) || !validAuthTime(previous.authTime))) {
+        throw new HttpsError('failed-precondition','Device binding requires repair.');
+      }
       if (previous?.ownerId && previous.ownerId !== uid) {
         const oldRef = bindingRef.collection('revocations').doc(previous.ownerId);
         const old = await tx.get(oldRef);
-        tx.set(oldRef,{authTime:Math.max(previous.authTime || 0,old.data()?.authTime || 0)});
+        if (old.exists && !validAuthTime(old.data().authTime)) {
+          throw new HttpsError('failed-precondition','Device revocation requires repair.');
+        }
+        tx.set(oldRef,{authTime:Math.max(previous.authTime,old.data()?.authTime || 0)});
       }
       tx.set(bindingRef,{ownerId:uid,authTime:token.auth_time,sessionId:i.sessionId,sessionCreatedAt:session.data().createdAt,updatedAt:FieldValue.serverTimestamp()});
       tx.set(collection.doc(deviceId),{token:i.token,authTime:token.auth_time,sessionId:i.sessionId,platform:i.platform,preferences:i.preferences,updatedAt:FieldValue.serverTimestamp()});
