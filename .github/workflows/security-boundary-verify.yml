@@ -1,0 +1,60 @@
+name: Security boundary verification
+
+on:
+  push:
+    branches: ['audit/security-chat-boundaries-20260922']
+  pull_request:
+    paths:
+      - 'firestore.rules'
+      - 'security/rules-review/firestore.candidate.rules'
+      - 'firebase.security-test.json'
+      - 'functions/security/public-profile.js'
+      - 'functions/security/profile-projection.js'
+      - 'functions/test/public-profile.test.cjs'
+      - 'functions/test/profile-projection.unit.test.cjs'
+      - 'functions/test/chat-rules.integration.test.cjs'
+      - '.github/workflows/security-boundary-verify.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  security-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - name: Install existing locked server dependencies
+        run: npm ci --prefix functions --ignore-scripts
+      - name: Syntax, synchronized rule candidates and pure privacy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check functions/security/public-profile.js
+          node --check functions/security/profile-projection.js
+          node --check functions/test/chat-rules.integration.test.cjs
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          node --test functions/test/profile-projection.unit.test.cjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Auth and Firestore authorization integration tests (demo only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth \
+            --project demo-unispace-security \
+            --config firebase.security-test.json \
+            "node --test --test-concurrency=1 functions/test/chat-rules.integration.test.cjs functions/test/public-profile.test.cjs"
