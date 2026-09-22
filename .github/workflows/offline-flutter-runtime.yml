@@ -1,0 +1,54 @@
+name: Offline Flutter verification runtime
+on:
+  push:
+    branches: ['audit/stage7-offline-verification-20260922']
+    paths: ['.github/workflows/offline-flutter-runtime.yml']
+permissions:
+  contents: read
+jobs:
+  prepare-flutter:
+    if: github.repository == 'kholyo18/unispace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 67592a9cefac8aac013e3691676e42996b1cdf15
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve only the existing application's dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Package offline test tooling without font files or credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
+          pubcache="${PUB_CACHE:-$HOME/.pub-cache}"
+          out="$RUNNER_TEMP/flutter-offline-package"
+          mkdir -p "$out"
+          flutter --version > "$out/flutter-version.txt"
+          git rev-parse HEAD > "$out/baseline-commit.txt"
+          tar -czf "$out/flutter-sdk.tar.gz" \
+            --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttc' \
+            --exclude='./bin/cache/artifacts/engine/android*' \
+            --exclude='./bin/cache/artifacts/engine/ios*' \
+            --exclude='./bin/cache/artifacts/engine/darwin*' \
+            --exclude='./bin/cache/artifacts/engine/windows*' \
+            --exclude='./bin/cache/flutter_web_sdk' \
+            --exclude='./examples' --exclude='./dev' --exclude='./.git/logs' \
+            -C "$sdk" .
+          tar -czf "$out/pub-packages.tar.gz" \
+            --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttc' \
+            -C "$pubcache" hosted hosted-hashes
+          cd "$out"
+          sha256sum *.tar.gz > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-flutter-runtime
+          path: ${{ runner.temp }}/flutter-offline-package/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
