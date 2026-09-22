@@ -254,3 +254,8 @@ const accountStateHandlers = createAccountStateHandlers({ auth: getAuth(), db: g
 exports.setOwnAccountState = onCall({ region: 'europe-west1', timeoutSeconds: 60 }, accountStateHandlers.own);
 exports.setAdministrativeAccountRestriction = onCall(
   { region: 'europe-west1', timeoutSeconds: 60 }, accountStateHandlers.administrative);
+
+const { createStorageUploadHandler } = require('./security/storage-upload');
+exports.prepareStorageUpload = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+  createStorageUploadHandler({ auth: getAuth(), db: getFirestore(), FieldValue, Timestamp,
+    bucketName: () => commentMediaBucket.value() }));

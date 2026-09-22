@@ -27,7 +27,7 @@ function createAccountStateHandlers({ auth, db, FieldValue, now = () => Date.now
     }
     return { uid, token };
   }
-  function write(tx, ref, controlRef, before, next, actor, action, administrative = null) {
+  function write(tx, ref, controlRef, before, next, actor, action, administrative = null, revokedBefore = 0) {
     const changed = before.revision === 0 || ['selfDisabled', 'selfFrozen', 'adminSuspended'].some(k => before[k] !== next[k]);
     const view = projection(next);
     if (!changed) return { ...view, revision: before.revision, changed: false };
@@ -39,6 +39,8 @@ function createAccountStateHandlers({ auth, db, FieldValue, now = () => Date.now
       patch[view.accountStatus === 'disabled' ? 'disabledAt' : 'reactivatedAt'] = timestamp;
     }
     if (oldView.frozen !== view.frozen || before.revision === 0) patch['security.frozenAt'] = view.frozen ? timestamp : null;
+    // Invalidate outstanding Storage permissions atomically on every state change.
+    tx.set(db.doc(`authRevocations/${ref.id}`), { revokedBefore, storageAllowed: false }, { merge: true });
     tx.update(ref, patch);
     tx.set(controlRef, { schemaVersion: 1, revision, selfDisabled: next.selfDisabled,
       selfFrozen: next.selfFrozen, adminSuspended: next.adminSuspended,
@@ -61,7 +63,7 @@ function createAccountStateHandlers({ auth, db, FieldValue, now = () => Date.now
       if (!validCutoff(cutoff, token.auth_time)) throw new HttpsError('unauthenticated', 'Session revoked.');
       const before = policy(() => readState(profile.data(), control.data(), deletion.exists));
       const next = policy(() => changeOwnState(before, input.action));
-      return write(tx, ref, controlRef, before, next, uid, input.action);
+      return write(tx, ref, controlRef, before, next, uid, input.action, null, cutoff.data()?.revokedBefore ?? 0);
     });
   }
   async function administrative(request) {
@@ -102,7 +104,7 @@ function createAccountStateHandlers({ auth, db, FieldValue, now = () => Date.now
         throw new HttpsError('failed-precondition', 'Revocation state needs review.');
       }
       const next = { ...before, adminSuspended: i.suspended };
-      const result = write(tx, ref, controlRef, before, next, uid, i.suspended ? 'suspend' : 'reinstate', i.reasonCode);
+      const result = write(tx, ref, controlRef, before, next, uid, i.suspended ? 'suspend' : 'reinstate', i.reasonCode, previousCutoff);
       if (i.suspended && result.changed) {
         // Atomic application-side cutoff, not a claim that Firebase Auth tokens
         // or a specific physical device were revoked at the Auth provider.

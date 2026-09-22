@@ -2,6 +2,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /storageUploadGrants/{grantId} { allow read, write: if false; }
     // Explicit server-only records; no broad match in this candidate grants access.
     match /communityReportLimits/{uid} { allow read, write: if false; }
     match /communityReportStatusLimits/{uid} { allow read, write: if false; }

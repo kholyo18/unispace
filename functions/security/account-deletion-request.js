@@ -53,11 +53,15 @@ function createAccountDeletionRequestHandler({
     let alreadyRequested = false;
 
     await db.runTransaction(async (tx) => {
-      const cutoff = await tx.get(db.collection('authRevocations').doc(uid));
+      const cutoffRef = db.collection('authRevocations').doc(uid);
+      const cutoff = await tx.get(cutoffRef);
       if (!validCutoff(cutoff, token.auth_time)) {
         throw new HttpsError('unauthenticated', 'Session revoked.');
       }
       const existing = await tx.get(requestRef);
+      if (cutoff.data()?.storageAllowed !== false) {
+        tx.set(cutoffRef, { revokedBefore: cutoff.data()?.revokedBefore ?? 0, storageAllowed: false }, { merge: true });
+      }
       if (existing.exists && existing.data()?.status === 'pending') {
         alreadyRequested = true;
         return;

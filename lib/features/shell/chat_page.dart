@@ -1,3 +1,4 @@
+import 'package:UniSpace/services/storage_upload_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -1023,7 +1024,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
       final ref = FirebaseStorage.instance
           .ref()
           .child('chats/${widget.chatId}/wallpaper/$_uid.jpg');
-      await ref.putFile(
+      await StorageUploadService.putFile(ref,
         File(picked.path),
         SettableMetadata(contentType: 'image/jpeg'),
       );
@@ -3526,7 +3527,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     setState(() => _sending = true);
 
     try {
-      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final id = FirebaseFirestore.instance.collection('chats').doc().id;
       final ext = isGif ? 'gif' : 'jpg';
       final contentType = isGif ? 'image/gif' : (mimeType.isEmpty ? 'image/jpeg' : mimeType);
 
@@ -3534,7 +3535,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           .ref()
           .child('chats/${widget.chatId}/images/$id.$ext');
 
-      await ref.putData(bytes, SettableMetadata(contentType: contentType));
+      await StorageUploadService.putData(ref, bytes, SettableMetadata(contentType: contentType));
       final url = await ref.getDownloadURL();
 
       await _msgs.add({
@@ -3572,15 +3573,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         _voiceState = VoiceRecordingState.sending;
       });
 
-      final id = DateTime.now()
-          .millisecondsSinceEpoch
-          .toString();
+      final id = FirebaseFirestore.instance.collection('chats').doc().id;
 
       final ref = FirebaseStorage.instance
           .ref()
           .child('chats/${widget.chatId}/audio/$id.m4a');
 
-      await ref.putFile(
+      await StorageUploadService.putFile(ref,
         file,
         SettableMetadata(
           contentType: 'audio/mp4',
@@ -4012,12 +4011,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     setState(() => _sending = true);
     try {
       final bytes = await picked.readAsBytes();
-      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final id = FirebaseFirestore.instance.collection('chats').doc().id;
       final ref = FirebaseStorage.instance
           .ref()
           .child('chats/${widget.chatId}/images/$id.jpg');
 
-      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      await StorageUploadService.putData(ref, bytes, SettableMetadata(contentType: 'image/jpeg'));
       final url = await ref.getDownloadURL();
 
       await _msgs.add({
@@ -4066,17 +4065,17 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
     setState(() => _sending = true);
     try {
-      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final id = FirebaseFirestore.instance.collection('chats').doc().id;
       final file = File(picked.path);
       final ref = FirebaseStorage.instance
           .ref()
           .child('chats/${widget.chatId}/videos/$id.mp4');
 
       if (await file.exists()) {
-        await ref.putFile(file, SettableMetadata(contentType: 'video/mp4'));
+        await StorageUploadService.putFile(ref, file, SettableMetadata(contentType: 'video/mp4'));
       } else {
         final bytes = await picked.readAsBytes();
-        await ref.putData(bytes, SettableMetadata(contentType: 'video/mp4'));
+        await StorageUploadService.putData(ref, bytes, SettableMetadata(contentType: 'video/mp4'));
       }
 
       final url = await ref.getDownloadURL();
@@ -4149,14 +4148,14 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
     setState(() => _sending = true);
     try {
-      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final id = FirebaseFirestore.instance.collection('chats').doc().id;
       final name = (file.name).trim().isEmpty ? 'file' : file.name;
       final safeName = name.replaceAll(RegExp(r'[^\w\.\-]'), '_');
       final ref = FirebaseStorage.instance
           .ref()
           .child('chats/${widget.chatId}/files/$id\_$safeName');
 
-      await ref.putData(
+      await StorageUploadService.putData(ref,
         bytes,
         SettableMetadata(
           contentType: file.extension != null
@@ -4213,11 +4212,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       if (_isVideoMediaFile(file)) {
         setState(() => _sending = true);
         try {
-          final id = DateTime.now().millisecondsSinceEpoch.toString();
+          final id = FirebaseFirestore.instance.collection('chats').doc().id;
           final ref = FirebaseStorage.instance
               .ref()
               .child('chats/${widget.chatId}/videos/$id.mp4');
-          await ref.putFile(
+          await StorageUploadService.putFile(ref,
             file,
             SettableMetadata(contentType: 'video/mp4'),
           );
