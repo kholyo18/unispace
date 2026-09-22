@@ -159,3 +159,28 @@ test('a repeated pending request is idempotent but revokes sessions again', asyn
   assert.equal(revoked.length, 2);
   assert.deepEqual(deletedUsers, ['alice', 'alice']);
 });
+
+for (const revokedBefore of [100, 101, '100', null, -1, 99.5]) {
+  test(`deletion rejects revoked or malformed cutoff ${JSON.stringify(revokedBefore)} before writes`, async () => {
+    const f = backend();
+    f.db.docs.set('authRevocations/alice', { revokedBefore });
+    await assert.rejects(f.handler(f.request()), { code: 'unauthenticated' });
+    assert.equal(f.db.writes.length, 0);
+    assert.equal(f.deletedUsers.length, 0);
+    assert.equal(f.revoked.length, 0);
+  });
+}
+test('deletion permits authentication strictly newer than a valid cutoff', async () => {
+  const f = backend(); f.db.docs.set('authRevocations/alice', { revokedBefore: 99 });
+  assert.equal((await f.handler(f.request())).status, 'pending');
+});
+
+test('deletion confirmation bound to another account cannot delete the current identity', async () => {
+  const f = backend();
+  await assert.rejects(f.handler(f.request({ confirm: true, expectedUid: 'bob' })), { code: 'unauthenticated' });
+  assert.equal(f.db.writes.length, 0); assert.equal(f.deletedUsers.length, 0);
+});
+test('current deletion client may assert its matching caller identity', async () => {
+  const f = backend();
+  assert.equal((await f.handler(f.request({ confirm: true, expectedUid: 'alice' }))).status, 'pending');
+});

@@ -1,3 +1,4 @@
+import '../../../ui/settings/account_state_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
 
   Future<void> _requestDeletion() async {
     if (_submitting || !_understood) return;
+    final expectedUid = FirebaseAuth.instance.currentUser?.uid;
+    if (expectedUid == null) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -41,9 +44,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
 
     setState(() => _submitting = true);
     try {
-      final callable = FirebaseFunctions.instanceFor(region: 'europe-west1')
-          .httpsCallable('requestAccountDeletion');
-      await callable.call(<String, dynamic>{'confirm': true});
+      await AccountStateService.requestDeletion(expectedUid);
+      if (FirebaseAuth.instance.currentUser != null) return;
 
       if (!mounted) return;
       await showDialog<void>(
@@ -65,8 +67,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
         ),
       );
 
-      await FirebaseAuth.instance.signOut();
-      if (!mounted) return;
+      if (!mounted || FirebaseAuth.instance.currentUser != null) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
     } on FirebaseFunctionsException catch (error) {
       if (!mounted) return;

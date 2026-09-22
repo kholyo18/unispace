@@ -1,0 +1,122 @@
+name: Account lifecycle authorization verification
+
+on:
+  pull_request:
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', 'test/**', '.github/workflows/security-account-state-verify.yml']
+  push:
+    branches: ['main']
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', 'test/**', '.github/workflows/security-account-state-verify.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  account-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Reproduce seven specifically named pre-fix rule failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show cd9589c9dfe88d64584446f34e8d30042f265ed8:firestore.rules > .state-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.security-test.json'));c.firestore.rules='.state-baseline.rules';fs.writeFileSync('.state-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config .state-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='^STATEREGRESSION:' functions/test/account-state-rules.integration.test.cjs" \
+            > state-baseline-results.log 2>&1
+          result=$?
+          set -e
+          cat state-baseline-results.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs = require('node:fs');
+          const expected = [
+            'STATEREGRESSION: clients cannot directly disable their account',
+            'STATEREGRESSION: clients cannot manufacture a deleted flag',
+            'STATEREGRESSION: clients cannot directly clear a frozen state',
+            'STATEREGRESSION: lifecycle timestamps are not client editable',
+            'STATEREGRESSION: an administrative restriction blocks direct chat reads',
+            'STATEREGRESSION: clients cannot revive a pending deletion',
+            'STATEREGRESSION: removing the entire security map cannot clear frozen state',
+          ];
+          const log = fs.readFileSync('state-baseline-results.log', 'utf8');
+          const failures = [...log.matchAll(/^not ok \d+ - (.+)$/gm)].map(m => m[1].trim());
+          if (process.env.BASELINE_EXIT !== '1' || failures.length !== expected.length ||
+              expected.some(name => !failures.includes(name)) || !/^# fail 7\s*$/m.test(log)) {
+            throw Error('Expected exactly seven named policy failures, not an environment failure.');
+          }
+          NODE
+      - name: Test actual lifecycle handlers rules and source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          for file in functions/security/account-{state,state-policy,access-guard,deletion-request,deletion-worker}.js functions/index.js; do
+            node --check "$file"
+          done
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/account-state*.test.cjs functions/test/account-deletion-request.test.cjs functions/test/profile-write-contract.integration.test.cjs" \
+            2>&1 | tee state-current-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: account-lifecycle-evidence
+          path: |
+            state-baseline-results.log
+            state-current-results.log
+          retention-days: 7
+
+  flutter-security-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Generate existing localization sources
+        run: |
+          dart pub global activate intl_utils 2.8.11
+          dart pub global run intl_utils:generate
+      - name: Run lifecycle and existing security privacy legal-widget tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Explicit executable suites. The commented-out template widget_test.dart
+          # has no main or tests and is not represented as executed coverage.
+          flutter test --reporter expanded \
+            test/account_state_client_test.dart test/account_recovery_test.dart \
+            test/mfa_safety_test.dart test/security_sessions_test.dart \
+            test/public_profile_reader_test.dart test/public_profile_widget_test.dart \
+            test/profile_privacy_test.dart test/privacy_settings_test.dart test/widgets \
+            2>&1 | tee flutter-security-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flutter-security-regression-evidence
+          path: flutter-security-results.log
+          retention-days: 7

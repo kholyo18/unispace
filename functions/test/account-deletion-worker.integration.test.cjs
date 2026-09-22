@@ -73,6 +73,8 @@ test('scheduled worker purges one account while preserving shared data', async (
       accountStatus: 'deleted',
     });
     seed.set(db.doc('users/bob'), { displayName: 'Bob', username: 'bob' });
+    seed.set(db.doc('accountStateControls/alice'), { schemaVersion: 1, adminSuspended: true });
+    seed.set(db.doc('accountStateControls/bob'), { schemaVersion: 1, adminSuspended: false });
     seed.set(db.doc('users/alice/following/bob'), { uid: 'bob' });
     seed.set(db.doc('users/bob/followers/alice'), { uid: 'alice' });
     seed.set(db.doc('users/alice/fcm_tokens/device1'), { token: 'secret-token' });
@@ -205,6 +207,8 @@ test('scheduled worker purges one account while preserving shared data', async (
     assert.ok(tombstoneId.startsWith('deleted_'));
 
     assert.equal((await db.doc('users/alice').get()).exists, false);
+    assert.equal((await db.doc('accountStateControls/alice').get()).exists, false);
+    assert.equal((await db.doc('accountStateControls/bob').get()).exists, true);
     assert.deepEqual(deletedAuthUsers, ['alice']);
     assert.equal((await db.doc('users/bob/followers/alice').get()).exists, false);
     assert.equal((await db.doc('messageRequests/request1').get()).exists, false);
