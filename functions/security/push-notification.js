@@ -2,6 +2,7 @@ const { canReceiveContentPush, contentMessages } = require('./push-content-acces
 const { createHash } = require('crypto');
 const { logger } = require('firebase-functions');
 const { pushAllowed } = require('./push-preferences');
+const { bindingAllows, registrationMatches } = require('./push-session-policy');
 const validId = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && !v.includes('/') && !['.','..'].includes(v);
 const unavailable = d => !d || ['disabled','deleted'].includes(d.accountStatus) || d.security?.frozen === true;
 
@@ -40,8 +41,7 @@ function createPushNotificationHandler({ db, auth, messaging }) {
       const batch = entries.slice(offset,offset + 500);
       // Drop deleted/reassigned token records before dispatch; preserve token-to-ref mapping.
       const live = await db.getAll(...batch.flatMap(([,refs]) => refs));
-      const present = new Set(live.filter(s => s.exists && typeof s.data().token === 'string').map(s => s.data().token));
-      const denied = new Set(live.filter(s => s.exists && !pushAllowed(s.data().preferences, data.type)).map(s => s.data().token));
+      const records = new Map(live.filter(s => s.exists).map(s => [s.id, s.data()]));
       const ownership = await db.getAll(...batch.map(([token]) => db.doc('pushTokenOwners/' + createHash('sha256').update(token).digest('hex'))));
       const cutoff = await db.doc('authRevocations/' + userId).get();
       const sessionRefs = new Map();
@@ -54,17 +54,15 @@ function createPushNotificationHandler({ db, auth, messaging }) {
       const sessionSnapshots = sessionRefs.size ? await db.getAll(...sessionRefs.values()) : [];
       const sessions = new Map(sessionSnapshots.map(s => [s.id,s]));
       const active = batch.filter(([token],index) => {
-        const binding = ownership[index];
-        const owned = !binding.exists || (binding.data().ownerId === userId &&
-          (!cutoff.exists || binding.data().authTime > cutoff.data().revokedBefore));
-        const state = binding.data();
-        const session = state?.sessionId != null ? sessions.get(state.sessionId) : null;
-        // Legacy bindings migrate on the next successful device synchronization.
-        const sessionActive = state?.sessionId == null || (session?.exists &&
-          session.data().sessionId === state.sessionId && session.data().isRevoked === false &&
-          typeof session.data().createdAt?.toMillis === 'function' &&
-          typeof state.sessionCreatedAt?.isEqual === 'function' && state.sessionCreatedAt.isEqual(session.data().createdAt));
-        return owned && sessionActive && present.has(token) && !denied.has(token);
+        const state = ownership[index].data();
+        const record = records.get(ownership[index].id);
+        const session = validId(state?.sessionId) ? sessions.get(state.sessionId)?.data() : null;
+        // Old unbound registrations must synchronize again. Never deliver by
+        // trusting only a client-writable/legacy fcm_tokens document.
+        return bindingAllows({ binding: state, userId,
+          cutoff: cutoff.exists ? cutoff.data() : null, session }) &&
+          record?.token === token && registrationMatches(record, state) &&
+          pushAllowed(record.preferences, data.type);
       });
       if (!active.length) continue;
       if (!await canReceiveContentPush({db,auth,userId,notification:data})) return;

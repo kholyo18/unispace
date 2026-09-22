@@ -114,7 +114,7 @@ function createCommentHandler({ auth, db, FieldValue, Timestamp, bucket }) {
       if (owner !== uid && !recipients.has(owner)) recipients.set(owner,'comment');
       for (const [recipient,type] of recipients) tx.create(db.collection(`users/${recipient}/notifications`).doc(),{
         type,actorId:uid,actorName:name,actorPhotoUrl:comment.authorPhotoUrl,postId:i.postId,commentId:i.commentId,
-        message:`${type === 'reply' ? 'رد على تعليقك' : 'علّق على منشورك'}: ${(comment.text || 'أرفق وسائط').slice(0,60)}`,
+        message:type === 'reply' ? 'رد على تعليقك' : 'علّق على منشورك',
         createdAt:comment.createdAt,read:false,
       });
       return {comment:toWire(comment),created:true};

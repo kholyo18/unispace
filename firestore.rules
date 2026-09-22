@@ -102,9 +102,10 @@ service cloud.firestore {
       allow update: if activeProfileOwner(userId) && editableProfileChange();
       // Signup and permanent deletion must complete through server-owned lifecycle paths.
       allow create, delete: if false;
+      // Device tokens and binding metadata are managed only by
+      // syncPushDevice/detachPushDevice. The Flutter client does not read them.
       match /fcm_tokens/{tokenId} {
-        allow read, write: if request.auth != null
-                             && request.auth.uid == userId;
+        allow read, write: if false;
       }
       // Accepted relationships are authorization evidence. Only manageFollow
       // may create, modify or remove these records via the Admin SDK.
@@ -213,20 +214,13 @@ service cloud.firestore {
         allow write: if false;
       }
       match /notifications/{notifId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create: if request.auth != null
-          && request.resource.data.actorId == request.auth.uid
-          && !exists(/databases/$(database)/documents/users/$(userId)/blocked_accounts/$(request.auth.uid))
-          && !exists(/databases/$(database)/documents/users/$(request.auth.uid)/blocked_accounts/$(userId));
-        allow update: if request.auth != null && (
-          request.auth.uid == userId
-          || request.auth.uid in resource.data.actorIds
-        );
-        allow delete: if request.auth != null && (
-          request.auth.uid == userId
-          || request.auth.uid in resource.data.actorIds
-          || resource.data.actorId == request.auth.uid
-        );
+        // Identity, content references and delivery metadata are server-owned.
+        // Recipients may acknowledge or dismiss, never manufacture an event.
+        allow read, delete: if activeProfileOwner(userId);
+        allow create: if false;
+        allow update: if activeProfileOwner(userId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read == true;
       }
     }
 

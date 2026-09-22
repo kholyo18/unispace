@@ -4964,51 +4964,6 @@ NotificationItem _notificationFromDoc(
   );
 }
 
-Future<void> pushNotification({
-  required String toUid,
-  required String type,
-  required String actorName,
-  String? actorPhotoUrl,
-  required String message,
-  String? postId,
-  String? chatId,
-  String? commentId,
-  String? docId,
-}) async {
-  final me = FirebaseAuth.instance.currentUser?.uid;
-  if (me == null || toUid.isEmpty || toUid == me) return;
-
-  try {
-    if (await isAccountBlocked(toUid)) return;
-    if (await isBlockedByAccount(toUid)) return;
-  } catch (_) {}
-
-  final id = docId ?? (type == 'follow' ? 'follow_$me' : null);
-  final col = FirebaseFirestore.instance
-      .collection('users')
-      .doc(toUid)
-      .collection('notifications');
-  final ref = id == null ? col.doc() : col.doc(id);
-
-  try {
-    await ref.set({
-      'type': type,
-      'actorId': me,
-      'actorName': actorName,
-      'actorPhotoUrl': actorPhotoUrl,
-      'message': message,
-      if (postId != null) 'postId': postId,
-      if (commentId != null) 'commentId': commentId,
-      'read': false,
-      'createdAt': FieldValue.serverTimestamp(),
-      if (chatId != null) 'chatId': chatId,
-    });
-    debugPrint('notif OK → $toUid type=$type id=${ref.id}');
-  } catch (e) {
-    debugPrint('notif FAIL → $toUid type=$type $e');
-  }
-}
-
 String composeLikeNotificationMessage({
   required bool isComment,
   required List<String> ids,
@@ -5030,38 +4985,6 @@ String composeLikeNotificationMessage({
       : 'و${count - 1} آخرين أعجبوا بمنشورك';
 }
 
-Future<void> pushNotificationFromMe({
-  required String toUid,
-  required String type,
-  required String message,
-  String? postId,
-  String? commentId,
-  String? docId,}) async {
-  final me = FirebaseAuth.instance.currentUser;
-  if (me == null) return;
-  var name = (me.displayName ?? '').trim();
-  String? photo = me.photoURL;
-  try {
-    final d = await FirebaseFirestore.instance.collection('users').doc(me.uid).get();
-    final fn = (d.data()?['firstName'] ?? '').toString().trim();
-    final ln = (d.data()?['lastName'] ?? '').toString().trim();
-    final fromNames = [fn, ln].where((e) => e.isNotEmpty).join(' ');
-    if (fromNames.isNotEmpty) name = fromNames;
-    final p = d.data()?['profileImageUrl']?.toString();
-    if (p != null && p.isNotEmpty) photo = p;
-  } catch (_) {}
-
-  await pushNotification(
-    toUid: toUid,
-    type: type,
-    actorName: name.isEmpty ? 'طالب UniSpace' : name,
-    actorPhotoUrl: photo,
-    message: message,
-    postId: postId,
-    commentId: commentId,
-    docId: docId,
-  );
-}
 Future<void> _markNotificationRead(String uid, String id) async {
   try {
     await FirebaseFirestore.instance

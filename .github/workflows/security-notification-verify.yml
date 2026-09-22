@@ -1,0 +1,101 @@
+name: Notification authorization verification
+
+on:
+  pull_request:
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', '.github/workflows/security-notification-verify.yml']
+  push:
+    branches: ['main']
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', '.github/workflows/security-notification-verify.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  notification-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Reproduce fourteen named pre-fix failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=ef4c0c13b66f49a4084533af20f379ca6d0f0d53
+          git show "$base:firestore.rules" > .notification-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.security-test.json'));c.firestore.rules='.notification-baseline.rules';fs.writeFileSync('.notification-baseline.json',JSON.stringify(c))"
+          # Only the isolated runner's two production modules are swapped. No branch is moved.
+          trap 'git checkout HEAD -- functions/security/push-notification.js functions/security/push-preferences.js' EXIT
+          git show "$base:functions/security/push-notification.js" > functions/security/push-notification.js
+          git show "$base:functions/security/push-preferences.js" > functions/security/push-preferences.js
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config .notification-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='^(NOTIFREGRESSION:|PUSHREGRESSION:)' functions/test/notification-rules.integration.test.cjs functions/test/push-registration.integration.test.cjs" \
+            > notification-baseline-results.log 2>&1
+          result=$?
+          set -e
+          git checkout HEAD -- functions/security/push-notification.js functions/security/push-preferences.js
+          trap - EXIT
+          cat notification-baseline-results.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs = require('node:fs');
+          const expected = [
+            'NOTIFREGRESSION: sender cannot create a cross-user notification',
+            'NOTIFREGRESSION: recipient cannot manufacture a self notification',
+            'NOTIFREGRESSION: a listed actor cannot rewrite a notification',
+            'NOTIFREGRESSION: recipient cannot edit server-owned notification fields',
+            'NOTIFREGRESSION: recipient cannot reset an acknowledged notification',
+            "NOTIFREGRESSION: listed actors cannot dismiss someone else's notification",
+            'NOTIFREGRESSION: revoked recipient cannot read or acknowledge notifications',
+            'NOTIFREGRESSION: raw device token documents are server-only',
+            'PUSHREGRESSION: an unbound legacy token cannot receive a notification',
+            'PUSHREGRESSION: a binding without a session cannot receive a notification',
+            'PUSHREGRESSION: a noncanonical legacy token record is not delivery authority',
+            'PUSHREGRESSION: malformed cutoff cannot authorize device registration',
+            'PUSHREGRESSION: frozen accounts cannot register push devices',
+            'PUSHREGRESSION: malformed device revocation cannot be bypassed during registration',
+          ];
+          const log = fs.readFileSync('notification-baseline-results.log', 'utf8');
+          const failures = [...log.matchAll(/^not ok \d+ - (.+)$/gm)].map(m => m[1].trim());
+          if (process.env.BASELINE_EXIT !== '1' || failures.length !== expected.length ||
+              expected.some(name => !failures.includes(name)) || !/^# fail 14\s*$/m.test(log)) {
+            throw Error('Expected exactly fourteen named pre-fix failures, not an environment failure.');
+          }
+          console.log('All fourteen notification and push regressions reproduced.');
+          NODE
+      - name: Verify candidate rules production handlers and source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          for file in functions/security/push-{session-policy,notification,preferences}.js functions/security/create-comment.js; do
+            node --check "$file"
+          done
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/notification-*.test.cjs functions/test/push-*.test.cjs functions/test/profile-write-contract.integration.test.cjs" \
+            2>&1 | tee notification-current-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notification-security-evidence
+          path: |
+            notification-baseline-results.log
+            notification-current-results.log
+          retention-days: 7
