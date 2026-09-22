@@ -548,6 +548,7 @@ async function deleteKnownEphemeralDocs(db, uid) {
   const names = [
     'communityReportLimits',
     'communityReportStatusLimits',
+    'accountStateControls', // Server lifecycle metadata follows account deletion.
     'usernameCheckLimits',
     'contentSearchLimits',
     'contentFeedLimits',

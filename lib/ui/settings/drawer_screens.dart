@@ -1,3 +1,4 @@
+import 'account_state_service.dart';
 import 'push_preferences_service.dart';
 import '../auth/account_recovery_screen.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -3223,17 +3224,16 @@ class _FreezeAccountPageState extends State<_FreezeAccountPage> {
   }
 
   Future<void> _toggle() async {
+    final expectedUid = FirebaseAuth.instance.currentUser?.uid;
+    if (expectedUid == null) return;
     if (!await _secReauthWithPassword(context)) return;
+    if (!mounted || FirebaseAuth.instance.currentUser?.uid != expectedUid) return;
     setState(() => _busy = true);
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final next = !_frozen;
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'security': {
-          'frozen': next,
-          'frozenAt': next ? FieldValue.serverTimestamp() : null,
-        },
-      }, SetOptions(merge: true));
+      await AccountStateService.change(uid, next ? 'freeze' : 'unfreeze');
+      if (FirebaseAuth.instance.currentUser?.uid != uid) return;
       if (!mounted) return;
       setState(() => _frozen = next);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3298,6 +3298,8 @@ class _DeleteAccountPageState extends State<_DeleteAccountPage> {
   }
 
   Future<void> _delete() async {
+    final expectedUid = FirebaseAuth.instance.currentUser?.uid;
+    if (expectedUid == null) return;
     if (_confirm.text.trim() != 'حذف') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('اكتب حذف للتأكيد')),
@@ -3305,18 +3307,13 @@ class _DeleteAccountPageState extends State<_DeleteAccountPage> {
       return;
     }
     if (!await _secReauthWithPassword(context)) return;
+    if (!mounted || FirebaseAuth.instance.currentUser?.uid != expectedUid) return;
     setState(() => _busy = true);
     try {
       final user = FirebaseAuth.instance.currentUser!;
       final uid = user.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'security': {
-          'deletedAt': FieldValue.serverTimestamp(),
-        },
-        'isDeleted': true,
-      }, SetOptions(merge: true));
-      await _revokeOtherSessions();
-      await user.delete();
+      await AccountStateService.requestDeletion(uid);
+      if (FirebaseAuth.instance.currentUser != null) return;
       if (!mounted) return;
       Navigator.of(context).popUntil((r) => r.isFirst);
     } on FirebaseAuthException catch (e) {
@@ -3380,12 +3377,8 @@ class FrozenAccountScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'security': {
-          'frozen': false,
-          'frozenAt': null,
-        },
-      }, SetOptions(merge: true));
+      await AccountStateService.change(user.uid, 'unfreeze');
+      if (!context.mounted || FirebaseAuth.instance.currentUser?.uid != user.uid) return;
       onUnfrozen();
     } catch (_) {
       if (!context.mounted) return;

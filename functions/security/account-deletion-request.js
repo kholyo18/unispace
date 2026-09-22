@@ -1,4 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https');
+const { validCutoff } = require('./account-state-policy');
 
 const DELETE_WITHIN_DAYS = 30;
 const DELETE_WINDOW_MS = DELETE_WITHIN_DAYS * 24 * 60 * 60 * 1000;
@@ -21,7 +22,8 @@ function createAccountDeletionRequestHandler({
 
     const data = request.data;
     if (!data || typeof data !== 'object' || Array.isArray(data) ||
-        data.confirm !== true || Object.keys(data).some((key) => key !== 'confirm')) {
+        data.confirm !== true || Object.keys(data).some((key) => !['confirm', 'expectedUid'].includes(key)) ||
+        (Object.hasOwn(data, 'expectedUid') && (typeof data.expectedUid !== 'string' || !data.expectedUid.length))) {
       throw new HttpsError('invalid-argument', 'Explicit confirmation is required.');
     }
 
@@ -36,16 +38,25 @@ function createAccountDeletionRequestHandler({
     } catch (_) {
       throw new HttpsError('unauthenticated', 'Sign in again.');
     }
-    if (token.uid !== uid || !Number.isFinite(token.auth_time)) {
+    if (token.uid !== uid || !Number.isSafeInteger(token.auth_time) || token.auth_time <= 0 || token.firebase?.tenant) {
       throw new HttpsError('unauthenticated', 'Invalid credential.');
     }
 
+    // Optional for older clients; current clients bind confirmation to the
+    // expected account even if the SDK changes credentials during an await.
+    if (Object.hasOwn(data, 'expectedUid') && data.expectedUid !== uid) {
+      throw new HttpsError('unauthenticated', 'Account changed.');
+    }
     const requestRef = db.collection('account_deletion_requests').doc(uid);
     const userRef = db.collection('users').doc(uid);
     const deleteBy = Timestamp.fromMillis(now() + DELETE_WINDOW_MS);
     let alreadyRequested = false;
 
     await db.runTransaction(async (tx) => {
+      const cutoff = await tx.get(db.collection('authRevocations').doc(uid));
+      if (!validCutoff(cutoff, token.auth_time)) {
+        throw new HttpsError('unauthenticated', 'Session revoked.');
+      }
       const existing = await tx.get(requestRef);
       if (existing.exists && existing.data()?.status === 'pending') {
         alreadyRequested = true;

@@ -13,13 +13,18 @@ exports.pushOnNotification = onDocumentCreated(
   event => createPushNotificationHandler({db:getFirestore(),auth:getAuth(),messaging:getMessaging()})(event),
 );
 // Keep session security in the configured CommonJS entry point.
-const { onCall } = require('firebase-functions/v2/https');
+// Sign-out, own deletion, token detach and session display bootstrap stay
+// available through their own verified-token handlers during suspension.
+const { onCall: lifecycleExemptOnCall } = require('firebase-functions/v2/https');
+const { createAccountAccessGuard } = require('./security/account-access-guard');
+const accountAccessGuard = createAccountAccessGuard({ db: getFirestore() });
+const onCall = (options, handler) => lifecycleExemptOnCall(options, accountAccessGuard(handler));
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { getAuth } = require('firebase-admin/auth');
 const { FieldValue } = require('firebase-admin/firestore');
 const { createRevokeAllSessionsHandler } = require('./security/revoke-all-sessions');
 
-exports.revokeAllUserSessions = onCall(
+exports.revokeAllUserSessions = lifecycleExemptOnCall(
   { region: 'europe-west1' },
   createRevokeAllSessionsHandler({ auth: getAuth(), db: getFirestore(), FieldValue }),
 );
@@ -120,7 +125,7 @@ const { createSyncPushDeviceHandler } = require('./security/push-preferences');
 exports.syncPushDevice = onCall({region:'europe-west1'},
   createSyncPushDeviceHandler({auth:getAuth(),db:getFirestore(),FieldValue}));
 
-exports.detachPushDevice = onCall({region:'europe-west1'},
+exports.detachPushDevice = lifecycleExemptOnCall({region:'europe-west1'},
   createSyncPushDeviceHandler({auth:getAuth(),db:getFirestore(),FieldValue},true));
 
 const { createPollAnswerHandler } = require('./security/poll-answers');
@@ -204,7 +209,7 @@ exports.completeSignupProfile = onCall({region:'europe-west1',timeoutSeconds:60}
   createCompleteSignupHandler({auth:getAuth(),db:getFirestore(),bucketName:()=>commentMediaBucket.value()}));
 
 const { createSessionBootstrapHandler } = require('./security/session-bootstrap');
-exports.markCurrentSession = onCall({region:'europe-west1',timeoutSeconds:60},
+exports.markCurrentSession = lifecycleExemptOnCall({region:'europe-west1',timeoutSeconds:60},
   createSessionBootstrapHandler({auth:getAuth(),db:getFirestore()}));
 
 const { createAccountDeletionRequestHandler } = require('./security/account-deletion-request');
@@ -219,7 +224,7 @@ const accountDeletionRequestHandler = createAccountDeletionRequestHandler({
     FieldValue,
   }),
 });
-exports.requestAccountDeletion = onCall(
+exports.requestAccountDeletion = lifecycleExemptOnCall(
   { region: 'europe-west1', timeoutSeconds: 60 },
   accountDeletionRequestHandler,
 );
@@ -242,3 +247,10 @@ exports.processAccountDeletions = onSchedule(
     Timestamp,
   }),
 );
+
+// Account lifecycle: self-service state cannot clear administrative restrictions.
+const { createAccountStateHandlers } = require('./security/account-state');
+const accountStateHandlers = createAccountStateHandlers({ auth: getAuth(), db: getFirestore(), FieldValue });
+exports.setOwnAccountState = onCall({ region: 'europe-west1', timeoutSeconds: 60 }, accountStateHandlers.own);
+exports.setAdministrativeAccountRestriction = onCall(
+  { region: 'europe-west1', timeoutSeconds: 60 }, accountStateHandlers.administrative);

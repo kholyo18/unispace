@@ -15,11 +15,21 @@ service cloud.firestore {
     }
 
     // Shared server-owned revocation cutoff for profiles, chats and relationships.
-    function activeSession() {
+    function authenticatedSession() {
       return request.auth != null
         && (!exists(/databases/$(database)/documents/authRevocations/$(request.auth.uid))
           || request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore);
     }
+    // Separate application suspension from the user's voluntary freeze state.
+    // A newly authenticated suspended owner may inspect their own status, but
+    // cannot use protected social writes or clear the administrative record.
+    function activeSession() {
+      return authenticatedSession()
+        && (!exists(/databases/$(database)/documents/accountStateControls/$(request.auth.uid))
+          || (get(/databases/$(database)/documents/accountStateControls/$(request.auth.uid)).data.schemaVersion == 1
+            && get(/databases/$(database)/documents/accountStateControls/$(request.auth.uid)).data.adminSuspended == false));
+    }
+    match /accountStateControls/{userId} { allow read, write: if false; }
     function isCurrentChatMember(chatId) {
       return activeSession()
         && request.auth.uid in
@@ -69,7 +79,7 @@ service cloud.firestore {
         'university','faculty','college','level','academic','department','major','studyLevel','section','work','phone','otherInfo',
         'mood','github','linkedin','portfolio','profileImageUrl','coverImageUrl','updatedAt',
         'privacy','profileVisibility','showEmailInProfile','isOnline','lastSeenAt',
-        'accountStatus','disabledAt','reactivatedAt','deletedAt','isDeleted','security'
+        'security'
       ]) && editableSecurityChange() && editableAcademicChange();
     }
     function editableAcademicChange() {
@@ -87,7 +97,7 @@ service cloud.firestore {
           && request.resource.data.get('security', {}).diff(resource.data.get('security', {}))
             .affectedKeys().hasOnly([
               'loginAlerts','loginAlertsEmail','mfaEnabled','backupCodes',
-              'compromisedAt','sessionsRevokedAt','frozen','frozenAt','deletedAt','lastLoginAlert'
+              'compromisedAt','sessionsRevokedAt','lastLoginAlert'
             ])
           // Legacy clients only clear this obsolete field; never store recovery codes here.
           && (!request.resource.data.get('security', {}).diff(resource.data.get('security', {}))
@@ -97,7 +107,7 @@ service cloud.firestore {
     match /users/{userId} {
       // Raw documents contain private fields. Other-profile readers must use
       // readPublicProfile/searchPeople/readFollowList, never direct user queries.
-      allow get: if activeProfileOwner(userId);
+      allow get: if authenticatedSession() && request.auth.uid == userId;
       allow list: if false;
       allow update: if activeProfileOwner(userId) && editableProfileChange();
       // Signup and permanent deletion must complete through server-owned lifecycle paths.
@@ -176,24 +186,20 @@ service cloud.firestore {
         allow delete: if false;
       }
       match /saved_posts/{postId} {
-        allow read, write: if request.auth != null
-                            && request.auth.uid == userId;
+        allow read, write: if activeProfileOwner(userId);
       }
       match /saved_comments/{commentId} {
-        allow read, write: if request.auth != null
-                            && request.auth.uid == userId;
+        allow read, write: if activeProfileOwner(userId);
       }
       match /authored_comments/{commentId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null && request.auth.uid == userId;
+        allow read: if activeSession();
+        allow write: if activeProfileOwner(userId);
       }
       match /hidden_posts/{postId} {
-        allow read, write: if request.auth != null
-                            && request.auth.uid == userId;
+        allow read, write: if activeProfileOwner(userId);
       }
       match /hidden_comments/{commentId} {
-        allow read, write: if request.auth != null
-                            && request.auth.uid == userId;
+        allow read, write: if activeProfileOwner(userId);
       }
       match /blocked_accounts/{blockedId} {
         allow get: if activeSession()

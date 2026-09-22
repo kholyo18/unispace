@@ -1,3 +1,4 @@
+import 'ui/settings/account_state_service.dart';
 import 'services/post_media_links.dart';
 import 'services/authorized_post_image.dart';
 import 'services/media_upload_limits.dart';
@@ -4085,15 +4086,8 @@ class _ReactivateAccountScreenState extends State<ReactivateAccountScreen> {
 
     setState(() => _busy = true);
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'accountStatus': 'active',
-        'reactivatedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'security': {
-          'frozen': false,
-          'frozenAt': null,
-        },
-      }, SetOptions(merge: true));
+      await AccountStateService.change(user.uid, 'reactivate');
+      if (FirebaseAuth.instance.currentUser?.uid != user.uid) return;
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -39233,6 +39227,8 @@ class AccountSettingsScreen extends StatelessWidget {
   const AccountSettingsScreen({super.key});
 
   Future<void> _deactivateAccount(BuildContext context) async {
+    final expectedUid = FirebaseAuth.instance.currentUser?.uid;
+    if (expectedUid == null) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -39255,14 +39251,11 @@ class AccountSettingsScreen extends StatelessWidget {
     if (ok != true || !context.mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null || user.uid != expectedUid) return;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'accountStatus': 'disabled',
-        'disabledAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await AccountStateService.change(user.uid, 'deactivate');
+      if (FirebaseAuth.instance.currentUser?.uid != user.uid) return;
 
       if (!context.mounted) return;
       Navigator.of(context).popUntil((r) => r.isFirst);
@@ -39277,15 +39270,8 @@ class AccountSettingsScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'accountStatus': 'active',
-        'reactivatedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'security': {
-          'frozen': false,
-          'frozenAt': null,
-        },
-      }, SetOptions(merge: true));
+      await AccountStateService.change(user.uid, 'reactivate');
+      if (FirebaseAuth.instance.currentUser?.uid != user.uid) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم إعادة تفعيل الحساب')),
@@ -39307,7 +39293,7 @@ class AccountSettingsScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('حذف الحساب نهائياً'),
         content: const Text(
-          'سيتم حذف حسابك من التطبيق. المنشورات القديمة قد تبقى إلى أن تُنظَّف لاحقاً من الخادم.\n\n'
+          'سيتم تسجيل طلب حذف الحساب وإزالة بياناته التشغيلية خلال مدة تصل إلى 30 يومًا.\n\n'
               'لا يمكن التراجع عن هذا الإجراء.',
         ),
         actions: [
@@ -39354,26 +39340,9 @@ class AccountSettingsScreen extends StatelessWidget {
         );
       }
 
-      // 2) حذف Auth أولاً — هذا يحرّر الإيميل
-      // لا تستخدم ?. حتى لا يُتخطى الحذف بصمت
-      await current.delete();
-
-      // 3) بعد نجاح الحذف فقط: تنظيف اختياري لـ Firestore
-      // قد يفشل لأن المستخدم لم يعد مصادقاً — هذا مقبول
-      try {
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'accountStatus': 'deleted',
-          'deletedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      } catch (e) {
-        debugPrint('Firestore cleanup after auth delete (optional): $e');
-      }
-
-      // 4) خروج محلي (Auth غالباً أصبح null بعد delete)
-      try {
-        await AuthSessionService.signOutFully();
-      } catch (_) {}
+      // Record the durable cleanup request before server-owned Auth deletion.
+      await AccountStateService.requestDeletion(uid);
+      if (FirebaseAuth.instance.currentUser != null) return;
 
       if (!context.mounted) return;
       Navigator.of(context).pop(); // إغلاق التحميل

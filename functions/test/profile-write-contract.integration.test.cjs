@@ -1,8 +1,7 @@
-// Verify existing profile protections without claiming that voluntary account
-// state fields are server-owned administrative sanctions. Lifecycle migration is deferred.
+// Profile edits stay compatible; voluntary lifecycle writes now use the server.
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { db, Timestamp, fixture, patch, denied, allowed, close } = require('./helpers/notification-fixture.cjs');
+const { db, auth, FieldValue, callableRequest, fixture, patch, denied, allowed, close } = require('./helpers/notification-fixture.cjs');
 after(close);
 test('client cannot add server identity roles counts or onboarding fields', async () => {
   const f = await fixture(), path = `users/${f.owner.uid}`;
@@ -44,9 +43,11 @@ test('revoked owners cannot change otherwise editable profile fields', async () 
   await db.doc(`authRevocations/${f.owner.uid}`).set({ revokedBefore: f.owner.authTime });
   denied(await patch(path, f.owner, { displayName: 'Not allowed' }));
 });
-test('voluntary deactivate and reactivate remain compatible pending separate lifecycle migration', async () => {
-  const f = await fixture(), path = `users/${f.owner.uid}`, now = Timestamp.now();
-  allowed(await patch(path, f.owner, { accountStatus: 'disabled', disabledAt: now, updatedAt: now }));
-  allowed(await patch(path, f.owner, { accountStatus: 'active', reactivatedAt: now, updatedAt: now,
-    security: { frozen: false, frozenAt: null } }));
+test('voluntary deactivate and reactivate remain compatible through the lifecycle service', async () => {
+  const f = await fixture(), path = `users/${f.owner.uid}`;
+  const { own } = require('../security/account-state').createAccountStateHandlers({ auth, db, FieldValue });
+  await own(callableRequest(f.owner, { expectedUid: f.owner.uid, action: 'deactivate' }));
+  assert.equal((await db.doc(path).get()).data().accountStatus, 'disabled');
+  await own(callableRequest(f.owner, { expectedUid: f.owner.uid, action: 'reactivate' }));
+  assert.equal((await db.doc(path).get()).data().accountStatus, 'active');
 });
