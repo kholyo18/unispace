@@ -50,7 +50,9 @@ void main() {
     expect(find.textContaining('نسخة للمراجعة'), findsNothing);
     expect(find.textContaining('غير نافذة'), findsNothing);
     expect(find.textContaining('تتوفر أدوات للإبلاغ'), findsOneWidget);
-    expect(find.textContaining('الحسابات المحظورة'), findsOneWidget);
+    // The unchanged approved copy uses the contracted Arabic phrase below.
+    // Assert the full phrase rather than a spelling that is not a substring.
+    expect(find.textContaining('إدارة للحسابات المحظورة'), findsOneWidget);
 
     final last = find.byKey(const ValueKey('community-heading-12'));
     await tester.ensureVisible(last);
