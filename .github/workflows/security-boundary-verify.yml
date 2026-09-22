@@ -58,3 +58,28 @@ jobs:
             --project demo-unispace-security \
             --config firebase.security-test.json \
             "node --test --test-concurrency=1 functions/test/chat-rules.integration.test.cjs functions/test/public-profile.test.cjs"
+      - name: Inventory dependency advisories (not a clean-security verdict)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { spawnSync } = require('node:child_process');
+          for (const scope of ['all', 'runtime']) {
+            const args = ['audit', '--prefix', 'functions', '--json'];
+            if (scope === 'runtime') args.push('--omit=dev');
+            const run = spawnSync('npm', args, { encoding: 'utf8', timeout: 120000 });
+            if (run.error || ![0, 1].includes(run.status)) {
+              throw new Error(`Dependency inventory failed for ${scope}; exit=${run.status}`);
+            }
+            const report = JSON.parse(run.stdout);
+            if (report.error || !report.metadata?.vulnerabilities || !report.vulnerabilities) {
+              throw new Error(`Incomplete dependency inventory for ${scope}`);
+            }
+            console.log(JSON.stringify({ scope, auditExitStatus: run.status,
+              summary: report.metadata.vulnerabilities,
+              advisories: Object.values(report.vulnerabilities).map(v => ({
+                name: v.name, severity: v.severity, isDirect: v.isDirect,
+                range: v.range, fixAvailable: v.fixAvailable, via: v.via,
+              })) }, null, 2));
+          }
+          NODE
