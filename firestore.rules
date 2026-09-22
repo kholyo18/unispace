@@ -14,29 +14,29 @@ service cloud.firestore {
         ];
     }
 
-    // Apply the same server-owned revocation cutoff used by profile updates.
-    function activeChatSession() {
+    // Shared server-owned revocation cutoff for profiles, chats and relationships.
+    function activeSession() {
       return request.auth != null
         && (!exists(/databases/$(database)/documents/authRevocations/$(request.auth.uid))
           || request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore);
     }
     function isCurrentChatMember(chatId) {
-      return activeChatSession()
+      return activeSession()
         && request.auth.uid in
           get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
     }
 
     match /chats/{chatId} {
-      allow get: if activeChatSession() && (
+      allow get: if activeSession() && (
         resource == null
         || request.auth.uid in resource.data.memberIds
       );
-      allow list: if activeChatSession()
+      allow list: if activeSession()
         && request.auth.uid in resource.data.memberIds;
-      allow create: if activeChatSession()
+      allow create: if activeSession()
         && request.auth.uid in request.resource.data.memberIds
         && request.resource.data.memberIds.size() == 2;
-      allow update: if activeChatSession()
+      allow update: if activeSession()
         && request.auth.uid in resource.data.memberIds
         && request.resource.data.memberIds == resource.data.memberIds;
       allow delete: if false;
@@ -60,9 +60,7 @@ service cloud.firestore {
     }
 
     function activeProfileOwner(userId) {
-      return request.auth != null && request.auth.uid == userId
-        && (!exists(/databases/$(database)/documents/authRevocations/$(userId))
-          || request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(userId)).data.revokedBefore);
+      return activeSession() && request.auth.uid == userId;
     }
     // Provisional allowlist: validate every editor/bootstrap path before deployment.
     function editableProfileChange() {
@@ -97,8 +95,9 @@ service cloud.firestore {
             || request.resource.data.get('security', {}).get('backupCodes', []) == []));
     }
     match /users/{userId} {
-      // Other-profile reads still require migration; unchanged in this candidate slice.
-      allow read: if request.auth != null;
+      // Active-session cutoff is enforced, but raw other-profile reads still
+      // require migration to authorized projections before production approval.
+      allow read: if activeSession();
       allow update: if activeProfileOwner(userId) && editableProfileChange();
       // Signup and permanent deletion must complete through server-owned lifecycle paths.
       allow create, delete: if false;
@@ -106,41 +105,73 @@ service cloud.firestore {
         allow read, write: if request.auth != null
                              && request.auth.uid == userId;
       }
+      // Accepted relationships are authorization evidence. Only manageFollow
+      // may create, modify or remove these records via the Admin SDK.
       match /follow_requests/{fromId} {
-        allow read: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == fromId
-        );
-        allow create: if request.auth != null && request.auth.uid == fromId;
-        allow update: if request.auth != null && request.auth.uid == userId;
-        allow delete: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == fromId
-        );
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == fromId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /following/{followedId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null
-          && (request.auth.uid == userId || request.auth.uid == followedId)
-          && !exists(/databases/$(database)/documents/users/$(userId)/blocked_accounts/$(followedId))
-          && !exists(/databases/$(database)/documents/users/$(followedId)/blocked_accounts/$(userId));
-        allow delete: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == followedId
-        );
-        allow update: if false;
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == followedId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /followers/{followerId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null
-          && (request.auth.uid == followerId || request.auth.uid == userId)
-          && !exists(/databases/$(database)/documents/users/$(userId)/blocked_accounts/$(followerId))
-          && !exists(/databases/$(database)/documents/users/$(followerId)/blocked_accounts/$(userId));
-        allow delete: if request.auth != null && (
-          request.auth.uid == followerId || request.auth.uid == userId
-        );
-        allow update: if false;
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == followerId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /sessions/{sessionId} {
-        allow read, write: if request.auth != null
-                            && request.auth.uid == userId;
+        function sessionFields() {
+          return ['sessionId','deviceId','alias','platform','model','manufacturer',
+            'osVersion','appVersion','buildNumber','locale','createdAt','lastSeenAt',
+            'updatedAt','isTrusted','isRevoked','revokedAt','revokeReason','networkType'];
+        }
+        function activeSessionRecord() {
+          let d = request.resource.data;
+          return d.sessionId == sessionId
+            && d.deviceId is string && d.deviceId.size() > 0
+            && d.alias is string && d.platform is string && d.model is string
+            && d.manufacturer is string && d.osVersion is string
+            && d.appVersion is string && d.buildNumber is string && d.locale is string
+            && d.createdAt is timestamp && d.lastSeenAt is timestamp && d.updatedAt is timestamp
+            && d.isTrusted is bool && d.isRevoked == false
+            && d.revokedAt == null && d.revokeReason == null
+            && (d.get('networkType', null) == null || d.networkType is string);
+        }
+        function activityOrInitialization() {
+          let d = request.resource.data;
+          // A legacy record may be initialized by the existing Flutter helper;
+          // its unknown fields are preserved, not freely edited or removed.
+          return resource.data.get('isRevoked', false) == false
+            && d.diff(resource.data).affectedKeys().hasOnly(sessionFields())
+            && activeSessionRecord()
+            && d.sessionId == resource.data.get('sessionId', sessionId)
+            && d.deviceId == resource.data.get('deviceId', d.deviceId)
+            && d.createdAt == resource.data.get('createdAt', d.createdAt);
+        }
+        function oneWayRevocation() {
+          let d = request.resource.data;
+          // This also handles malformed/legacy records and repeated revocation.
+          // Repeating it never permits activity, identity edits or reactivation.
+          return d.diff(resource.data).affectedKeys()
+              .hasOnly(['isRevoked','revokedAt','revokeReason','updatedAt'])
+            && d.isRevoked == true
+            && d.revokedAt == request.time && d.updatedAt == request.time
+            && d.revokeReason in ['manual','logout_all','logout_all_other'];
+        }
+        allow read: if activeProfileOwner(userId);
+        allow create: if activeProfileOwner(userId)
+          && request.resource.data.keys().hasOnly(sessionFields())
+          && activeSessionRecord() && request.resource.data.isTrusted == false;
+        allow update: if activeProfileOwner(userId)
+          && (activityOrInitialization() || oneWayRevocation());
+        // Deleting a tombstone would permit recreation of a revoked session ID.
+        allow delete: if false;
       }
       match /saved_posts/{postId} {
         allow read, write: if request.auth != null
@@ -163,16 +194,22 @@ service cloud.firestore {
                             && request.auth.uid == userId;
       }
       match /blocked_accounts/{blockedId} {
-        allow read: if request.auth != null
+        allow get: if activeSession()
           && (request.auth.uid == userId || request.auth.uid == blockedId);
-        allow write: if request.auth != null && request.auth.uid == userId;
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /blocked_by/{blockerId} {
-        allow read: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == blockerId
-        );
-        allow create, delete: if request.auth != null
-          && request.auth.uid == blockerId;
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == blockerId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
+      }
+      // Legacy block readers still exist in notifications and settings.
+      // Owners may inspect them; the server handles unblocking by target UID.
+      match /blocked_users/{blockedId} {
+        allow read: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /notifications/{notifId} {
         allow read: if request.auth != null && request.auth.uid == userId;

@@ -16,6 +16,8 @@ function projectProfile(data, { self, following }) {
     followingVisibility: audience(p.followingVisibility),
     whoCanComment: audience(p.whoCanComment),
     whoCanRepost: audience(p.whoCanRepost),
+    // Keep the default aligned with PrivacySettings and the chat client.
+    whoCanMessage: audience(p.whoCanMessage ?? 'mutual'),
   } };
   const copy = keys => { for (const key of keys) if (typeof data[key] === 'string') result[key] = data[key]; };
   copy(['firstName', 'lastName', 'displayName', 'username', 'profileImageUrl']);

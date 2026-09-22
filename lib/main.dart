@@ -40451,15 +40451,12 @@ class _BlockedAccountsSheetState extends State<_BlockedAccountsSheet> {
     if (confirmed != true) return;
 
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('blocked_accounts')
-          .doc(account.id)
-          .delete();
-      if (!mounted) return;
+      if (FirebaseAuth.instance.currentUser?.uid != uid) {
+        throw StateError('Account changed');
+      }
+      await unblockAccount(account.id);
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
       setState(() => _items.removeWhere((e) => e.id == account.id));
-      blockedListRevision.value++;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(content: Text('تم إلغاء حظر ${account.name}')),
       );

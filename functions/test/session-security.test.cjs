@@ -133,3 +133,98 @@ test('server revokes only the authenticated user, including more than one batch'
   await assert.rejects(handler(callableRequest('server-user')),e=>e.code==='unauthenticated');
   assert.deepEqual(calls,['server-user']);
 });
+
+// Regression/compatibility coverage added after the full-backend audit exposed
+// three failures in the inherited session policy. All writes target the emulator.
+test('session metadata and trusted-device preferences remain editable',async()=>{
+  const path='users/metadata-owner/sessions/device';
+  await status(await commit(path,session('device'),{uid:'metadata-owner'}),200);
+  await status(await commit(path,{alias:'Renamed phone',isTrusted:true,model:'Updated model',
+    osVersion:'17',appVersion:'2',buildNumber:'2',locale:'fr',networkType:'wifi'},
+    {uid:'metadata-owner',patch:true,timestamps:['lastSeenAt','updatedAt']}),200);
+});
+test('session heartbeat cannot create a missing record',async()=>{
+  await status(await commit('users/missing-owner/sessions/missing',{},
+    {uid:'missing-owner',patch:true,timestamps:['lastSeenAt','updatedAt']}),403);
+});
+test('session identity and original creation time are immutable',async()=>{
+  const path='users/immutable-owner/sessions/device';
+  await status(await commit(path,session('device'),{uid:'immutable-owner'}),200);
+  for(const change of [{sessionId:'other'},{deviceId:'other'},{createdAt:new Date()}]) {
+    await status(await commit(path,change,{uid:'immutable-owner',patch:true}),403);
+  }
+});
+test('initialization without optional networkType matches the Flutter writer',async()=>{
+  const record=session('new');delete record.networkType;
+  await status(await commit('users/flutter-owner/sessions/new',record,{uid:'flutter-owner'}),200);
+});
+test('legacy initialization preserves legacy fields without granting arbitrary edits',async()=>{
+  const path='users/legacy-init/sessions/old';
+  await db.doc(path).set({deviceName:'Legacy name',platform:'android',legacyValue:'unchanged'});
+  const record=session('old');delete record.networkType;
+  await status(await commit(path,record,{uid:'legacy-init',patch:true}),200);
+  assert.equal((await db.doc(path).get()).data().legacyValue,'unchanged');
+  await status(await commit(path,{legacyValue:'forged'},{uid:'legacy-init',patch:true}),403);
+  await status(await commit(path,{alias:'New alias'},{uid:'legacy-init',patch:true}),200);
+});
+test('unknown session fields and malformed metadata are denied',async()=>{
+  const path='users/schema-owner/sessions/device';
+  await status(await commit(path,{...session('device'),admin:true},{uid:'schema-owner'}),403);
+  await status(await commit(path,{...session('device'),sessionId:'wrong'},{uid:'schema-owner'}),403);
+  await status(await commit(path,{...session('device'),isTrusted:true},{uid:'schema-owner'}),403);
+  await status(await commit(path,session('device'),{uid:'schema-owner'}),200);
+  for(const change of [{admin:true},{alias:42},{isTrusted:'true'},{lastSeenAt:'invalid'},
+    {isRevoked:'false'},{revokedAt:new Date()},{revokeReason:'forged'}]) {
+    await status(await commit(path,change,{uid:'schema-owner',patch:true}),403);
+  }
+});
+test('all current Flutter revocation reasons are allowed with server timestamps',async()=>{
+  for(const reason of ['manual','logout_all','logout_all_other']) {
+    const path=`users/reasons-owner/sessions/${reason}`;
+    await status(await commit(path,session(reason),{uid:'reasons-owner'}),200);
+    await status(await commit(path,{isRevoked:true,revokeReason:reason},
+      {uid:'reasons-owner',patch:true,timestamps:['revokedAt','updatedAt']}),200);
+  }
+});
+test('forged revocation timestamps and reasons are denied',async()=>{
+  const path='users/revocation-owner/sessions/device';
+  await status(await commit(path,session('device'),{uid:'revocation-owner'}),200);
+  await status(await commit(path,{isRevoked:true,revokeReason:'manual',revokedAt:new Date(0),updatedAt:new Date(0)},
+    {uid:'revocation-owner',patch:true}),403);
+  await status(await commit(path,{isRevoked:true,revokeReason:'unexpected'},
+    {uid:'revocation-owner',patch:true,timestamps:['revokedAt','updatedAt']}),403);
+});
+test('repeat revocation works without allowing revoked-record edits or resurrection',async()=>{
+  const path='users/repeat-owner/sessions/device';
+  await status(await commit(path,session('device'),{uid:'repeat-owner'}),200);
+  for(let i=0;i<2;i++)await status(await commit(path,{isRevoked:true,revokeReason:'manual'},
+    {uid:'repeat-owner',patch:true,timestamps:['revokedAt','updatedAt']}),200);
+  await status(await commit(path,{alias:'not allowed'}, {uid:'repeat-owner',patch:true}),403);
+  await status(await commit(path,{}, {uid:'repeat-owner',patch:true,timestamps:['lastSeenAt','updatedAt']}),403);
+  await status(await commit(path,session('device'),{uid:'repeat-owner'}),403);
+  await status(await request('/'+path,{uid:'repeat-owner',method:'DELETE'}),403);
+});
+test('session documents cannot be deleted even before revocation',async()=>{
+  const path='users/no-delete-owner/sessions/device';
+  await status(await commit(path,session('device'),{uid:'no-delete-owner'}),200);
+  await status(await request('/'+path,{uid:'no-delete-owner',method:'DELETE'}),403);
+});
+test('active-session and full-session queries remain owner-scoped',async()=>{
+  const path='users/list-owner/sessions/device';
+  await status(await commit(path,session('device'),{uid:'list-owner'}),200);
+  await status(await request('/users/list-owner/sessions',{uid:'list-owner'}),200);
+  await status(await request('/users/list-owner/sessions',{uid:'stranger'}),403);
+  const body={structuredQuery:{from:[{collectionId:'sessions'}],where:{fieldFilter:{
+    field:{fieldPath:'isRevoked'},op:'EQUAL',value:{booleanValue:false},
+  }},orderBy:[{field:{fieldPath:'lastSeenAt'},direction:'DESCENDING'}]}};
+  await status(await request('/users/list-owner:runQuery',{uid:'list-owner',method:'POST',body}),200);
+  await status(await request('/users/list-owner:runQuery',{uid:'stranger',method:'POST',body}),403);
+});
+test('malformed server cutoff denies profile and session reads',async()=>{
+  const uid='malformed-cutoff-owner',path=`users/${uid}/sessions/device`;
+  await db.doc(`users/${uid}`).set({displayName:'Owner'});
+  await db.doc(path).set(session('device'));
+  await db.doc(`authRevocations/${uid}`).set({revokedBefore:'invalid'});
+  await status(await request(`/users/${uid}`,{uid}),403);
+  await status(await request('/'+path,{uid}),403);
+});
