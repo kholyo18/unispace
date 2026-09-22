@@ -1,0 +1,63 @@
+name: Split offline test runtime
+on:
+  push:
+    branches: ['audit/stage7-offline-verification-20260922']
+    paths: ['.github/workflows/offline-runtime-chunks.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  split-tools:
+    if: github.repository == 'kholyo18/unispace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download the already verified tool artifact from this repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download 35788221922 --repo kholyo18/unispace --name offline-flutter-runtime --dir "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          sha256sum -c SHA256SUMS.txt
+          mkdir -p "$RUNNER_TEMP/chunks" "$RUNNER_TEMP/tool-base"
+          split -b 300M flutter-sdk.tar.gz "$RUNNER_TEMP/chunks/sdk-part-"
+          cp node24.tar.gz pub-packages.tar.gz SHA256SUMS.txt *version.txt baseline-commit.txt "$RUNNER_TEMP/tool-base/"
+          cd "$RUNNER_TEMP/chunks"
+          sha256sum sdk-part-* > "$RUNNER_TEMP/tool-base/chunk-SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-runtime-base
+          path: ${{ runner.temp }}/tool-base/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-sdk-part-aa
+          path: ${{ runner.temp }}/chunks/sdk-part-aa
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-sdk-part-ab
+          path: ${{ runner.temp }}/chunks/sdk-part-ab
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-sdk-part-ac
+          path: ${{ runner.temp }}/chunks/sdk-part-ac
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-sdk-part-ad
+          path: ${{ runner.temp }}/chunks/sdk-part-ad
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: warn
