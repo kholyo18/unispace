@@ -14,29 +14,29 @@ service cloud.firestore {
         ];
     }
 
-    // Apply the same server-owned revocation cutoff used by profile updates.
-    function activeChatSession() {
+    // Shared server-owned revocation cutoff for profiles, chats and relationships.
+    function activeSession() {
       return request.auth != null
         && (!exists(/databases/$(database)/documents/authRevocations/$(request.auth.uid))
           || request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore);
     }
     function isCurrentChatMember(chatId) {
-      return activeChatSession()
+      return activeSession()
         && request.auth.uid in
           get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
     }
 
     match /chats/{chatId} {
-      allow get: if activeChatSession() && (
+      allow get: if activeSession() && (
         resource == null
         || request.auth.uid in resource.data.memberIds
       );
-      allow list: if activeChatSession()
+      allow list: if activeSession()
         && request.auth.uid in resource.data.memberIds;
-      allow create: if activeChatSession()
+      allow create: if activeSession()
         && request.auth.uid in request.resource.data.memberIds
         && request.resource.data.memberIds.size() == 2;
-      allow update: if activeChatSession()
+      allow update: if activeSession()
         && request.auth.uid in resource.data.memberIds
         && request.resource.data.memberIds == resource.data.memberIds;
       allow delete: if false;
@@ -60,9 +60,7 @@ service cloud.firestore {
     }
 
     function activeProfileOwner(userId) {
-      return request.auth != null && request.auth.uid == userId
-        && (!exists(/databases/$(database)/documents/authRevocations/$(userId))
-          || request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(userId)).data.revokedBefore);
+      return activeSession() && request.auth.uid == userId;
     }
     // Provisional allowlist: validate every editor/bootstrap path before deployment.
     function editableProfileChange() {
@@ -106,37 +104,25 @@ service cloud.firestore {
         allow read, write: if request.auth != null
                              && request.auth.uid == userId;
       }
+      // Accepted relationships are authorization evidence. Only manageFollow
+      // may create, modify or remove these records via the Admin SDK.
       match /follow_requests/{fromId} {
-        allow read: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == fromId
-        );
-        allow create: if request.auth != null && request.auth.uid == fromId;
-        allow update: if request.auth != null && request.auth.uid == userId;
-        allow delete: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == fromId
-        );
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == fromId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /following/{followedId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null
-          && (request.auth.uid == userId || request.auth.uid == followedId)
-          && !exists(/databases/$(database)/documents/users/$(userId)/blocked_accounts/$(followedId))
-          && !exists(/databases/$(database)/documents/users/$(followedId)/blocked_accounts/$(userId));
-        allow delete: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == followedId
-        );
-        allow update: if false;
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == followedId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /followers/{followerId} {
-        allow read: if request.auth != null;
-        allow create: if request.auth != null
-          && (request.auth.uid == followerId || request.auth.uid == userId)
-          && !exists(/databases/$(database)/documents/users/$(userId)/blocked_accounts/$(followerId))
-          && !exists(/databases/$(database)/documents/users/$(followerId)/blocked_accounts/$(userId));
-        allow delete: if request.auth != null && (
-          request.auth.uid == followerId || request.auth.uid == userId
-        );
-        allow update: if false;
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == followerId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /sessions/{sessionId} {
         allow read, write: if request.auth != null
@@ -163,16 +149,22 @@ service cloud.firestore {
                             && request.auth.uid == userId;
       }
       match /blocked_accounts/{blockedId} {
-        allow read: if request.auth != null
+        allow get: if activeSession()
           && (request.auth.uid == userId || request.auth.uid == blockedId);
-        allow write: if request.auth != null && request.auth.uid == userId;
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /blocked_by/{blockerId} {
-        allow read: if request.auth != null && (
-          request.auth.uid == userId || request.auth.uid == blockerId
-        );
-        allow create, delete: if request.auth != null
-          && request.auth.uid == blockerId;
+        allow get: if activeSession()
+          && (request.auth.uid == userId || request.auth.uid == blockerId);
+        allow list: if activeProfileOwner(userId);
+        allow write: if false;
+      }
+      // Legacy block readers still exist in notifications and settings.
+      // Owners may inspect them; the server handles unblocking by target UID.
+      match /blocked_users/{blockedId} {
+        allow read: if activeProfileOwner(userId);
+        allow write: if false;
       }
       match /notifications/{notifId} {
         allow read: if request.auth != null && request.auth.uid == userId;

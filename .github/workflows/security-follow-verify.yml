@@ -3,44 +3,124 @@ name: Follow authorization review
 on:
   push:
     branches: ['audit/security-follow-boundaries-20260922']
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', '.github/workflows/security-follow-verify.yml']
   pull_request:
-    paths:
-      - 'firestore.rules'
-      - 'security/rules-review/**'
-      - 'functions/security/**'
-      - 'functions/test/**'
-      - 'lib/**'
-      - '.github/workflows/security-follow-verify.yml'
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', '.github/workflows/security-follow-verify.yml']
 
 permissions:
   contents: read
 
 jobs:
-  source-inventory:
+  focused-security:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Record tracked source revision and relationship access sites
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Syntax and synchronized candidate checks
+        run: |
+          node --check functions/security/follow-relationships.js
+          node --check functions/security/profile-projection.js
+          node --check functions/test/follow-rules.integration.test.cjs
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+      - name: Prove seven regressions against the immutable pre-fix rules
         shell: bash
         run: |
           set -euo pipefail
-          git rev-parse HEAD
-          git status --porcelain
-          git ls-files '*AGENTS.md' '*CLAUDE.md'
-          git grep -n -E "followers|following|follow_requests|blocked_accounts|blocked_by|blocked_users|manageFollow|readPublicProfile" -- lib > relationship-access-sites.txt
-          wc -l relationship-access-sites.txt
-          cat relationship-access-sites.txt
-          git archive --format=zip --output=source-review.zip HEAD \
-            lib test functions security scripts firestore.rules firebase.json \
-            firebase.security-test.json pubspec.yaml pubspec.lock README.md .github
+          git show 62e74ee86641ea1c80c41c384aa301a286a65913:firestore.rules > .security-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.security-test.json'));c.firestore.rules='.security-baseline.rules';fs.writeFileSync('.security-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config .security-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='REGRESSION:' functions/test/follow-rules.integration.test.cjs" > baseline-results.log 2>&1
+          result=$?
+          set -e
+          cat baseline-results.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs = require('node:fs');
+          const log = fs.readFileSync('baseline-results.log', 'utf8');
+          const expected = [
+            'direct follower injection is denied',
+            'unrelated users cannot read relationship metadata',
+            'revoked sessions cannot inspect relationships',
+            'direct block deletion is denied',
+            'owner can read legacy block records',
+            'direct relationship deletion is denied',
+            'pending requests must use the callable',
+          ];
+          const failed = [...log.matchAll(/^not ok \d+ - REGRESSION: (.+)$/gm)].map(m => m[1].trim());
+          if (process.env.BASELINE_EXIT !== '1' || failed.length !== expected.length ||
+              expected.some(name => !failed.includes(name)) || !/^# fail 7\s*$/m.test(log)) {
+            throw new Error('Baseline did not reproduce exactly the seven expected rule failures.');
+          }
+          console.log('Confirmed: all seven regressions are detected in the pre-fix rules.');
+          NODE
+      - name: Run affected security and client-contract tests with current rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/follow-rules.integration.test.cjs functions/test/follow-relationships.test.cjs functions/test/public-profile.test.cjs functions/test/profile-projection.unit.test.cjs functions/test/profile-messaging.unit.test.cjs functions/test/chat-rules.integration.test.cjs functions/test/follow-client-contract.test.cjs" \
+            2>&1 | tee focused-results.log
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: follow-source-review
+          name: follow-security-evidence
           path: |
-            source-review.zip
-            relationship-access-sites.txt
-          retention-days: 1
-          if-no-files-found: error
+            baseline-results.log
+            focused-results.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  full-backend-survey:
+    # Failures stay visible. This is not a silently passing inventory step.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run every existing backend test file
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/*.test.cjs" \
+            2>&1 | tee backend-survey-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-survey-evidence
+          path: backend-survey-results.log
+          if-no-files-found: warn
+          retention-days: 7

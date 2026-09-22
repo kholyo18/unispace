@@ -37,7 +37,10 @@ function createFollowHandler({ auth, db, FieldValue }) {
         `users/${owner}/blocked_users/${from}`, `users/${from}/blocked_users/${owner}`,
         `users/${owner}/blocked_by/${from}`, `users/${from}/blocked_by/${owner}`];
       const [cutoff, ownerDoc, fromDoc, follower, following, pending, ...blocks] = await tx.getAll(...paths.map(p => db.doc(p)));
-      if (cutoff.exists && token.auth_time <= cutoff.data().revokedBefore) throw new HttpsError('unauthenticated', 'Session revoked.');
+      if (cutoff.exists && (!Number.isFinite(cutoff.data().revokedBefore)
+          || token.auth_time <= cutoff.data().revokedBefore)) {
+        throw new HttpsError('unauthenticated', 'Session revoked.');
+      }
       const unavailable = doc => !doc.exists || ['deleted','disabled'].includes(doc.data().accountStatus) || doc.data().security?.frozen === true;
       if (grants && (unavailable(ownerDoc) || unavailable(fromDoc) || blocks.some(b=>b.exists))) throw new HttpsError('permission-denied', 'Follow unavailable.');
       const person = (id, doc) => {
@@ -65,6 +68,8 @@ function createFollowHandler({ auth, db, FieldValue }) {
       }
       if (action === 'unblock') {
         tx.delete(db.doc(`users/${uid}/blocked_accounts/${userId}`));
+        // Clear only the caller-owned legacy record. Never remove the peer's block.
+        tx.delete(db.doc(`users/${uid}/blocked_users/${userId}`));
         tx.delete(db.doc(`users/${userId}/blocked_by/${uid}`));
         return {state:'none'};
       }
