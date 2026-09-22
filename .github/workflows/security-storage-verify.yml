@@ -53,6 +53,30 @@ jobs:
             throw Error('Expected exactly eight policy failures, not emulator/setup failures.');
           }
           NODE
+      - name: Reproduce four content-overwrite defects in the first stage-6 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 65139f004dfc10a5f12e02b03202fb21d02061ff:security/rules-review/storage.candidate.rules > .storage-overwrite-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.storage-security-test.json'));c.storage.rules='.storage-overwrite-baseline.rules';fs.writeFileSync('.storage-overwrite-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth,storage --project demo-unispace-security --config .storage-overwrite-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='^OVERWRITEREGRESSION:' functions/storage-test/storage-rules.test.cjs" > storage-overwrite-baseline-results.log 2>&1
+          result=$?
+          set -e
+          cat storage-overwrite-baseline-results.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs=require('node:fs');const log=fs.readFileSync('storage-overwrite-baseline-results.log','utf8');
+          const expected=['fresh grants cannot replace existing post image or video bytes',
+            'comment upload grants cannot replace existing comment bytes',
+            'chat grants cannot replace existing image video audio or file bytes',
+            'replacement of profile and wallpaper requires the explicit overwrite grant'];
+          const failed=[...log.matchAll(/^not ok \d+ - OVERWRITEREGRESSION: (.+)$/gm)].map(m=>m[1].trim());
+          if(process.env.BASELINE_EXIT!=='1'||failed.length!==4||expected.some(v=>!failed.includes(v))||!/^# fail 4\s*$/m.test(log)) {
+            throw Error('Expected exactly four overwrite failures, not emulator/setup failures.');
+          }
+          NODE
       - name: Validate grants and actual Storage client requests with current rules
         shell: bash
         run: |
@@ -70,6 +94,7 @@ jobs:
           path: |
             storage-baseline-results.log
             storage-current-results.log
+            storage-overwrite-baseline-results.log
             storage-debug.log
           if-no-files-found: warn
           retention-days: 7

@@ -23,6 +23,7 @@ async function upload(u,path,{grant=null,mime='image/jpeg',bytes=Buffer.from('ab
   'X-Goog-Upload-Protocol':'multipart','Content-Type':`multipart/related; boundary=${boundary}`},body,signal:AbortSignal.timeout(15000)}));
 }
 const get=(u,path,suffix='')=>fetch(base+'/'+encodeURIComponent(path)+suffix,{headers:headers(u),signal:AbortSignal.timeout(15000)}).then(response);
+const changeMetadata=(u,path,data)=>fetch(base+'/'+encodeURIComponent(path),{method:'PATCH',headers:{...headers(u),'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(15000)}).then(response);
 const erase=(u,path)=>fetch(base+'/'+encodeURIComponent(path),{method:'DELETE',headers:headers(u),signal:AbortSignal.timeout(15000)}).then(response);
 const denied=r=>assert.equal(r.status,403,JSON.stringify(r.data));
 const allowed=r=>assert.ok(r.status>=200&&r.status<300,JSON.stringify(r.data));
@@ -60,6 +61,8 @@ test('post images and videos accept exact server grants and remain immutable',as
  const f=await setup();for(const [folder,mime]of [['images','image/jpeg'],['videos','video/mp4']]){
   const path=`community_posts/${f.post}/${folder}/new.bin`,grant=await issue(f.owner,path,mime);
   allowed(await upload(f.owner,path,{grant,mime}));allowed(await get(f.owner,path));denied(await upload(f.owner,path,{grant,mime}));
+  denied(await upload(f.owner,path,{grant,mime,bytes:Buffer.from('xyz')}));
+  assert.equal((await get(f.owner,path,'?alt=media')).data,'abc');
  }
 });
 test('approved comment upload works for the caller but not for another UID',async()=>{
@@ -136,4 +139,47 @@ test('documented remaining boundary: a bearer download token is not revoked by S
  const f=await setup();const [metadata]=await bucket.file(f.chatPath).getMetadata();const token=metadata.metadata.firebaseStorageDownloadTokens;
  const result=await get(null,f.chatPath,'?alt=media&token='+encodeURIComponent(token));allowed(result);
  // This test records a release blocker, not a private-media security claim.
+});
+
+// Regression names also execute against the first stage-6 candidate. File contents
+// use Storage's create operation even when resource already exists.
+test('OVERWRITEREGRESSION: fresh grants cannot replace existing post image or video bytes',async()=>{
+ const f=await setup();for(const [folder,mime]of [['images','image/jpeg'],['videos','video/mp4']]){
+  const path=`community_posts/${f.post}/${folder}/fixed.bin`;
+  allowed(await upload(f.owner,path,{grant:await issue(f.owner,path,mime),mime}));
+  denied(await upload(f.owner,path,{grant:await issue(f.owner,path,mime),mime,bytes:Buffer.from('xyz')}));
+  assert.equal((await get(f.owner,path,'?alt=media')).data,'abc');
+ }
+});
+test('OVERWRITEREGRESSION: comment upload grants cannot replace existing comment bytes',async()=>{
+ const f=await setup(),path=`community_posts/${f.post}/comments/${f.actor.uid}/fixed/media.jpg`;
+ allowed(await upload(f.actor,path,{grant:await issue(f.actor,path)}));
+ denied(await upload(f.actor,path,{grant:await issue(f.actor,path),bytes:Buffer.from('xyz')}));
+ assert.equal((await get(f.actor,path,'?alt=media')).data,'abc');
+});
+test('OVERWRITEREGRESSION: chat grants cannot replace existing image video audio or file bytes',async()=>{
+ const f=await setup();for(const [folder,mime]of [['images','image/jpeg'],['videos','video/mp4'],['audio','audio/mp4'],['files','application/octet-stream']]){
+  const path=`chats/${f.chat}/${folder}/fixed.bin`;
+  allowed(await upload(f.owner,path,{grant:await issue(f.owner,path,mime),mime}));
+  denied(await upload(f.owner,path,{grant:await issue(f.owner,path,mime),mime,bytes:Buffer.from('xyz')}));
+  assert.equal((await get(f.actor,path,'?alt=media')).data,'abc');
+ }
+});
+test('OVERWRITEREGRESSION: replacement of profile and wallpaper requires the explicit overwrite grant',async()=>{
+ const f=await setup();for(const path of [`users/${f.owner.uid}/permission.jpg`,`chats/${f.chat}/wallpaper/${f.owner.uid}.jpg`]){
+  const grant=await issue(f.owner,path),ref=db.doc(`storageUploadGrants/${grant.grantId}`);
+  allowed(await upload(f.owner,path,{grant}));await ref.update({overwrite:false});
+  denied(await upload(f.owner,path,{grant,bytes:Buffer.from('xyz')}));
+  assert.equal((await get(f.owner,path,'?alt=media')).data,'abc');
+  await ref.update({overwrite:true});allowed(await upload(f.owner,path,{grant,bytes:Buffer.from('xyz')}));
+  assert.equal((await get(f.owner,path,'?alt=media')).data,'xyz');
+ }
+});
+test('immutable media metadata cannot be reassigned even by the uploader',async()=>{
+ const f=await setup();const comment=`community_posts/${f.post}/comments/${f.owner.uid}/fixed/media.jpg`;
+ allowed(await upload(f.owner,comment,{grant:await issue(f.owner,comment)}));
+ for(const path of [f.postPath,f.chatPath,comment]){
+  denied(await changeMetadata(f.owner,path,{metadata:{uploadedBy:f.actor.uid}}));
+  assert.equal((await get(f.owner,path)).data.metadata.uploadedBy,f.owner.uid);
+ }
 });

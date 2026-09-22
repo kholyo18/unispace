@@ -11,6 +11,8 @@ service firebase.storage {
         && c.storageSchema == 1 && c.storageAllowed == true && c.storageUntil is timestamp && request.time < c.storageUntil;
     }
     function session() { return request.auth != null && active(); }
+    // Storage create authorizes file-content writes, including overwrites.
+    // update only covers metadata. Existing bytes need an explicit guard.
     function grant(overwrite) {
       let grantId = request.resource.metadata.get('uploadGrantId', '');
       let g = firestore.get(/databases/(default)/documents/storageUploadGrants/$(grantId)).data;
@@ -30,25 +32,28 @@ service firebase.storage {
     }
     match /users/{uid}/{fileName} {
       allow get: if session() && request.auth.uid == uid;
-      allow create: if session() && request.auth.uid == uid && grant(false);
+      allow create: if session() && request.auth.uid == uid && grant(resource != null);
       allow update: if session() && request.auth.uid == uid && grant(true);
       allow delete: if session() && request.auth.uid == uid;
     }
     match /community_posts/{postId}/{folder}/{fileName} {
       allow get: if session() && folder in ['images', 'videos'] && ownsPost(postId);
-      allow create: if session() && folder in ['images', 'videos'] && grant(false);
+      allow create: if session() && resource == null
+        && folder in ['images', 'videos'] && grant(false);
       allow update: if false;
       allow delete: if session() && folder in ['images', 'videos'] && ownsPost(postId);
     }
     match /community_posts/{postId}/comments/{uid}/{commentId}/{fileName} {
       allow get: if session() && request.auth.uid == uid;
-      allow create: if session() && request.auth.uid == uid && grant(false);
+      allow create: if session() && resource == null && request.auth.uid == uid && grant(false);
       allow update: if false;
       allow delete: if session() && request.auth.uid == uid;
     }
     match /chats/{chatId}/{folder}/{fileName} {
       allow get: if session() && folder in ['images', 'videos', 'audio', 'files', 'wallpaper'] && chatMember(chatId);
-      allow create: if session() && folder in ['images', 'videos', 'audio', 'files', 'wallpaper'] && grant(false);
+      allow create: if session() && folder in ['images', 'videos', 'audio', 'files', 'wallpaper']
+        && (resource == null || (folder == 'wallpaper' && fileName == request.auth.uid + '.jpg'))
+        && grant(resource != null);
       allow update: if session() && folder == 'wallpaper' && fileName == request.auth.uid + '.jpg' && grant(true);
       // Older objects lack trustworthy uploader metadata. Keep their deletion server-only.
       allow delete: if session() && chatMember(chatId) && resource.metadata.get('uploadedBy', '') == request.auth.uid;

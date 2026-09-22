@@ -101,3 +101,21 @@ in the PR after reading logs; static source tests are not device/runtime proof.
 Primary references: Firebase Security Rules behavior (two-document cross-service
 limit), Firebase StorageReference Android/Swift API (long-lived shareable download
 URLs), and Firebase Emulator Suite Storage connection documentation.
+
+## Verification-discovered correction: Storage content overwrite semantics
+
+The first stage-6 candidate incorrectly assumed `allow update: if false` rejected
+content replacement. Its actual emulator run passed 75 of 76 checks: re-uploading
+an existing post returned 200 when the test required 403. Firebase's official
+Storage core-syntax guide defines create as file-content writes and update as
+pre-existing metadata updates. This was a candidate policy defect, not an inferred
+emulator-only defect, and the failing assertion was retained.
+
+The revised content-write conditions explicitly require resource == null for
+ordinary post/comment/chat objects, with only own profile/wallpaper replacements
+permitted under an explicit overwrite-capable grant. Additional tests use fresh
+grants with different same-length bytes, verify original bytes remain unchanged,
+and exercise metadata-only identity reassignment. Four named regressions run
+against the immutable first candidate before running the revised policy. They are
+not a claim about currently deployed live Rules. Source: Firebase Storage Security
+Rules core-syntax, Granular operations section.
