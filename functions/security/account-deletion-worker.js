@@ -575,6 +575,7 @@ async function purgeAccount({ auth, db, bucket, FieldValue, Timestamp, uid, tomb
   await detachPushDevices({ db, FieldValue, Timestamp, uid, userRef, nowMs });
   await deleteUsernameReservations(db, uid);
   await deleteReceiptRows(db, uid);
+  await deleteExpired(db.collection('storageUploadGrants').where('uid', '==', uid), db);
   await deleteKnownEphemeralDocs(db, uid);
   await deleteFilesWithPrefix(bucket, 'users/' + uid + '/');
 
@@ -638,6 +639,7 @@ async function cleanupExpiredReports({ db, Timestamp, nowMs }) {
 async function cleanupRetention({ db, Timestamp, nowMs }) {
   const cutoff = Timestamp.fromMillis(nowMs);
   await cleanupExpiredReports({ db, Timestamp, nowMs });
+  await deleteExpired(db.collection('storageUploadGrants').where('expiresAt', '<=', cutoff), db);
   await deleteExpired(db.collection('authRevocations').where('expiresAt', '<=', cutoff), db);
   await deleteExpired(db.collection('account_deletion_requests').where('auditDeleteAt', '<=', cutoff), db);
   await deleteExpired(db.collectionGroup('revocations').where('expiresAt', '<=', cutoff), db);

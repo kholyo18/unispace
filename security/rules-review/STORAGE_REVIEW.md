@@ -17,3 +17,10 @@ Deferred: compile/emulator tests; owner/nonowner uploads; stolen UID paths; revo
 ## Filename follow-up
 
 New-post upload filenames now contain random per-helper-invocation IDs; edit uploads consistently use the per-edit random ID. This supersedes the earlier fixed-name/timestamp collision note. One SDK task still uses its original path, so resumable upload behavior under create-only rules needs final testing. Orphan cleanup and download-token privacy remain unresolved; no deployment.
+
+## Stage 6 superseding candidate
+
+The executable candidate now uses scoped upload grants and a server-owned access
+projection. See STAGE6_STORAGE_AUTHORIZATION.md for the new client/backend contract,
+explicit token-URL limitations and non-deployment status. Earlier ownership-only
+notes above describe the historical candidate, not the current test policy.

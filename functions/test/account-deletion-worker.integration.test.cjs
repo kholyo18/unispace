@@ -197,6 +197,9 @@ test('scheduled worker purges one account while preserving shared data', async (
       randomId,
     });
 
+    await db.doc('storageUploadGrants/alice-active').set({uid:'alice',expiresAt:Timestamp.fromMillis(now + 60000)});
+    await db.doc('storageUploadGrants/bob-active').set({uid:'bob',expiresAt:Timestamp.fromMillis(now + 60000)});
+    await db.doc('storageUploadGrants/bob-expired').set({uid:'bob',expiresAt:Timestamp.fromMillis(now - 60000)});
     const result = await worker();
     assert.deepEqual(result, { processed: true, status: 'completed' });
 
@@ -208,6 +211,9 @@ test('scheduled worker purges one account while preserving shared data', async (
 
     assert.equal((await db.doc('users/alice').get()).exists, false);
     assert.equal((await db.doc('accountStateControls/alice').get()).exists, false);
+    assert.equal((await db.doc('storageUploadGrants/alice-active').get()).exists, false);
+    assert.equal((await db.doc('storageUploadGrants/bob-active').get()).exists, true);
+    assert.equal((await db.doc('storageUploadGrants/bob-expired').get()).exists, false);
     assert.equal((await db.doc('accountStateControls/bob').get()).exists, true);
     assert.deepEqual(deletedAuthUsers, ['alice']);
     assert.equal((await db.doc('users/bob/followers/alice').get()).exists, false);

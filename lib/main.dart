@@ -1,3 +1,4 @@
+import 'package:UniSpace/services/storage_upload_service.dart';
 import 'ui/settings/account_state_service.dart';
 import 'services/post_media_links.dart';
 import 'services/authorized_post_image.dart';
@@ -6430,7 +6431,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
           .child('images')
           .child('image_${uploadId}_$index.jpg');
 
-      final uploadTask = ref.putData(
+      final uploadTask = StorageUploadService.putData(ref,
         bytes,
         SettableMetadata(contentType: 'image/jpeg'),
       );
@@ -6839,7 +6840,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
         .ref()
         .child('community_posts/$postId/videos/video_${uploadId}_$index.$extension');
 
-    await ref.putFile(file, SettableMetadata(contentType: contentType));
+    await StorageUploadService.putFile(ref, file, SettableMetadata(contentType: contentType));
     return await ref.getDownloadURL();
   }
 
@@ -11579,7 +11580,7 @@ class _PostCardState extends State<_PostCard> {
             .child('images')
             .child('edit_${editUploadId}_$i.jpg');
         validateMediaUploadSize(newImages[i].length, video: false);
-        await ref.putData(newImages[i], SettableMetadata(contentType: 'image/jpeg'));
+        await StorageUploadService.putData(ref, newImages[i], SettableMetadata(contentType: 'image/jpeg'));
         imageUrls.add(await ref.getDownloadURL());
       }
 
@@ -11592,7 +11593,7 @@ class _PostCardState extends State<_PostCard> {
         final ref = FirebaseStorage.instance
             .ref()
             .child('community_posts/$postId/videos/edit_${editUploadId}_$i.$ext');
-        await ref.putFile(
+        await StorageUploadService.putFile(ref,
           file,
           SettableMetadata(contentType: postVideoContentType(ext)),
         );
@@ -11618,7 +11619,7 @@ class _PostCardState extends State<_PostCard> {
               'community_posts/$postId/images/poll_edit_${editUploadId}_${pollImg++}.jpg',
             );
             validateMediaUploadSize((s['imageBytes'] as Uint8List).length, video: false);
-            await ref.putData(
+            await StorageUploadService.putData(ref,
               s['imageBytes'] as Uint8List,
               SettableMetadata(contentType: 'image/jpeg'),
             );
@@ -11639,7 +11640,7 @@ class _PostCardState extends State<_PostCard> {
                 final ref = FirebaseStorage.instance.ref(
                   'community_posts/$postId/videos/poll_edit_${editUploadId}_${pollVid++}.$videoExtension',
                 );
-                await ref.putFile(file, SettableMetadata(contentType: videoMime));
+                await StorageUploadService.putFile(ref, file, SettableMetadata(contentType: videoMime));
                 resolvedSlides.add({'type': 'video', 'url': await ref.getDownloadURL()});
               }
             }
@@ -36668,7 +36669,7 @@ Future<void> _postComment({required BuildContext context, required String postId
       }
       final contentType = attachment.uploadContentType;
       if (FirebaseAuth.instance.currentUser?.uid != user.uid) throw StateError('تغيّر الحساب');
-      await ref.putData(attachment.bytes, SettableMetadata(contentType: contentType));
+      await StorageUploadService.putData(ref, attachment.bytes, SettableMetadata(contentType: contentType));
       mediaUrl = await ref.getDownloadURL();
       mediaType = switch (attachment.kind) {
         CommentMediaKind.video => 'video', CommentMediaKind.gif => 'gif', CommentMediaKind.image => 'image',
@@ -37100,7 +37101,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         throw const _MediaUploadError('يجب أن تكون الصورة غير فارغة وألا تتجاوز 20 ميغابايت');
       }
       if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
-      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+      await StorageUploadService.putFile(ref, file, SettableMetadata(contentType: 'image/jpeg'));
       var url = await ref.getDownloadURL();
       if (isProfile) {
         final sep = url.contains('?') ? '&' : '?';

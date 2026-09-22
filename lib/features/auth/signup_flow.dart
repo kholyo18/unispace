@@ -1,3 +1,4 @@
+import 'package:UniSpace/services/storage_upload_service.dart';
 import '../../services/media_upload_limits.dart';
 import 'dart:async';
 
@@ -342,7 +343,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     final image = File(file.path);
     validateMediaUploadSize(await image.length(), video: false);
     if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
-    await ref.putFile(image, SettableMetadata(contentType: 'image/jpeg'));
+    await StorageUploadService.putFile(ref, image, SettableMetadata(contentType: 'image/jpeg'));
     final url = await ref.getDownloadURL();
     if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
     return url;

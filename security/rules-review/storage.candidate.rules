@@ -1,65 +1,63 @@
-// REVIEW CANDIDATE ONLY. Verify SDK uploads, cross-service permissions and token URLs before deployment.
+// REVIEW CANDIDATE. Requires prepareStorageUpload and compatible clients. NOT deployed.
+// These rules do not revoke bearer download URLs. Token delivery migration remains required.
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function active() {
-      return request.auth != null
-        && (!firestore.exists(/databases/(default)/documents/authRevocations/$(request.auth.uid))
-          || request.auth.token.auth_time > firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore);
+      let c = firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data;
+      return request.auth.token.get('firebase', {}).get('tenant', null) == null
+        && request.auth.token.auth_time is int && request.auth.token.auth_time > 0
+        && c.revokedBefore is int && c.revokedBefore >= 0 && request.auth.token.auth_time > c.revokedBefore
+        && c.storageSchema == 1 && c.storageAllowed == true && c.storageUntil is timestamp && request.time < c.storageUntil;
+    }
+    function session() { return request.auth != null && active(); }
+    // Storage create authorizes file-content writes, including overwrites.
+    // update only covers metadata. Existing bytes need an explicit guard.
+    function grant(overwrite) {
+      let grantId = request.resource.metadata.get('uploadGrantId', '');
+      let g = firestore.get(/databases/(default)/documents/storageUploadGrants/$(grantId)).data;
+      return grantId.matches('^[A-Za-z0-9_-]{20}$') && g.schemaVersion == 1
+        && g.uid == request.auth.uid && g.path == request.resource.name && g.bucket == bucket
+        && g.authTime == request.auth.token.auth_time && g.expiresAt is timestamp && request.time < g.expiresAt
+        && request.resource.size > 0 && request.resource.size == g.size
+        && request.resource.contentType == g.contentType
+        && request.resource.metadata.get('uploadedBy', '') == request.auth.uid
+        && (!overwrite || g.overwrite == true);
     }
     function ownsPost(postId) {
-      return active()
-        && firestore.get(/databases/(default)/documents/community_posts/$(postId)).data.authorId == request.auth.uid;
+      return firestore.get(/databases/(default)/documents/community_posts/$(postId)).data.authorId == request.auth.uid;
     }
     function chatMember(chatId) {
-      return active()
-        && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.memberIds;
+      return request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.memberIds;
     }
-    function media(maxBytes, pattern) {
-      return request.resource != null && request.resource.size > 0
-        && request.resource.size <= maxBytes && request.resource.contentType.matches(pattern);
+    match /users/{uid}/{fileName} {
+      allow get: if session() && request.auth.uid == uid;
+      allow create: if session() && request.auth.uid == uid && grant(resource != null);
+      allow update: if session() && request.auth.uid == uid && grant(true);
+      allow delete: if session() && request.auth.uid == uid;
     }
-    match /users/{userId}/{fileName} {
-      allow read: if active();
-      allow create, update: if active() && request.auth.uid == userId
-        && media(20 * 1024 * 1024, 'image/.*');
-      allow delete: if active() && request.auth.uid == userId;
-    }
-    match /community_posts/{postId}/images/{fileName} {
-      // Transitional SDK reads. Download-token privacy requires a separate delivery migration.
-      allow read: if active();
-      allow create: if ownsPost(postId) && media(20 * 1024 * 1024, 'image/.*');
+    match /community_posts/{postId}/{folder}/{fileName} {
+      allow get: if session() && folder in ['images', 'videos'] && ownsPost(postId);
+      allow create: if session() && resource == null
+        && folder in ['images', 'videos'] && grant(false);
       allow update: if false;
-      allow delete: if ownsPost(postId);
+      allow delete: if session() && folder in ['images', 'videos'] && ownsPost(postId);
     }
-    match /community_posts/{postId}/videos/{fileName} {
-      allow read: if active();
-      allow create: if ownsPost(postId) && media(200 * 1024 * 1024, 'video/.*');
+    match /community_posts/{postId}/comments/{uid}/{commentId}/{fileName} {
+      allow get: if session() && request.auth.uid == uid;
+      allow create: if session() && resource == null && request.auth.uid == uid && grant(false);
       allow update: if false;
-      allow delete: if ownsPost(postId);
-    }
-    match /community_posts/{postId}/comments/{uploaderId}/{commentId}/{fileName} {
-      allow read: if active();
-      allow create: if active() && request.auth.uid == uploaderId
-        && firestore.exists(/databases/(default)/documents/community_posts/$(postId))
-        && media(40 * 1024 * 1024, 'image/.*|video/.*');
-      allow update: if false;
-      allow delete: if active() && request.auth.uid == uploaderId;
+      allow delete: if session() && request.auth.uid == uid;
     }
     match /chats/{chatId}/{folder}/{fileName} {
-      allow read: if chatMember(chatId);
-      allow create: if chatMember(chatId) && (
-        (folder == 'images' && media(40 * 1024 * 1024, 'image/.*'))
-        || (folder == 'videos' && media(40 * 1024 * 1024, 'video/.*'))
-        || (folder == 'audio' && media(40 * 1024 * 1024, 'audio/.*'))
-        || (folder == 'files' && media(20 * 1024 * 1024, 'application/octet-stream'))
-        || (folder == 'wallpaper' && fileName == request.auth.uid + '.jpg'
-          && media(20 * 1024 * 1024, 'image/.*'))
-      );
-      // Legacy chat media paths do not carry uploader IDs; do not permit peer overwrites/deletes.
-      allow update: if chatMember(chatId) && folder == 'wallpaper'
-        && fileName == request.auth.uid + '.jpg' && media(20 * 1024 * 1024, 'image/.*');
-      allow delete: if chatMember(chatId) && folder == 'wallpaper' && fileName == request.auth.uid + '.jpg';
+      allow get: if session() && folder in ['images', 'videos', 'audio', 'files', 'wallpaper'] && chatMember(chatId);
+      allow create: if session() && folder in ['images', 'videos', 'audio', 'files', 'wallpaper']
+        && (resource == null || (folder == 'wallpaper' && fileName == request.auth.uid + '.jpg'))
+        && grant(resource != null);
+      allow update: if session() && folder == 'wallpaper' && fileName == request.auth.uid + '.jpg' && grant(true);
+      // Older objects lack trustworthy uploader metadata. Keep their deletion server-only.
+      allow delete: if session() && chatMember(chatId) && resource.metadata.get('uploadedBy', '') == request.auth.uid;
     }
+    // No prefix listing or broad recursive fallback is permitted.
   }
 }
