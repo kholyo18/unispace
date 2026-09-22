@@ -1,29 +1,55 @@
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'public_profile_reader.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 class PublicProfileService {
-  static Future<Map<String, dynamic>> load(String userId) async {
-    final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
-        .httpsCallable('readPublicProfile')
-        .call<Map<String, dynamic>>({'userId': userId});
-    final data = Map<String, dynamic>.from(response.data);
-    if (data['canViewContent'] is! bool || data['privacy'] is! Map) {
-      throw StateError('Invalid profile response');
-    }
-    final lastSeen = data['lastSeenAt'];
-    if (lastSeen is num)
-      data['lastSeenAt'] =
-          Timestamp.fromMillisecondsSinceEpoch(lastSeen.toInt());
-    return data;
+  static StreamSubscription<User?>? _authSubscription;
+  static String? _viewerId;
+  static int _sessionRevision = 0;
+
+  static void _recordViewer(String? uid) {
+    if (_viewerId == uid) return;
+    _viewerId = uid;
+    _sessionRevision++;
   }
 
-  // Each refresh is authorized again; no full user document or persistent cache.
-  static Stream<Map<String, dynamic>> watch(String userId) async* {
-    yield await load(userId);
-    yield* Stream<void>.periodic(const Duration(seconds: 30))
-        .asyncMap((_) => load(userId));
+  /// Process-memory scope only; not a token or an authorization credential.
+  static String? get viewerSession {
+    final auth = FirebaseAuth.instance;
+    if (_authSubscription == null) {
+      _viewerId = auth.currentUser?.uid;
+      _authSubscription = auth.authStateChanges().listen((user) {
+        _recordViewer(user?.uid);
+      });
+    }
+    // Also handle synchronous account changes before their stream event arrives.
+    _recordViewer(auth.currentUser?.uid);
+    return _viewerId == null ? null : '$_viewerId:$_sessionRevision';
   }
+
+  static final _reader = PublicProfileReader(
+    sessionKey: () => viewerSession,
+    fetchProfile: (userId) async {
+      final response = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('readPublicProfile')
+          .call<Map<String, dynamic>>({'userId': userId});
+      final data = Map<String, dynamic>.from(response.data);
+      final lastSeen = data['lastSeenAt'];
+      if (lastSeen is num && lastSeen.isFinite) {
+        data['lastSeenAt'] = Timestamp.fromMillisecondsSinceEpoch(lastSeen.toInt());
+      }
+      return data;
+    },
+  );
+
+  static Future<Map<String, dynamic>> load(String userId) => _reader.load(userId);
+  static Future<bool> isUnavailable(String userId) => _reader.isUnavailable(userId);
+  static Future<Set<String>> unavailableUserIds(Iterable<String> ids) =>
+      _reader.unavailableUserIds(ids);
+  static Stream<Map<String, dynamic>> watch(String userId) => _reader.watch(userId);
 }
 
 /// Uses only the authorized photo URL; never opens the private user document.

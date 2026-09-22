@@ -40552,37 +40552,58 @@ class AuthorProfiles {
   static final Set<String> _loading = {};
 
   static final Map<String, String?> _names = {};
+  static String? _viewerScope;
+  static int _blockRevision = -1;
+  static int _followRevision = -1;
+  static int _generation = 0;
+
+  static void _syncScope() {
+    final session = PublicProfileService.viewerSession;
+    if (_viewerScope == session && _blockRevision == blockedListRevision.value
+        && _followRevision == followRevision.value) return;
+    _viewerScope = session;
+    _blockRevision = blockedListRevision.value;
+    _followRevision = followRevision.value;
+    _generation++;
+    _photos.clear();
+    _names.clear();
+    _loading.clear();
+  }
 
   static String? nameOf(String? uid) {
+    _syncScope();
     if (uid == null || uid.isEmpty) return null;
     return _names[uid];
   }
 
   static void putName(String uid, String name) {
+    _syncScope();
     _names[uid] = name;
     revision.value++;
   }
 
   static String? photoOf(String? uid) {
+    _syncScope();
     if (uid == null || uid.isEmpty) return null;
     return _photos[uid];
   }
 
   static void put(String uid, String? photoUrl) {
+    _syncScope();
     _photos[uid] = photoUrl;
     revision.value++;
   }
 
   static Future<void> ensure(String uid) async {
-    if (uid.isEmpty || _loading.contains(uid)) return;
+    _syncScope();
+    if (_viewerScope == null || uid.isEmpty || _loading.contains(uid)) return;
     if (_photos.containsKey(uid) && _names.containsKey(uid)) return;
     _loading.add(uid);
+    final generation = _generation;
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      final data = doc.data() ?? <String, dynamic>{};
+      final data = await PublicProfileService.load(uid);
+      _syncScope();
+      if (_generation != generation) return;
       _photos[uid] = data['profileImageUrl']?.toString();
       final fn = (data['firstName'] ?? '').toString().trim();
       final ln = (data['lastName'] ?? '').toString().trim();
@@ -40593,9 +40614,14 @@ class AuthorProfiles {
           : (display.isNotEmpty ? display : _names[uid]);
       revision.value++;
     } catch (e) {
+      _syncScope();
+      if (_generation == generation) {
+        _photos.remove(uid);
+        _names.remove(uid);
+      }
       debugPrint('AuthorProfiles.ensure failed: $e');
     } finally {
-      _loading.remove(uid);
+      if (_generation == generation) _loading.remove(uid);
     }
   }
 }
@@ -41295,12 +41321,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   void _listenPresence() {
     _presenceSub?.cancel();
+    final session = PublicProfileService.viewerSession;
     final Stream<Map<String, dynamic>> stream = _isSelf
         ? FirebaseFirestore.instance.collection('users').doc(widget.userId).snapshots()
             .map((doc) => doc.data() ?? <String, dynamic>{})
         : PublicProfileService.watch(widget.userId);
     _presenceSub = stream.listen((data) {
-      if (!mounted) return;
+      if (!mounted || PublicProfileService.viewerSession != session) return;
       final priv = data['privacy'];
       final pmap = priv is Map ? Map<String, dynamic>.from(priv) : null;
       final ts = data['lastSeenAt'];
@@ -41332,7 +41359,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         _showEmailOnProfile = privacy.showEmail;
         _email = privacy.showEmail || _isSelf ? (data['email'] ?? '').toString().trim() : '';
         _isOnline = data['isOnline'] == true;
-        if (ts is Timestamp) _lastSeenAt = ts.toDate();
+        _lastSeenAt = ts is Timestamp ? ts.toDate() : null;
         if (!_isSelf) {
           _unavailable = isUserDocUnavailable(data);
         }
@@ -41340,7 +41367,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         _showLastSeen = pmap?['showLastSeen'] == true;
       });
     }, onError: (Object error) {
-      if (!mounted) return;
+      if (!mounted || PublicProfileService.viewerSession != session) return;
       setState(() { _profileFailed = true; _serverCanViewContent = false; _email = ''; });
     });
   }
@@ -41622,6 +41649,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _loadProfile() async {
+    final session = PublicProfileService.viewerSession;
     setState(() { _loadingProfile = true; _profileFailed = false; });
     try {
       final Map<String, dynamic> data;
@@ -41633,6 +41661,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       } else {
         data = await PublicProfileService.load(widget.userId);
       }
+      if (!mounted || PublicProfileService.viewerSession != session) return;
       final fn = (data['firstName'] ?? '').toString().trim();
       final ln = (data['lastName'] ?? '').toString().trim();
       final fromNames = [fn, ln].where((e) => e.isNotEmpty).join(' ');
@@ -41703,7 +41732,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       }
     } catch (e) {
       debugPrint('UserProfile load failed: $e');
-      if (!mounted) return;
+      if (!mounted || PublicProfileService.viewerSession != session) return;
       setState(() {
         _loadingProfile = false;
         _profileFailed = true;
@@ -44538,14 +44567,10 @@ DocumentReference<Map<String, dynamic>> _followRequestRef(
 }
 
 Future<bool> isUserPrivate(String userId) async {
-  if (userId.isEmpty) return false;
+  if (userId.isEmpty) return true;
   try {
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .get();
-    if (!doc.exists) return true;
-    return ProfilePrivacy.fromDocument(doc.data()).isPrivate;
+    final profile = await PublicProfileService.load(userId);
+    return ProfilePrivacy.fromDocument(profile).isPrivate;
   } catch (e) {
     debugPrint('isUserPrivate failed: $e');
   }
@@ -44649,18 +44674,16 @@ Future<bool> canCommentOnAuthor(String authorId) async {
   if (me == null) return false;
   if (me == authorId) return true;
   try {
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(authorId)
-        .get();
-    final raw = doc.data()?['privacy'];
-    final who = raw is Map
-        ? (raw['whoCanComment'] ?? 'everyone').toString()
-        : 'everyone';
-    return canInteractWithAuthor(authorId: authorId, audience: who);
+    final session = PublicProfileService.viewerSession;
+    final profile = await PublicProfileService.load(authorId);
+    if (profile['canViewContent'] != true) return false;
+    final who = (profile['privacy'] as Map)['whoCanComment'];
+    if (!['everyone', 'followers', 'mutual'].contains(who)) return false;
+    final allowed = await canInteractWithAuthor(authorId: authorId, audience: who as String);
+    return PublicProfileService.viewerSession == session && allowed;
   } catch (e) {
     debugPrint('canCommentOnAuthor failed: $e');
-    return true;
+    return false;
   }
 }
 Future<void> _manageFollow(String action, String userId) async {
@@ -46275,38 +46298,14 @@ class _BlockedUserRow extends StatelessWidget {
 // END OF FILE — UniSpace
 // ============================================================================
 
-Future<bool> isPeerUnavailable(String uid) async {
-  if (uid.trim().isEmpty) return false;
-  try {
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid.trim())
-        .get();
-    return isUserDocUnavailable(doc.data());
-  } catch (_) {
-    return false;
-  }
+Future<bool> isPeerUnavailable(String uid) {
+  // A failed authorization check must never make an account look available.
+  return PublicProfileService.isUnavailable(uid.trim());
 }
 
-Future<Set<String>> loadUnavailableUserIds(Iterable<String> ids) async {
-  final out = <String>{};
-  final list = ids
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .toSet()
-      .toList();
-  for (var i = 0; i < list.length; i += 10) {
-    final end = i + 10 > list.length ? list.length : i + 10;
-    final chunk = list.sublist(i, end);
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .where(FieldPath.documentId, whereIn: chunk)
-        .get();
-    for (final d in snap.docs) {
-      if (isUserDocUnavailable(d.data())) out.add(d.id);
-    }
-  }
-  return out;
+Future<Set<String>> loadUnavailableUserIds(Iterable<String> ids) {
+  // Bounded requests use the same authorized projection as the profile screen.
+  return PublicProfileService.unavailableUserIds(ids);
 }
 
 bool isUserDocUnavailable(Map<String, dynamic>? data) {
