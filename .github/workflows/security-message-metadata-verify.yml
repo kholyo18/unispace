@@ -1,0 +1,87 @@
+name: Message metadata authorization verification
+on:
+  pull_request:
+    paths:
+      - 'firestore.rules'
+      - 'security/rules-review/firestore.candidate.rules'
+      - 'functions/test/message-metadata-rules.integration.test.cjs'
+      - '.github/workflows/security-message-metadata-verify.yml'
+  push:
+    branches: ['audit/security-message-metadata-20260922']
+permissions:
+  contents: read
+jobs:
+  message-metadata:
+    if: github.repository == 'kholyo18/unispace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Syntax and synchronized rules
+        run: |
+          node --check functions/test/message-metadata-rules.integration.test.cjs
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+      - name: Reproduce eight exact pre-fix failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 924cdbf61bee2301464a35213befcc2d51682dae:firestore.rules > .metadata-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.security-test.json'));c.firestore.rules='.metadata-baseline.rules';fs.writeFileSync('.metadata-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config .metadata-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='REGRESSION:' functions/test/message-metadata-rules.integration.test.cjs" > metadata-baseline.log 2>&1
+          result=$?
+          set -e
+          cat metadata-baseline.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs = require('node:fs');
+          const log = fs.readFileSync('metadata-baseline.log', 'utf8');
+          const expected = [
+            'author cannot forge peer reaction',
+            'peer cannot rewrite author reaction',
+            'author cannot erase peer reactions with text edit',
+            'author cannot forge peer read receipt',
+            'peer cannot erase existing read receipt',
+            'create cannot prepopulate another persons metadata',
+            'author cannot forge peer star',
+            'recipient can star another authors message',
+          ];
+          const failed = [...log.matchAll(/^not ok \d+ - REGRESSION: (.+)$/gm)].map(m => m[1].trim());
+          if (process.env.BASELINE_EXIT !== '1' || failed.length !== expected.length ||
+              expected.some(name => !failed.includes(name)) || !/^# fail 8\s*$/m.test(log) ||
+              !/^# skipped 0\s*$/m.test(log)) throw new Error('Expected exact eight baseline failures.');
+          NODE
+      - name: Verify current interactions and inherited chat boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/message-metadata-rules.integration.test.cjs functions/test/chat-rules.integration.test.cjs" \
+            2>&1 | tee metadata-current.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: message-metadata-evidence
+          path: |
+            metadata-baseline.log
+            metadata-current.log
+          retention-days: 7
+          if-no-files-found: warn

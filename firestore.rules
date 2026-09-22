@@ -37,6 +37,64 @@ service cloud.firestore {
           get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
     }
 
+    // Message interaction metadata belongs to the acting participant, not the
+    // message author. Keep legacy single-string reactions and the six-value UI.
+    function shortReaction(value) {
+      return value is string && value.size() > 0 && value.size() <= 32;
+    }
+    function validReaction(value) {
+      return shortReaction(value)
+        || (value is list && value.size() > 0 && value.size() <= 6
+          && value.size() == value.toSet().size()
+          && shortReaction(value[0])
+          && (value.size() < 2 || shortReaction(value[1]))
+          && (value.size() < 3 || shortReaction(value[2]))
+          && (value.size() < 4 || shortReaction(value[3]))
+          && (value.size() < 5 || shortReaction(value[4]))
+          && (value.size() < 6 || shortReaction(value[5])));
+    }
+    function ownReactionValue(data) {
+      return !(request.auth.uid in data) || validReaction(data[request.auth.uid]);
+    }
+    function ownStarValue(data) {
+      return !(request.auth.uid in data) || data[request.auth.uid] == true;
+    }
+    function ownInteractionMapChange(key) {
+      let old = resource.data.get(key, {});
+      let next = request.resource.data.get(key, {});
+      return old is map && next is map
+        && next.diff(old).affectedKeys().hasOnly([request.auth.uid])
+        && (key == 'reactions' ? ownReactionValue(next) : ownStarValue(next));
+    }
+    function ownReadReceiptChange() {
+      let old = resource.data.get('readBy', []);
+      let next = request.resource.data.get('readBy', []);
+      // A receipt is monotonic. Only the caller may add their identity, and
+      // replacing/deleting the parent list cannot erase anyone's receipt.
+      return old is list && next is list
+        && next.size() == next.toSet().size()
+        && next.hasAll(old)
+        && next.toSet().difference(old.toSet()).hasOnly([request.auth.uid])
+        && next.removeAll([request.auth.uid]) == old.removeAll([request.auth.uid]);
+    }
+    function validInitialInteractions() {
+      let reactions = request.resource.data.get('reactions', {});
+      let stars = request.resource.data.get('starredBy', {});
+      let readers = request.resource.data.get('readBy', []);
+      return reactions is map && stars is map && readers is list
+        && reactions.keys().hasOnly([request.auth.uid]) && ownReactionValue(reactions)
+        && stars.keys().hasOnly([request.auth.uid]) && ownStarValue(stars)
+        && readers.hasOnly([request.auth.uid]) && readers.size() <= 1;
+    }
+    function validInteractionChanges() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      // Validate only changed containers, so unrelated edits preserve legacy
+      // data without granting clients the authority to repair other identities.
+      return (!changed.hasAny(['reactions']) || ownInteractionMapChange('reactions'))
+        && (!changed.hasAny(['starredBy']) || ownInteractionMapChange('starredBy'))
+        && (!changed.hasAny(['readBy']) || ownReadReceiptChange());
+    }
+
     match /chats/{chatId} {
       allow get: if activeSession() && (
         resource == null
@@ -54,16 +112,18 @@ service cloud.firestore {
       match /messages/{msgId} {
         allow read: if isCurrentChatMember(chatId);
         allow create: if isCurrentChatMember(chatId)
-          && request.resource.data.authorId == request.auth.uid;
+          && request.resource.data.authorId == request.auth.uid
+          && validInitialInteractions();
         // Authorship is immutable. Being the original author never bypasses
         // current membership or the server-owned session revocation cutoff.
         allow update: if isCurrentChatMember(chatId)
           && request.resource.data.authorId == resource.data.authorId
+          && validInteractionChanges()
           && (
             resource.data.authorId == request.auth.uid
             || request.resource.data.diff(resource.data)
                 .affectedKeys()
-                .hasOnly(['readBy', 'reactions'])
+                .hasOnly(['readBy', 'reactions', 'starredBy'])
           );
         allow delete: if isCurrentChatMember(chatId)
           && resource.data.authorId == request.auth.uid;
