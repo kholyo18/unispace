@@ -1,0 +1,112 @@
+name: Profile read authorization verification
+
+on:
+  pull_request:
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', 'test/**', '.github/workflows/security-profile-read-verify.yml']
+  push:
+    branches: ['main']
+    paths: ['firestore.rules', 'security/rules-review/**', 'functions/**', 'lib/**', 'test/**', '.github/workflows/security-profile-read-verify.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  profile-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prove seven raw-profile regressions against the pre-fix rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show ae3e09f2dabf7f59d7dbae3bc8b6d7a7f796e6b3:firestore.rules > .profile-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.security-test.json'));c.firestore.rules='.profile-baseline.rules';fs.writeFileSync('.profile-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config .profile-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='RAWREGRESSION:' functions/test/profile-read-rules.integration.test.cjs" > profile-baseline-results.log 2>&1
+          result=$?
+          set -e
+          cat profile-baseline-results.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs = require('node:fs');
+          const log = fs.readFileSync('profile-baseline-results.log', 'utf8');
+          const expected = [
+            'a stranger cannot read a public raw profile',
+            'accepted followers cannot read private raw profiles',
+            'a blocked user cannot read the raw profile',
+            'foreign missing documents do not allow existence probes',
+            'unfiltered user directory enumeration is denied',
+            'email name and document-ID queries cannot expose raw profiles',
+            'user aggregation cannot bypass directory restrictions',
+          ];
+          const failed = [...log.matchAll(/^not ok \d+ - RAWREGRESSION: (.+)$/gm)].map(m => m[1].trim());
+          if (process.env.BASELINE_EXIT !== '1' || failed.length !== expected.length ||
+              expected.some(name => !failed.includes(name)) || !/^# fail 7\s*$/m.test(log)) {
+            throw new Error('Expected exactly the seven named pre-fix rule failures.');
+          }
+          console.log('All seven raw-profile regressions reproduced against the immutable baseline.');
+          NODE
+      - name: Verify current rules, projected access and client source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          node --check functions/security/public-profile.js
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/profile-read-rules.integration.test.cjs functions/test/profile-read-client-contract.test.cjs functions/test/public-profile.test.cjs" \
+            2>&1 | tee profile-current-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: profile-read-rule-evidence
+          path: |
+            profile-baseline-results.log
+            profile-current-results.log
+          retention-days: 7
+
+  flutter-profile-reader:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Run production reader and existing profile privacy/widget tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --reporter expanded \
+            test/public_profile_reader_test.dart test/public_profile_widget_test.dart \
+            test/profile_privacy_test.dart test/privacy_settings_test.dart \
+            2>&1 | tee flutter-profile-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flutter-profile-reader-evidence
+          path: flutter-profile-results.log
+          retention-days: 7

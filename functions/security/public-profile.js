@@ -28,7 +28,10 @@ function createPublicProfileHandler({ auth, db }) {
         `users/${uid}/blocked_users/${target}`, `users/${target}/blocked_users/${uid}`,
         `users/${uid}/blocked_by/${target}`, `users/${target}/blocked_by/${uid}`];
       const [cutoff, profile, follower, ...blocks] = await tx.getAll(...paths.map(p => db.doc(p)));
-      if (cutoff.exists && token.auth_time <= cutoff.data().revokedBefore) throw new HttpsError('unauthenticated', 'Session revoked.');
+      if (cutoff.exists && (!Number.isFinite(cutoff.data().revokedBefore)
+          || token.auth_time <= cutoff.data().revokedBefore)) {
+        throw new HttpsError('unauthenticated', 'Session revoked.');
+      }
       const data = profile.data();
       if (!data || ['disabled', 'deleted'].includes(data.accountStatus) || data.security?.frozen === true ||
           (uid !== target && blocks.some(b => b.exists))) throw new HttpsError('not-found', 'Profile unavailable.');
