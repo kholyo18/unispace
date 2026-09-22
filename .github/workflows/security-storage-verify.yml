@@ -1,0 +1,100 @@
+name: Storage authorization verification
+on:
+  pull_request:
+    paths: ['firestore.rules', 'firebase.storage-security-test.json', 'security/rules-review/**', 'functions/**', 'lib/**', 'test/**', '.github/workflows/security-storage-verify.yml']
+  push:
+    branches: ['main']
+    paths: ['firestore.rules', 'firebase.storage-security-test.json', 'security/rules-review/**', 'functions/**', 'lib/**', 'test/**', '.github/workflows/security-storage-verify.yml']
+permissions:
+  contents: read
+jobs:
+  storage-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prove eight historical Storage policy failures (not current live policy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show f16a0d04ceae68a9ba138f44db0a6892eb193281:security/rules-review/storage.published-2026-09-14.rules > .storage-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.storage-security-test.json'));c.storage.rules='.storage-baseline.rules';fs.writeFileSync('.storage-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth,storage --project demo-unispace-security --config .storage-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='^STORAGEREGRESSION:' functions/storage-test/storage-rules.test.cjs" > storage-baseline-results.log 2>&1
+          result=$?
+          set -e
+          cat storage-baseline-results.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs=require('node:fs');const log=fs.readFileSync('storage-baseline-results.log','utf8');
+          const expected=['nonowners cannot directly upload post media','strangers cannot overwrite post media',
+            'outsiders cannot read private chat object metadata','visitors cannot retrieve raw post token metadata',
+            'comment uploader path cannot be impersonated','arbitrary post upload type is rejected',
+            'post prefix listing is denied','revoked authentication cannot read post media'];
+          const failed=[...log.matchAll(/^not ok \d+ - STORAGEREGRESSION: (.+)$/gm)].map(m=>m[1].trim());
+          if(process.env.BASELINE_EXIT!=='1'||failed.length!==8||expected.some(v=>!failed.includes(v))||!/^# fail 8\s*$/m.test(log)) {
+            throw Error('Expected exactly eight policy failures, not emulator/setup failures.');
+          }
+          NODE
+      - name: Validate grants and actual Storage client requests with current rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          for file in functions/security/storage-upload*.js functions/test/storage-upload*.cjs functions/storage-test/*.cjs; do node --check "$file"; done
+          npx --yes firebase-tools@15.18.0 emulators:exec \
+            --only firestore,auth,storage --project demo-unispace-security --config firebase.storage-security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/storage-upload*.test.cjs functions/storage-test/storage-rules.test.cjs" \
+            2>&1 | tee storage-current-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storage-security-evidence
+          path: |
+            storage-baseline-results.log
+            storage-current-results.log
+            storage-debug.log
+          if-no-files-found: warn
+          retention-days: 7
+  flutter-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Execute production upload coordinator and existing media/profile tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test test/storage_upload_client_test.dart test/public_profile_reader_test.dart test/profile_privacy_test.dart test/public_profile_widget_test.dart \
+            --reporter expanded 2>&1 | tee flutter-storage-results.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flutter-storage-evidence
+          path: flutter-storage-results.log
+          if-no-files-found: warn
+          retention-days: 7
