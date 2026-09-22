@@ -95,8 +95,9 @@ service cloud.firestore {
             || request.resource.data.get('security', {}).get('backupCodes', []) == []));
     }
     match /users/{userId} {
-      // Other-profile reads still require migration; unchanged in this candidate slice.
-      allow read: if request.auth != null;
+      // Active-session cutoff is enforced, but raw other-profile reads still
+      // require migration to authorized projections before production approval.
+      allow read: if activeSession();
       allow update: if activeProfileOwner(userId) && editableProfileChange();
       // Signup and permanent deletion must complete through server-owned lifecycle paths.
       allow create, delete: if false;
@@ -125,8 +126,52 @@ service cloud.firestore {
         allow write: if false;
       }
       match /sessions/{sessionId} {
-        allow read, write: if request.auth != null
-                            && request.auth.uid == userId;
+        function sessionFields() {
+          return ['sessionId','deviceId','alias','platform','model','manufacturer',
+            'osVersion','appVersion','buildNumber','locale','createdAt','lastSeenAt',
+            'updatedAt','isTrusted','isRevoked','revokedAt','revokeReason','networkType'];
+        }
+        function activeSessionRecord() {
+          let d = request.resource.data;
+          return d.sessionId == sessionId
+            && d.deviceId is string && d.deviceId.size() > 0
+            && d.alias is string && d.platform is string && d.model is string
+            && d.manufacturer is string && d.osVersion is string
+            && d.appVersion is string && d.buildNumber is string && d.locale is string
+            && d.createdAt is timestamp && d.lastSeenAt is timestamp && d.updatedAt is timestamp
+            && d.isTrusted is bool && d.isRevoked == false
+            && d.revokedAt == null && d.revokeReason == null
+            && (d.get('networkType', null) == null || d.networkType is string);
+        }
+        function activityOrInitialization() {
+          let d = request.resource.data;
+          // A legacy record may be initialized by the existing Flutter helper;
+          // its unknown fields are preserved, not freely edited or removed.
+          return resource.data.get('isRevoked', false) == false
+            && d.diff(resource.data).affectedKeys().hasOnly(sessionFields())
+            && activeSessionRecord()
+            && d.sessionId == resource.data.get('sessionId', sessionId)
+            && d.deviceId == resource.data.get('deviceId', d.deviceId)
+            && d.createdAt == resource.data.get('createdAt', d.createdAt);
+        }
+        function oneWayRevocation() {
+          let d = request.resource.data;
+          // This also handles malformed/legacy records and repeated revocation.
+          // Repeating it never permits activity, identity edits or reactivation.
+          return d.diff(resource.data).affectedKeys()
+              .hasOnly(['isRevoked','revokedAt','revokeReason','updatedAt'])
+            && d.isRevoked == true
+            && d.revokedAt == request.time && d.updatedAt == request.time
+            && d.revokeReason in ['manual','logout_all','logout_all_other'];
+        }
+        allow read: if activeProfileOwner(userId);
+        allow create: if activeProfileOwner(userId)
+          && request.resource.data.keys().hasOnly(sessionFields())
+          && activeSessionRecord() && request.resource.data.isTrusted == false;
+        allow update: if activeProfileOwner(userId)
+          && (activityOrInitialization() || oneWayRevocation());
+        // Deleting a tombstone would permit recreation of a revoked session ID.
+        allow delete: if false;
       }
       match /saved_posts/{postId} {
         allow read, write: if request.auth != null

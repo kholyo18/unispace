@@ -68,3 +68,29 @@ read from completed runs; no success is claimed by this document alone.
 Before any production deployment, verify deployed manageFollow/readFollowList,
 release a compatible client, audit existing data and re-fetch live rules. Do not
 blindly deploy this candidate or weaken it to accommodate old direct-write clients.
+
+## Session failures exposed by the full test run
+
+At commit `7ff359375b6c8bea1fe06e22dfc4bff644ae965b`, the focused suite passed
+113/113 but the complete backend suite passed 165/168. All three failures came
+from inherited session Rules: reactivating a revoked record, editing arbitrary
+legacy fields, and reading the profile with a revoked authentication timestamp.
+The first-run evidence is retained; those failures were not skipped or reclassified.
+
+The follow-up policy applies the shared cutoff to raw profile reads and session
+reads/writes; it does NOT restrict raw profiles to their owners yet. New sessions
+follow the actual Flutter initialization schema. Activity, alias, device metadata
+and trusted-device UI preferences remain editable on active records, with immutable
+session ID, installation ID and creation time. Legacy initialization may add the
+current schema while preserving unknown legacy fields, but cannot freely edit them.
+Revocation permits only the four actual Flutter revocation fields with server
+timestamps and the three supported reasons. Repeated revocation is allowed, but
+heartbeat/alias writes, resurrection and client deletion are denied after revocation.
+Twelve additional emulator tests cover these denial and legitimate-use boundaries.
+
+This protects record integrity and the shared server-owned authentication cutoff.
+It is NOT cryptographically bound per-device token revocation: clients still create
+session records, `isTrusted` remains UI metadata, and a malicious authenticated client
+could invent a different session ID. Proper per-session enforcement requires a
+separate server-owned, token-bound session design and a compatible rollout.
+Fresh CI must confirm this follow-up before it is considered verified.
