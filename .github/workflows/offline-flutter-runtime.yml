@@ -17,10 +17,19 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.44.9'
           channel: stable
           cache: true
-      - name: Resolve only the existing application's dependencies
-        run: flutter pub get --enforce-lockfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Resolve the existing locked application and isolated localization tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+          flutter pub global activate intl_utils 2.8.16
       - name: Package offline test tooling without font files or credentials
         shell: bash
         run: |
@@ -30,7 +39,9 @@ jobs:
           out="$RUNNER_TEMP/flutter-offline-package"
           mkdir -p "$out"
           flutter --version > "$out/flutter-version.txt"
+          node --version > "$out/node-version.txt"
           git rev-parse HEAD > "$out/baseline-commit.txt"
+          tar -czf "$out/node24.tar.gz" -C "$(dirname "$(command -v node)")" node
           tar -czf "$out/flutter-sdk.tar.gz" \
             --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttc' \
             --exclude='./bin/cache/artifacts/engine/android*' \
@@ -42,7 +53,7 @@ jobs:
             -C "$sdk" .
           tar -czf "$out/pub-packages.tar.gz" \
             --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttc' \
-            -C "$pubcache" hosted hosted-hashes
+            -C "$pubcache" hosted hosted-hashes global_packages
           cd "$out"
           sha256sum *.tar.gz > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
