@@ -1,0 +1,56 @@
+name: Prepare reviewed profile blobs
+on:
+  push:
+    branches: ['audit/security-profile-reads-20260922']
+    paths: ['.github/workflows/prepare-profile-review-blobs.yml']
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.repository == 'kholyo18/unispace' && github.ref == 'refs/heads/audit/security-profile-reads-20260922'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ae3e09f2dabf7f59d7dbae3bc8b6d7a7f796e6b3
+          persist-credentials: false
+      - name: Prepare five exact unreferenced source blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 <<'PY'
+          import base64, hashlib, json, os, pathlib, subprocess, urllib.request, zlib
+          payload = 'eNrtW+ly20YS/q+nGFe5QjAkQZHULVNax7YqrvhQWevkh8qlDIGhOBEIcDGAZMVR1T7EPuE+yXbPhRkQlGjHSWqr4h8WMZijp4+vu2caMZ9OSa93yQtC+1OeM1FkOQvzMmGCTOotGzyN2UdC43h/NNwKw8HucGd/a0QGm5s7W1sbvV5veZaNTqfTMNM//kF6+9vdfdKB/webBJ4Fy695xEiUZGUc2gHk0wZx//32G8nZv0p4GUKPrMwjFsa0oOElK4KWYFGZ8+K21SWf7tqqbUKjq3LxLIuZgObzD20yHuOf9qGa+U79mdMimpF+CXSI/if88zK+g9V7at1+nzyNCn7NeoIJwbOURGWRAfu4ICydZkBH3CWTsiA5vSFZMWN5b5FnU54wIJjGgoiCJ4kzHW4Ddknm/DKnBc5YZISWxSzL+a8sJjD6FxbhC5AFmyIvoCkuZROhC3i4pkloZqRJkt3IpQ4InxIqiT1TtAaw145d+B0QGGdROWdpIUiUpQXlKczNr2nByJSzJBYhebu0BWAMmZeiIMAcZzp8dVpOEh6dqs59wWgezU5ZtoAHfH2SIXGvuCi6JGXXLCcx7DySM+UEpJlzJkIzp9oJyM7ZiJ767U3K8kAJp9qTGpDA9HLElCaCHRq1US/LBSgJe2BC8s03hMW8oJPEvH82o+klC9p2OtjwGb9MywWhKciI5XOaAh9JzBImBSM5FGVz2Dtws5jlWXk5k9oN7MxguRgonbLoNgK2Lmgxg417pEbAsYJ11YzM3RFazXC43x0MSGc42uzurGU3d1bNlao0Knr/E+72DZ0zR+drKmXsDnWUPBqTtEySQ7/vDRgfW9kZ+eu2hyWP0RgVDXqqu43ehuH0a2kawDFtGcBoHmFD1zDUsZcISEDJGX7qfYIo5mUKmHCRs0WWF7Bn9UOat7PHrkO9YrjkWexhZJkqi+wbpOkvpOobQwl/kcC5RjeNptPBaHs4ZWG4z6KtreG0hqbrTKQhdp2uUoP2urugP3sad804rXeeJX8POp6AfXyS3AeVnJC7tovIPystevwJJHnXnyRZdMXiC9NY0Bys+O7nbtVPNy11xfE/dx+aeHK73qyyn5zygzVcwDkwzHOF2l2imdIlU4lNLO+SMAzlBOIDGRN6Q0HixUf0IU+TJICXyljndBEsyPgImBECigaLNnoSbQWgOoFaIWQfAY8EqnyRXbFUKvxFweeMPBlr3yEdV9AGR3YNXeLvJMi3JWbcAE7ekO+LYiFe5HmWB60y9SwAXFlLozvR48NWBYmNhASP3pTzCctDLk44mAQL7qPDTKW97mfuAtXETvA1dnTnCxIXBTEZ3VY0WGHj9h/JLkD5eSvmApFBLqFgNW59CHkaJSVEBYGMH2gUZWVanBW0KEUbx8lmY0zH4TTPfmUp4NWYFHnJoIcbmQSIZY/wndRFZLdSplBkcxZMUGMmWhagMStYkmZFbwpkSEq1ERLg0zXlEtskQzxESvikPwf/DRzIC4AB71ljzN5ga7A9isJwuEd3Y1rDGH+EAhO/DVFja3N7e9gdAXKoX9t7CB5RQoUgTyUIa3KFwgcBfOQRRBMpTcgZK56cFTlPL4/IRZLRGH6B8D7dgcCWOr+mC925S9TfYxiVgmsSekzHjtDvycU1Z2DDZ1G2YO57Dp75QsrhHbvmUrXGpDdY6qJA4P4+lwxCBRWojckmvHY6XGcg/Qtxm0aShMBqv9qSCRnHxIPXM+W6Q0286qQVHjXY3RX6STMN6FZ9U2OisQ+DLNMcQnxYssoMcVx9p2Pit6gxbbDAoswNMT4hhg7zss7flZSYAUvcbiLBdK7Y3umYtsUsKzIRQgRFcxvbKhWpN2pt85rvPK0zOoTD304D8wj2bKXoSlZjDMpHhy8ytAG8gEdA1hfzRXFr+KdjJDlCtygyz6Gz8k0+MVKRFmWBkZgmBec1liCJvI8sZ3bgKz7Y1V3mIivJKkZI7v4ZnFBifIgVDWzQNL7Pk3t54cyPrkIPWZ8hJyXQyZ4gIUeQ5Al4cIhpE4prmnBZs8HsG9lQKZ/KsQR2aNdtyyN8pe03sHadJayErM3ofj+wW9lVgoK2nNqr2ix2KRrH8v2hC3EeOjpGqwcX+W2VV6gREDzZOOsE0pYJFezEnhMAHQVNI2bG4D+gMElUSgzRA8Z+rbb3HuMxpMxrxEOAKkLTa6voAfrryIEcHxPrdeJbYAiPjrSvWRqmaG6EcuSRy5xG+WqJOCyDBKl6qvF9SZGRivOWjnxezuklA61ufTgOi0ztwAmEFN1TFEqgxkGGKCS8tD7gpluttjMuhL/zpeGJMxwc/sOjdcCwP8ITnq3NncFWd7B1f7xg/h3AQlwsEnoLav4mK5SmHxPdCO8diKsIbbRmsGfICjELDJgTj64lkbEvESeYNZaUs3l2zXxhWy/U9NJGsDGblJenwLMiaPm8CBXKQP4JT5B1P2Yte0ylhJE4dmQtsmm1BzbUPLaiE/67U3IcDPGMbgiCHIyGg+5gVAny4j0YobEAyB9ZiuEzI+xjwdJYEPn0ZKnTkUJZFTThsQ1LT8HuGZh7YNPLi4VuOisnx2GEWJAEPuZ8XljlKDQoLKPzJ26kaWz+CMAfXyKKcXHGkmmlncf34FQTNkk8uuExIFCoj5hCkdKFAAUSQds/2JSJZQAj2jK5fAiZnNEHzdu/Qc2vLX+4zFuM5+SOQyWJQBp6u9IymUvNMTdicc13+S/RHz0sCMQ6LbgloFPSwZNIB+b4NY1uWx/qnYBdMv+Dvlxg0gDiaRIo5m3zAPu1gVNOFGJmKoRdDMHtDBT0aYHrKe0fjYZ4XgI/tvfhx1fQfQsVoAc3LyDNSt6mJtdTO4INh/bloTOCYUNTJxkLKH0FPmislr3vAWrgR6vlTs/F2zThKbMMMQ0wiU57DyvfirIH5gH3/8kB8wo6XyCuWB7CLIWAVZ8DIwIPI2t9vCmAfGdUXWRa4/RW277vuHAyZZiYC+T+8yx6XzUr5XamMyA32trUYt7Z/QPE/ErvGGUHmnt83nJbXfYauiwad0mWyuMBcI1vJ3glQBg+/jUmKpg8ImEBIjUCiZzmRPorovcAW5ans89o+iPM+wziSjwiH5tjVavGoH3ORts6BFcC2RkOuzsokJ2tr2Z3Orz34nrpCHXXoIrpf5+bqXFJ+9rKyDWb6twzx85tL2r20KoJ4qSxGrzaGY0033YGX1OR7wgD4lyDWzMabvRAKIs/0IX82QGvvzg4nDf6uOp8mnZhug/hzYxB9ohxKHh35sS27fCXjEPMQFomcB7sbo4UFu1K3/P1RNgUFDfEpM4MBEVYC0f/YtBxkHXJrvyrP7ICnxSbt7ZHe5iWdOAXYL66DXmu70XfsSnICyKkFUGiPcOSt1nQO9hQ6KKxZZJlyZH2QKfqZtUeHejLRuf0QJ4dyOalYxO9o869nazncNLsL0uy70+xVYKt6Hda3QxbnbxD9KqPun0Se87xj5baqQ5l0GoM94Mq/G3DZjUDvdh/YWX+YDbu3Ravsbie2lu52Wxco/FkvZzAabe2hd5ssIdKt7MLWbG8wvV0BjKdZ9kcCXmbquTQKI6663RVR/N7bk+I6mrjdajG/xVqY1dfoThqYSyecM9ljr0MwOl4M8ugI3ZX0X81K4S/0Hzegh7PLC81emPtwW0G8ayL4tXQA6eHr6wglZeAZTmNip94MdOCMXs6sLztwq+YI3AcIIm/J1/9ImW3XHaOEvXo81bkxWPAkkcKEBvAxmdzNYUVBuggsr29xGdn4UfnFTu7pGVuWrEMpzUHnaeQnFQHl8iueyiRF/USwxUPvlAiSLcSfB0RHvZQ/hWMJmgdbFi26SaX6lmlS1plzPJUpha/zmlKL5kqsbFQIU3R3hrUXY6Eop3h7nZ3hFC0M9zf8w7oLr5TVziIaO+yGz/ASIAFP8mYDrfa75MXb56Ttyfk5OWrF+S///4PeZ/yswUFeMCX46/4DytYav71lLHcTe9WHM+bw3kVr61ysr0/yYFaQlZhoSarOYGtXKPsbVXvwiaES7uCWPsz+CaTH6x300pqi9LUQWI0Y9GVKnNStVxzesUITYm+QYeQMbsi1ZU1znafjcEuHUIc5hyqkMqI3LlEPpJhqTPsvVRwEbxEQIBne9vMY+EpghJqVmI2ajrhMb99hYdgeHYQCyMbdTBnAvea4O6J620X8DQoW+cZr0a1sKeABcE1zQmXt8rw54mkIUxYelnMsKEzJoPNtq+WYI5IJenAK3LkjgD/5z4d6E6e84xmZXoF42VHgUIBengXZ/XdMZ5Wfk31V9w6wRLDU1rMQlOGiDAt371MDxR1K8ME5Jc2TcJTSSFOI2rHIc22YyynjSogL7IgmLZ7vlO20rP6Cp0Orel8uf4Zg/oOKzvAnnQNnEBcJsWMEQHZYnPpJ7or7GEiACEzugdtqlwmDSnRFkUQBZrRpSnbOSbmRHip8qTkfcjNCugudLWZybgudF2iW5eyZm9dtRLH+9u78V4Y0s1oNNjdWq5aWXe+qqZl3RHoIAfd4T7pDLrb2+AYNzp8jkWDpIXvDySiQIhoW8HfXYEXPphqG7lAafa9JzmzN8YnQJXYml5kaeakLEC7+nNwwTmnycqOshD0whaC9mvPD42zZYS1ZztuQwcJTYqnbNC/Pm9OoGW0ujojtvkAEwtYnC2DkKXLgNAJhH85u4Q2DOPLPFuw3g3seeAh0AyrrZ7pUtGgtVS87HXGktJm+oNPLUV160CTf+cjpz4cW30jYXYW6hNpmz2rY6elWJ2LR8pudWWaG4vjOwzGKwhU5WUyXtOlZS/Ta5rwmFQV3Wr9lod+1g1W59VNVyOWWNsPsrC0nFvmLQ8iY/dW3h73S2a85gm4IAapQCzOOMjyxSKLZnZy8JgQ6gftWnikTj29YjBG52flBECSL1A55FnYMQCYNED3zT1FZFiJXCv90lG/U7HUWP+Vww7y+Ec5S2P1jFPY8VJVPvO4udQKX+NbWyTiU+CUq/Ska3lBIQTM2RSkOkNZOM6EXkJ6dUjSjEyxhkSW3Bu/S8CbLsBJy5s/zKkguAsdE773olRdMDbZ8LdGEW/R02vL9Q9jqtffmlVkPhMCOTyLeRSoOs/npbqxDrR6HJDRphc3ywVfY4h2IWMwdxmV4vWBP2DdEbCwN2fzDEJ8IctqsjS5RcaAN1PlrcgODGT9eDdnMRap4rcWy0qDaZCfJXp3B7L8fWxRC5M/C1hutU9dP6sDnapswdEM6U+iMs+BMKnjYaUrhDTMpkbIdsQE9VmDgFTIXPoix/wyB0+bS7OIU85gfuqTfMwYEpGRmSwaJygWAKE0K4XNDCK1rPmcBQIbnpv7dkgloAfNAdTstyA+DY2brmXxnnXJmqlj9Qd8wmP78uBx3aBa2p5co1YS1H65fmjzTrYGanE92Q/s9oAEUgs9lehqjWBgL3r4AQnqXs+rNPpKfs8p4V7H87ndP9f3NRVKre/9vNEPOB/niqHmfvBYxjoNU+TuaXWTX/piZ9Sp3WTV/RJe3uLftu8sPjsuAn0y0eHSibY/p712aEjtlyerZd4rZ/Uyn3LdrGd8ZPFIr7cyK+n8Dofj7Ee9ry4aZa6D6A+rCYn2MpdyEy0s5SLv37061GcZYDypybjUSb7nL0M/BbJf2sivGntYhMZunI8dIYiLOX54Zj+p/MwRa31y+blzqnToc0f9/cnm359s/v3J5t+fbP4ffLL5P6Q4NSs='
+          patch = zlib.decompress(base64.b64decode(payload, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == 'a1df2c031cdd937c20d2f86b3d8a97c338fb33ecf2e132ed7446868e784b926e'
+          expected = {
+              'firestore.rules': ('add93249f40d6061b77b6468a8dd4f946f700e85', '172694337c48e68dca4f21e5b86106e9d15146b0'),
+              'security/rules-review/firestore.candidate.rules': ('add93249f40d6061b77b6468a8dd4f946f700e85', '172694337c48e68dca4f21e5b86106e9d15146b0'),
+              'functions/security/public-profile.js': ('f1352febba96b74d414399acf4f5920f1fe049df', '9ec442fe656a2a2dbfa2183693354acf9f956732'),
+              'lib/main.dart': ('814153c2684ca7d80f7e8acdc6843493c0958707', '28a7daf71aeba09f28ed9688c4dc918b3b399a99'),
+              'lib/ui/settings/public_profile_service.dart': ('dd957d8e8f50b3e13dd39fb9cca9e7ac6dea51ed', 'a0c3174e2e981d533d3d2188020e3f891800965a'),
+          }
+          def blob_sha(data):
+              return hashlib.sha1(('blob ' + str(len(data)) + '\0').encode() + data).hexdigest()
+          for name, hashes in expected.items():
+              assert blob_sha(pathlib.Path(name).read_bytes()) == hashes[0], name
+          subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '-'], input=patch, check=True)
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          changed = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
+          assert set(changed) == set(expected)
+          for name, hashes in expected.items():
+              data = pathlib.Path(name).read_bytes()
+              assert blob_sha(data) == hashes[1], name
+              body = json.dumps({'encoding': 'base64', 'content': base64.b64encode(data).decode()}).encode()
+              request = urllib.request.Request('https://api.github.com/repos/kholyo18/unispace/git/blobs', data=body,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  result = json.load(response)
+              assert result['sha'] == hashes[1]
+              print(name + ': ' + result['sha'])
+          print('Prepared exact unreferenced blobs only. No branch, production data or Firebase deployment changed.')
+          PY
