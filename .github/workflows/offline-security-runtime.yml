@@ -1,0 +1,61 @@
+name: Offline security verification runtime
+on:
+  push:
+    branches: ['audit/stage7-offline-verification-20260922']
+    paths: ['.github/workflows/offline-security-runtime.yml']
+permissions:
+  contents: read
+jobs:
+  prepare-runtime:
+    if: github.repository == 'kholyo18/unispace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 67592a9cefac8aac013e3691676e42996b1cdf15
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install baseline locked dependencies and isolated emulator tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix functions --ignore-scripts
+          npm install --prefix "$RUNNER_TEMP/offline-cli" --ignore-scripts --no-audit --no-fund firebase-tools@15.18.0
+      - name: Run existing baseline Storage tests in local emulators
+        shell: bash
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/offline-cli/node_modules/firebase-tools/lib/bin/firebase.js" emulators:exec \
+            --only firestore,auth,storage --project demo-unispace-security \
+            --config firebase.storage-security-test.json \
+            "node --test --test-concurrency=1 functions/storage-test/*.test.cjs" 2>&1 | tee "$RUNNER_TEMP/baseline-storage.log"
+      - name: Package only public source, installed dependencies and emulator binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/offline-package"
+          git archive HEAD | gzip > "$RUNNER_TEMP/offline-package/baseline-source.tar.gz"
+          tar -czf "$RUNNER_TEMP/offline-package/functions-dependencies.tar.gz" -C functions node_modules
+          tar -czf "$RUNNER_TEMP/offline-package/emulator-cli.tar.gz" -C "$RUNNER_TEMP/offline-cli" node_modules package.json package-lock.json
+          tar -czf "$RUNNER_TEMP/offline-package/emulator-binaries.tar.gz" -C "$HOME/.cache/firebase" emulators
+          cp "$RUNNER_TEMP/baseline-storage.log" "$RUNNER_TEMP/offline-package/"
+          git rev-parse HEAD > "$RUNNER_TEMP/offline-package/baseline-commit.txt"
+          cd "$RUNNER_TEMP/offline-package"
+          sha256sum *.tar.gz > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-security-runtime
+          path: ${{ runner.temp }}/offline-package/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
