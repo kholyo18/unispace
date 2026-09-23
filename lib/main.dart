@@ -46262,9 +46262,12 @@ Future<void> initPushNotifications() async {
     );
 
     FirebaseMessaging.onMessage.listen((msg) async {
-      if (FirebaseAuth.instance.currentUser == null ||
-          (msg.data['recipientId'] != null && msg.data['recipientId'] != FirebaseAuth.instance.currentUser?.uid) ||
-          !PushPreferencesService.instance.allows(msg.data['type']?.toString() ?? '')) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null || msg.data['recipientId'] is! String ||
+          msg.data['recipientId'] != uid ||
+          !PushPreferencesService.instance.allows(msg.data['type']?.toString() ?? '')) {
+        return;
+      }
       final n = msg.notification;
       if (n == null) return;
       await _localNotifs.show(
@@ -46332,7 +46335,10 @@ void _handleFcmPayload(String payload) {
 
 void _openFromFcmData(Map<String, dynamic> data) {
   final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null || (data['recipientId'] != null && data['recipientId'] != uid)) return;
+  if (uid == null || data['recipientId'] is! String ||
+      data['recipientId'] != uid) {
+    return;
+  }
   final ctx = unispaceNavigatorKey.currentContext;
   if (ctx == null) return;
   final n = NotificationItem(
