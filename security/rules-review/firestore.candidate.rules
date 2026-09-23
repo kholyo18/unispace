@@ -122,6 +122,74 @@ service cloud.firestore {
         && (!changed.hasAny(['typing']) || ownActivityChange('typing', true));
     }
 
+    // Personal chat preferences are writable only by their own participant.
+    // This is an integrity boundary: the containing chat is still readable by
+    // both members. It does not make nickname/theme values confidential.
+    function validDirectChatMembers(data) {
+      let ids = data.memberIds;
+      return ids is list && ids.size() == 2
+        && ids[0] is string && ids[1] is string
+        && ids[0].size() > 0 && ids[1].size() > 0
+        && ids[0] != ids[1] && request.auth.uid in ids;
+    }
+    function ownPreferenceValue(key, data) {
+      return !(request.auth.uid in data)
+        || ((key == 'muted' || key == 'autoTranslate')
+          ? data[request.auth.uid] is bool
+          : (key == 'theme' ? data[request.auth.uid] is map
+            : (key == 'clearedAt' ? currentActivityTimestamp(data[request.auth.uid])
+              : data[request.auth.uid] is string)));
+    }
+    function ownPreferenceChange(key) {
+      let old = resource.data.get(key, {});
+      let next = request.resource.data.get(key, {});
+      return old is map && next is map
+        && next.diff(old).affectedKeys().hasOnly([request.auth.uid])
+        && ownPreferenceValue(key, next);
+    }
+    function initialPreference(key) {
+      let data = request.resource.data.get(key, {});
+      return data is map && data.keys().hasOnly([request.auth.uid])
+        && ownPreferenceValue(key, data);
+    }
+    function personalFlagKeys(uid) {
+      return ['pinned_' + uid, 'muted_' + uid, 'deletedBy_' + uid];
+    }
+    function optionalBoolean(data, key) {
+      return !(key in data) || data[key] is bool;
+    }
+    function initialPersonalPreferences() {
+      let data = request.resource.data;
+      let uid = request.auth.uid;
+      let peer = data.memberIds[0] == uid ? data.memberIds[1] : data.memberIds[0];
+      return !data.keys().hasAny(personalFlagKeys(peer))
+        && optionalBoolean(data, 'pinned_' + uid)
+        && optionalBoolean(data, 'muted_' + uid)
+        && optionalBoolean(data, 'deletedBy_' + uid)
+        && initialPreference('muted') && initialPreference('clearedAt')
+        && initialPreference('nicknames') && initialPreference('theme')
+        && initialPreference('autoTranslate') && initialPreference('autoTranslateLang');
+    }
+    function personalPreferenceChanges() {
+      let data = request.resource.data;
+      let changed = data.diff(resource.data).affectedKeys();
+      let uid = request.auth.uid;
+      let ids = resource.data.memberIds;
+      let peer = ids[0] == uid ? ids[1] : ids[0];
+      // Flat keys are the existing chat-list representation. Protect the other
+      // current member's values even if unchanged legacy values are malformed.
+      return !changed.hasAny(personalFlagKeys(peer))
+        && (!changed.hasAny(['pinned_' + uid]) || optionalBoolean(data, 'pinned_' + uid))
+        && (!changed.hasAny(['muted_' + uid]) || optionalBoolean(data, 'muted_' + uid))
+        && (!changed.hasAny(['deletedBy_' + uid]) || optionalBoolean(data, 'deletedBy_' + uid))
+        && (!changed.hasAny(['muted']) || ownPreferenceChange('muted'))
+        && (!changed.hasAny(['clearedAt']) || ownPreferenceChange('clearedAt'))
+        && (!changed.hasAny(['nicknames']) || ownPreferenceChange('nicknames'))
+        && (!changed.hasAny(['theme']) || ownPreferenceChange('theme'))
+        && (!changed.hasAny(['autoTranslate']) || ownPreferenceChange('autoTranslate'))
+        && (!changed.hasAny(['autoTranslateLang']) || ownPreferenceChange('autoTranslateLang'));
+    }
+
     match /chats/{chatId} {
       allow get: if activeSession() && (
         resource == null
@@ -130,14 +198,15 @@ service cloud.firestore {
       allow list: if activeSession()
         && request.auth.uid in resource.data.memberIds;
       allow create: if activeSession()
-        && request.auth.uid in request.resource.data.memberIds
-        && request.resource.data.memberIds.size() == 2
+        && validDirectChatMembers(request.resource.data)
         && validInitialActivity('lastReadAt')
-        && validInitialActivity('typing');
+        && validInitialActivity('typing')
+        && initialPersonalPreferences();
       allow update: if activeSession()
-        && request.auth.uid in resource.data.memberIds
+        && validDirectChatMembers(resource.data)
         && request.resource.data.memberIds == resource.data.memberIds
-        && validActivityChanges();
+        && validActivityChanges()
+        && personalPreferenceChanges();
       allow delete: if false;
       match /messages/{msgId} {
         allow read: if isCurrentChatMember(chatId);
