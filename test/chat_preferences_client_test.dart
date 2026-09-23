@@ -56,6 +56,7 @@ void main() {
         await client.setMuted(value);
         expect(writes.single, {
           'muted': {uid: value},
+          'muted_$uid': value,
         });
       },
     );
@@ -214,9 +215,11 @@ void main() {
     expect(writes, [
       {
         'muted': {uid: true},
+        'muted_$uid': true,
       },
       {
         'muted': {uid: false},
+        'muted_$uid': false,
       },
     ]);
   });

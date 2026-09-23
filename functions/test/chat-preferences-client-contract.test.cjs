@@ -33,3 +33,31 @@ test('preference snapshot decoding is typed and earlier activity guards remain w
   assert.match(page, /await _chatActivity\.setTyping\(active\)/);
   assert.match(page, /_peerTypingExpiry = Timer\(remaining,/);
 });
+
+test('MUTECONSISTENCYREGRESSION: list shares the detail mute reader', () => {
+  assert.match(page, /muted: ChatPreferencesSnapshot\.readMuted\(doc\.data\(\), uid\)/);
+  assert.doesNotMatch(page, /muted: doc\.data\(\)\[['"]muted_\$uid['"]\]/);
+});
+test('MUTECONSISTENCYREGRESSION: list mute uses the bound preference writer', () => {
+  const block = page.slice(page.indexOf("      case 'mute':"), page.indexOf("      case 'delete':"));
+  assert.match(block, /await preferences\.setMuted\(!muted\)/);
+  assert.match(block, /expectedUid: ownerUid/);
+  assert.match(block, /currentUid: \(\) => mounted \? _auth\.currentUser\?\.uid : null/);
+  assert.match(block, /preferences\.dispose\(\)/);
+  assert.match(block, /context\.mounted && preferences\.isCurrent/);
+  assert.doesNotMatch(block, /ref\.set\(\{['"]muted_/);
+});
+test('MUTECONSISTENCYREGRESSION: menu retains its owner and session across selection', () => {
+  const start = page.indexOf('  Future<void> _showChatActions(');
+  const block = page.slice(start, page.indexOf('class _ChatRow', start));
+  assert.match(page, /ownerUid: uid/);
+  assert.match(block, /required String ownerUid/);
+  assert.match(block, /final menuSession = PublicProfileService\.viewerSession;/);
+  assert.ok(block.indexOf('final menuSession = PublicProfileService.viewerSession;') < block.indexOf('await showMenu<String>'));
+  const selected = block.slice(block.indexOf('if (selected == null'));
+  assert.match(selected, /_auth\.currentUser\?\.uid != ownerUid/);
+  assert.match(selected, /PublicProfileService\.viewerSession != menuSession/);
+  assert.match(selected, /!context\.mounted/);
+  assert.match(selected, /final uid = ownerUid;/);
+  assert.doesNotMatch(selected, /_auth\.currentUser!\.uid/);
+});

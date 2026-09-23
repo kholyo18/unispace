@@ -36,6 +36,8 @@ class ChatPreferencesClient {
   Future<bool> setMuted(bool value) => _send(
     () => {
       'muted': {expectedUid: value},
+      // Keep the recognized legacy list field in the same atomic merge.
+      'muted_$expectedUid': value,
     },
   );
 
@@ -117,6 +119,17 @@ class ChatPreferencesClient {
 /// Tolerates old malformed containers; never imports a peer's preferences.
 /// Values remain in a shared chat document, not a confidential per-user store.
 class ChatPreferencesSnapshot {
+  /// During compatibility, either recognized true preserves an existing mute.
+  /// An explicit setMuted writes both values together to resolve conflicts.
+  /// Unknown literal dotted fields and other users' entries are never imported.
+  static bool readMuted(Map<String, dynamic> data, String uid) {
+    if (uid.isEmpty) return false;
+    final canonical = data['muted'];
+    bool flag(Object? value) => value is bool && value;
+    return flag(canonical is Map ? canonical[uid] : null) ||
+        flag(data['muted_$uid']);
+  }
+
   ChatPreferencesSnapshot.fromData(Map<String, dynamic> data, String uid) {
     Object? own(String key) {
       final container = data[key];
@@ -127,7 +140,7 @@ class ChatPreferencesSnapshot {
     final theme = rawTheme is Map ? rawTheme : const <String, dynamic>{};
     String text(Object? value, String fallback) =>
         value is String ? value : fallback;
-    muted = own('muted') == true;
+    muted = readMuted(data, uid);
     nickname = text(own('nicknames'), '');
     autoTranslate = own('autoTranslate') == true;
     autoTranslateLang = text(own('autoTranslateLang'), 'ar');
