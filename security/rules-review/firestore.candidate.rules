@@ -95,6 +95,33 @@ service cloud.firestore {
         && (!changed.hasAny(['readBy']) || ownReadReceiptChange());
     }
 
+    // Chat activity is participant-owned. Client timestamps must resolve to
+    // request.time; a caller cannot backdate or future-date a seen/typing mark.
+    function currentActivityTimestamp(value) {
+      return value is timestamp && value == request.time;
+    }
+    function ownActivityChange(key, mayRemove) {
+      let old = resource.data.get(key, {});
+      let next = request.resource.data.get(key, {});
+      return old is map && next is map
+        && next.diff(old).affectedKeys().hasOnly([request.auth.uid])
+        && ((mayRemove && !(request.auth.uid in next))
+          || (request.auth.uid in next
+            && currentActivityTimestamp(next[request.auth.uid])));
+    }
+    function validInitialActivity(key) {
+      let data = request.resource.data.get(key, {});
+      return data is map && data.keys().hasOnly([request.auth.uid])
+        && (!(request.auth.uid in data)
+          || currentActivityTimestamp(data[request.auth.uid]));
+    }
+    function validActivityChanges() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      // Preserve unchanged legacy data during unrelated chat operations.
+      return (!changed.hasAny(['lastReadAt']) || ownActivityChange('lastReadAt', false))
+        && (!changed.hasAny(['typing']) || ownActivityChange('typing', true));
+    }
+
     match /chats/{chatId} {
       allow get: if activeSession() && (
         resource == null
@@ -104,10 +131,13 @@ service cloud.firestore {
         && request.auth.uid in resource.data.memberIds;
       allow create: if activeSession()
         && request.auth.uid in request.resource.data.memberIds
-        && request.resource.data.memberIds.size() == 2;
+        && request.resource.data.memberIds.size() == 2
+        && validInitialActivity('lastReadAt')
+        && validInitialActivity('typing');
       allow update: if activeSession()
         && request.auth.uid in resource.data.memberIds
-        && request.resource.data.memberIds == resource.data.memberIds;
+        && request.resource.data.memberIds == resource.data.memberIds
+        && validActivityChanges();
       allow delete: if false;
       match /messages/{msgId} {
         allow read: if isCurrentChatMember(chatId);
