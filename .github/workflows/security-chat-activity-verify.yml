@@ -1,0 +1,132 @@
+name: Chat activity authorization verification
+on:
+  pull_request:
+    paths:
+      - 'firestore.rules'
+      - 'security/rules-review/**'
+      - 'functions/test/chat-activity*.test.cjs'
+      - 'functions/test/message-metadata-rules.integration.test.cjs'
+      - 'lib/features/shell/chat_page.dart'
+      - 'lib/services/chat_activity_client.dart'
+      - 'test/chat_activity_client_test.dart'
+      - '.github/workflows/security-chat-activity-verify.yml'
+permissions:
+  contents: read
+jobs:
+  activity-rules:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prove ten exact failures against pre-fix Rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 169c9bf2c2a493487b0a87d1eb16eb1d3000e0b5:firestore.rules > .activity-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.security-test.json'));c.firestore.rules='.activity-baseline.rules';fs.writeFileSync('.activity-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec --only firestore,auth \
+            --project demo-unispace-security --config .activity-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='^ACTIVITYREGRESSION:' functions/test/chat-activity-rules.integration.test.cjs" > activity-baseline.log 2>&1
+          result=$?
+          set -e
+          cat activity-baseline.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs = require('node:fs');
+          const expected = [
+            'member cannot forge peer seen time',
+            'parent replacement cannot erase peer seen time',
+            'own seen time cannot be removed',
+            'future seen timestamp is denied',
+            'member cannot impersonate peer typing',
+            'member cannot erase peer typing',
+            'arbitrary typing timestamp is denied',
+            'creation cannot prepopulate peer seen state',
+            'creation cannot prepopulate peer typing',
+            'summary edit cannot hide peer activity rewrite',
+          ];
+          const log = fs.readFileSync('activity-baseline.log', 'utf8');
+          const failed = [...log.matchAll(/^not ok \d+ - ACTIVITYREGRESSION: (.+)$/gm)].map(m => m[1].trim());
+          if (process.env.BASELINE_EXIT !== '1' || failed.length !== expected.length ||
+              expected.some(n => !failed.includes(n)) || !/^# fail 10\s*$/m.test(log) ||
+              !/^# skipped 0\s*$/m.test(log)) throw Error('Expected the exact ten old-policy failures.');
+          NODE
+      - name: Test current activity and inherited message boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          node --check functions/test/chat-activity-rules.integration.test.cjs
+          npx --yes firebase-tools@15.18.0 emulators:exec --only firestore,auth \
+            --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/chat-activity*.test.cjs functions/test/message-metadata-rules.integration.test.cjs functions/test/chat-rules.integration.test.cjs" \
+            2>&1 | tee activity-current.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chat-activity-rule-evidence
+          path: |
+            activity-baseline.log
+            activity-current.log
+          retention-days: 7
+  flutter-activity:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+      - name: Resolve locked dependencies and generate only missing intl messages
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+          dart pub global activate intl_utils 2.8.16
+          stage="$(mktemp -d)"
+          cp pubspec.yaml "$stage/"
+          mkdir -p "$stage/lib"
+          cp -R lib/l10n "$stage/lib/l10n"
+          (cd "$stage" && dart pub global run intl_utils:generate)
+          mkdir -p lib/generated/intl
+          cp -R "$stage/lib/generated/intl/." lib/generated/intl/
+      - name: Analyze new production client and executable tests
+        run: flutter analyze lib/services/chat_activity_client.dart test/chat_activity_client_test.dart
+      - name: Execute activity and existing security upload privacy regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --reporter expanded \
+            test/chat_activity_client_test.dart test/storage_upload_client_test.dart \
+            test/account_state_client_test.dart test/account_recovery_test.dart \
+            test/mfa_safety_test.dart test/security_sessions_test.dart \
+            test/public_profile_reader_test.dart test/public_profile_widget_test.dart \
+            test/profile_privacy_test.dart test/privacy_settings_test.dart test/widgets \
+            2>&1 | tee flutter-activity.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chat-activity-flutter-evidence
+          path: flutter-activity.log
+          retention-days: 7

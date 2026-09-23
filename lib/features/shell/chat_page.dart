@@ -1,4 +1,5 @@
 import 'package:UniSpace/services/storage_upload_service.dart';
+import 'package:UniSpace/services/chat_activity_client.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -3084,6 +3085,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _hasText = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _chatSub;
   Timer? _typingIdle;
+  Timer? _peerTypingExpiry;
+  late final ChatActivityClient _chatActivity;
   bool _peerTyping = false;
   bool _muted = false;
   DateTime? _peerLastActive;
@@ -3134,6 +3137,17 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     super.initState();
     _voice = VoiceSessionController();
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    _chatActivity = ChatActivityClient(
+      expectedUid: uid,
+      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+      sessionKey: () => PublicProfileService.viewerSession,
+      merge: (data) => FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .set(data, SetOptions(merge: true)),
+      serverTimestamp: FieldValue.serverTimestamp,
+      deleteField: FieldValue.delete,
+    );
     _me = types.User(id: uid, firstName: 'أنا');
     _peer = types.User(
       id: widget.peerId,
@@ -3146,32 +3160,33 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       if (has != _hasText) setState(() => _hasText = has);
     });
     if (uid.isNotEmpty) {
-      unawaited(
-        FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set(
-          {
-            'unread.$uid': 0,
-            'lastReadAt.$uid': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        ),
-      );
+      unawaited(_markChatRead());
     }
     _chatSub = FirebaseFirestore.instance
         .collection('chats')
         .doc(widget.chatId)
         .snapshots()
         .listen((doc) {
-      if (!mounted) return;
+      if (!mounted || !_chatActivity.isCurrent) return;
       final data = doc.data() ?? {};
-      final map = Map<String, dynamic>.from(data['typing'] ?? {});
-      final raw = map[widget.peerId];
-      var typing = false;
-      if (raw is Timestamp) {
-        typing = DateTime.now().difference(raw.toDate()).inSeconds < 4;
+      final typingMap = data['typing'];
+      final raw = typingMap is Map ? typingMap[widget.peerId] : null;
+      final remaining = ChatActivityClient.typingRemaining(
+        raw is Timestamp ? raw.toDate() : null,
+        DateTime.now(),
+      );
+      final typing = remaining > Duration.zero;
+      _peerTypingExpiry?.cancel();
+      if (typing) {
+        _peerTypingExpiry = Timer(remaining, () {
+          if (mounted && _chatActivity.isCurrent) {
+            setState(() => _peerTyping = false);
+          }
+        });
       }
 
-      final readRaw = Map<String, dynamic>.from(data['lastReadAt'] ?? {});
-      final rr = readRaw[widget.peerId];
+      final readRaw = data['lastReadAt'];
+      final rr = readRaw is Map ? readRaw[widget.peerId] : null;
       DateTime? peerRead;
       if (rr is Timestamp) peerRead = rr.toDate();
 
@@ -3208,15 +3223,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       });
     });
     _sub = _msgs.orderBy('createdAt', descending: true).snapshots().listen((snap) {
-      if (!mounted) return;
+      if (!mounted || !_chatActivity.isCurrent) return;
       setState(() => _messages = snap.docs.map(_toMessage).toList());
       if (_me.id.isEmpty) return;
-      unawaited(
-        FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
-          'lastReadAt.${_me.id}': FieldValue.serverTimestamp(),
-          'unread.${_me.id}': 0,
-        }, SetOptions(merge: true)),
-      );
+      unawaited(_markChatRead());
     }, onError: (e) => debugPrint('messages stream error: $e'));
 
     _peerSub = PublicProfileService.watch(widget.peerId).listen((data) {
@@ -3333,6 +3343,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     _peerSub?.cancel();
     _chatSub?.cancel();
     _typingIdle?.cancel();
+    _peerTypingExpiry?.cancel();
+    _chatActivity.dispose();
     _recordTicker?.cancel();
     _inputCtrl.dispose();
     _searchCtrl.dispose();
@@ -3371,16 +3383,32 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     }, SetOptions(merge: true));
   }
 
-  void _onComposerChanged(String _) {
-    if (_me.id.isEmpty) return;
-    FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
-      'typing.${_me.id}': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+  Future<void> _markChatRead() async {
+    try {
+      await _chatActivity.markRead();
+    } catch (_) {
+      debugPrint('Chat read acknowledgement failed');
+    }
+  }
+
+  Future<void> _setChatTyping(bool active) async {
+    try {
+      await _chatActivity.setTyping(active);
+    } catch (_) {
+      debugPrint('Chat typing update failed');
+    }
+  }
+
+  void _onComposerChanged(String text) {
+    if (!_chatActivity.isCurrent) return;
     _typingIdle?.cancel();
+    if (text.trim().isEmpty) {
+      unawaited(_setChatTyping(false));
+      return;
+    }
+    unawaited(_setChatTyping(true));
     _typingIdle = Timer(const Duration(seconds: 3), () {
-      FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
-        'typing.${_me.id}': FieldValue.delete(),
-      }, SetOptions(merge: true));
+      unawaited(_setChatTyping(false));
     });
   }
 
@@ -3684,11 +3712,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         'unread.${widget.peerId}': FieldValue.increment(1),
       });
       _touchMyPresence();
-      unawaited(
-        FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
-          'typing.${_me.id}': FieldValue.delete(),
-        }, SetOptions(merge: true)),
-      );
+      _typingIdle?.cancel();
+      unawaited(_setChatTyping(false));
     } catch (e) {
       debugPrint('send failed: $e');
     } finally {
