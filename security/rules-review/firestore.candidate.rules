@@ -190,6 +190,18 @@ service cloud.firestore {
         && (!changed.hasAny(['autoTranslateLang']) || ownPreferenceChange('autoTranslateLang'));
     }
 
+    // Author edits are not authority to replace a message's envelope.
+    // Creation time, media references, type, reply attribution and unknown
+    // fields remain immutable. Legacy text-only edits are still supported.
+    function validAuthorMessageEdit() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['text', 'editedAt', 'readBy', 'reactions', 'starredBy'])
+        && (!changed.hasAny(['text'])
+          || request.resource.data.get('text', null) is string)
+        && (!changed.hasAny(['editedAt'])
+          || currentActivityTimestamp(request.resource.data.get('editedAt', null)));
+    }
+
     match /chats/{chatId} {
       allow get: if activeSession() && (
         resource == null
@@ -219,7 +231,7 @@ service cloud.firestore {
           && request.resource.data.authorId == resource.data.authorId
           && validInteractionChanges()
           && (
-            resource.data.authorId == request.auth.uid
+            (resource.data.authorId == request.auth.uid && validAuthorMessageEdit())
             || request.resource.data.diff(resource.data)
                 .affectedKeys()
                 .hasOnly(['readBy', 'reactions', 'starredBy'])
