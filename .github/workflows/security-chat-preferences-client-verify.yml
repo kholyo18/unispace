@@ -62,7 +62,7 @@ jobs:
           set -euo pipefail
           git show 972022ad97f404b70e74c2efb2ab907d488e6cda:lib/features/shell/chat_page.dart > /tmp/preference-old.dart
           set +e
-          CHAT_PREFERENCE_SOURCE=/tmp/preference-old.dart node --test --test-name-pattern='^PREFERENCECLIENTREGRESSION:' functions/test/chat-preferences-client-contract.test.cjs > evidence/source-baseline.log 2>&1
+          CHAT_PREFERENCE_SOURCE=/tmp/preference-old.dart node --test --test-reporter=tap --test-name-pattern='^PREFERENCECLIENTREGRESSION:' functions/test/chat-preferences-client-contract.test.cjs > evidence/source-baseline.log 2>&1
           result=$?
           set -e
           RESULT="$result" node <<'NODE'
@@ -70,7 +70,7 @@ jobs:
           const names=[...log.matchAll(/^not ok \d+ - PREFERENCECLIENTREGRESSION: (.+)$/gm)].map(m=>m[1]);
           if(process.env.RESULT!=='1'||names.length!==2||!names.includes('no literal dotted preference set keys remain')||!names.includes('bubble selection has only one persistence decision')||!/^# fail 2\s*$/m.test(log)) throw Error('Expected exactly the two source regressions.');
           NODE
-          node --test functions/test/chat-preferences-client-contract.test.cjs 2>&1 | tee evidence/source-current.log
+          node --test --test-reporter=tap functions/test/chat-preferences-client-contract.test.cjs 2>&1 | tee evidence/source-current.log
       - name: Analyze production client and tests
         shell: bash
         run: |
@@ -96,7 +96,7 @@ jobs:
           export CHAT_PREFERENCES_PAYLOADS="$PWD/evidence/preference-payloads.json"
           npx --yes firebase-tools@15.18.0 emulators:exec --only firestore,auth \
             --project demo-unispace-security --config firebase.security-test.json \
-            "node --test --test-concurrency=1 functions/client-test/chat-preferences-payload.test.cjs" \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/client-test/chat-preferences-payload.test.cjs" \
             2>&1 | tee evidence/payload-integration.log
           git diff --exit-code -- pubspec.yaml pubspec.lock functions/package.json functions/package-lock.json firestore.rules security/rules-review/firestore.candidate.rules
           sha256sum lib/features/shell/chat_page.dart lib/services/chat_preferences_client.dart test/chat_preferences_client_test.dart test/support/export_chat_preferences.dart functions/client-test/chat-preferences-payload.test.cjs functions/test/chat-preferences-client-contract.test.cjs > evidence/source-sha256.txt
