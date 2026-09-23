@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { initializeApp, deleteApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const PROJECT = 'demo-unispace-security';
 const fsHost = process.env.FIRESTORE_EMULATOR_HOST;
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
@@ -17,19 +18,30 @@ const app = initializeApp({ projectId: PROJECT }, `metadata-${randomUUID()}`);
 const db = getFirestore(app);
 const base = `http://${fsHost}/v1/projects/${PROJECT}/databases/(default)/documents`;
 let author, peer, outsider;
-async function signup() {
-  const response = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo`, {
+async function signup(uid) {
+  const email = `metadata-${randomUUID()}@example.test`;
+  const password = 'Local-fixture-password-29!';
+  // Deliberately exercise digit-leading IDs: random signup previously made the
+  // unquoted REST update-mask bug intermittent. Admin only provisions fixtures.
+  if (uid) await getAuth(app).createUser({ uid, email, password });
+  const action = uid ? 'signInWithPassword' : 'signUp';
+  const response = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:${action}?key=demo`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: `metadata-${randomUUID()}@example.test`,
-      password: 'Local-fixture-password-29!', returnSecureToken: true }),
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
     signal: AbortSignal.timeout(15000),
   });
-  assert.equal(response.ok, true, `Local signup returned ${response.status}`);
+  assert.equal(response.ok, true, `Local authentication returned ${response.status}`);
   const data = await response.json();
+  if (uid) assert.equal(data.localId, uid);
   const claims = JSON.parse(Buffer.from(data.idToken.split('.')[1], 'base64url'));
   return { uid: data.localId, token: data.idToken, authTime: claims.auth_time };
 }
-before(async () => { [author, peer, outsider] = await Promise.all([signup(), signup(), signup()]); });
+before(async () => {
+  [author, peer, outsider] = await Promise.all([
+    signup(`7author${randomUUID().replaceAll('-', '')}`),
+    signup(`8peer${randomUUID().replaceAll('-', '')}`), signup(),
+  ]);
+});
 after(async () => { await db.terminate(); await deleteApp(app); });
 function val(v) {
   if (v === null) return { nullValue: null };
@@ -52,8 +64,10 @@ function write(path, data, mask = Object.keys(data)) {
 }
 function commit(actor, writes) { return request(`${base}:commit`, actor, { writes }); }
 function patch(path, actor, data, mask) { return commit(actor, [write(path, data, mask)]); }
-function nested(path, field, uid, v) { return write(path, { [field]: { [uid]: v } }, [`${field}.${uid}`]); }
-function ok(r) { assert.ok(r.status >= 200 && r.status < 300, `Expected success, got ${r.status}: ${r.data.error?.status}`); }
+// REST masks require quoting for digit-leading or punctuation-containing segments.
+function fp(...parts) { return parts.map(p => '`' + p.replaceAll('\\', '\\\\').replaceAll('`', '\\`') + '`').join('.'); }
+function nested(path, field, uid, v) { return write(path, { [field]: { [uid]: v } }, [fp(field, uid)]); }
+function ok(r) { assert.ok(r.status >= 200 && r.status < 300, `Expected success, got ${r.status}: ${r.data.error?.status}: ${r.data.error?.message}`); }
 function denied(r) { assert.equal(r.status, 403); assert.equal(r.data.error?.status, 'PERMISSION_DENIED'); }
 async function fixture(data = {}) {
   const chat = `chats/metadata-${randomUUID()}`, message = `${chat}/messages/one`;
@@ -108,7 +122,7 @@ test('own dotted reaction add and delete preserve the other participant', async 
   ok(await commit(peer, [nested(f.message, 'reactions', peer.uid, ['👍', '🔥'])]));
   assert.deepEqual((await db.doc(f.message).get()).data().reactions,
     { [author.uid]: ['❤️'], [peer.uid]: ['👍', '🔥'] });
-  ok(await patch(f.message, peer, { reactions: {} }, [`reactions.${peer.uid}`]));
+  ok(await patch(f.message, peer, { reactions: {} }, [fp('reactions', peer.uid)]));
   assert.deepEqual((await db.doc(f.message).get()).data().reactions, { [author.uid]: ['❤️'] });
 });
 test('legacy string and all six quick reactions remain accepted', async () => {
@@ -149,7 +163,7 @@ test('own star acknowledgement is idempotent and deletion preserves others', asy
   const f = await fixture({ starredBy: { [author.uid]: true } });
   ok(await commit(peer, [nested(f.message, 'starredBy', peer.uid, true)]));
   ok(await commit(peer, [nested(f.message, 'starredBy', peer.uid, true)]));
-  ok(await patch(f.message, peer, { starredBy: {} }, [`starredBy.${peer.uid}`]));
+  ok(await patch(f.message, peer, { starredBy: {} }, [fp('starredBy', peer.uid)]));
   assert.deepEqual((await db.doc(f.message).get()).data().starredBy, { [author.uid]: true });
 });
 test('peer cannot erase author star or store false or non-boolean stars', async () => {
