@@ -31,6 +31,10 @@ function createPushNotificationHandler({ db, auth, messaging }) {
       catch (error) { if (error.code === 'auth/user-not-found') return; throw error; }
       if (account.disabled) return;
       const data = notification.data(), actorId = data.actorId;
+      // Only reviewed system kinds may omit an actor. Missing identity must not
+      // turn a social event into a bypass of the Auth/profile/block checks.
+      const actorOptional = data.type === 'announcement' || data.type === 'exam_reminder';
+      if (!actorOptional && !validId(actorId)) return;
       if (actorId != null && actorId !== '') {
         if (!validId(actorId)) return;
         const paths = [db.doc(`users/${actorId}`),
