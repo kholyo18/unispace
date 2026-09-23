@@ -1,5 +1,6 @@
 import 'package:UniSpace/services/storage_upload_service.dart';
 import 'package:UniSpace/services/chat_activity_client.dart';
+import 'package:UniSpace/services/chat_preferences_client.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -257,7 +258,7 @@ class _ChatDetailsPage extends StatefulWidget {
     required this.messages,
     required this.onSearch,
     required this.onOpenProfile,
-    required this.onToggleMute,
+    required this.preferences,
     required this.onClear,
     this.onWallpaperChanged,
     this.onBubbleColorChanged,
@@ -279,7 +280,7 @@ class _ChatDetailsPage extends StatefulWidget {
   final List<types.Message> messages;
   final VoidCallback onSearch;
   final VoidCallback onOpenProfile;
-  final VoidCallback onToggleMute;
+  final ChatPreferencesClient preferences;
   final VoidCallback onClear;
   final ValueChanged<String>? onWallpaperChanged;
   final ValueChanged<int>? onBubbleColorChanged;
@@ -301,10 +302,9 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
   String? _bubbleGradientKey;
   String? _wallpaperGradientKey;
 
-  DocumentReference<Map<String, dynamic>> get _chat =>
-      FirebaseFirestore.instance.collection('chats').doc(widget.chatId);
-
-  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
+  bool _savingPreference = false;
+  String get _uid => widget.preferences.expectedUid;
+  bool get _currentPreferences => mounted && widget.preferences.isCurrent;
 
   @override
   void initState() {
@@ -323,16 +323,20 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
     super.dispose();
   }
 
-  Future<void> _patch(Map<String, dynamic> data) async {
-    if (_uid.isEmpty) return;
+  Future<bool> _savePreference(Future<bool> Function() action) async {
+    if (!_currentPreferences || _savingPreference) return false;
+    setState(() => _savingPreference = true);
     try {
-      await _chat.set(data, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('theme patch failed: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر حفظ المظهر: $e')),
-      );
+      return await action() && _currentPreferences;
+    } catch (_) {
+      if (_currentPreferences) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر حفظ إعداد المحادثة. حاول مجددًا.')),
+        );
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _savingPreference = false);
     }
   }
   Future<void> _editNickname() async {
@@ -355,7 +359,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                 style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
               ),
               const SizedBox(height: 6),
-              const Text('يظهر لك في المحادثة فقط، وليس للطرف الآخر.'),
+              const Text('يغيّر الاسم المعروض عندك، ولا يغيّر اسم الحساب.'),
               const SizedBox(height: 12),
               TextField(
                 controller: ctrl,
@@ -387,13 +391,11 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
       },
     );
     ctrl.dispose();
-    if (value == null) return;
-    _nick.text = value;
-    setState(() {});
-    await _saveNick(value);
-  }
-  Future<void> _saveNick(String v) async {
-    await _patch({'nicknames.$_uid': v.trim()});
+    if (value == null || !_currentPreferences) return;
+    if (await _savePreference(() => widget.preferences.setNickname(value))) {
+      _nick.text = value;
+      setState(() {});
+    }
   }
 
   Future<void> _block() async {
@@ -857,54 +859,26 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                                     style: style,
                                     selected: isSelected,
                                     onTap: () async {
-                                      setSheetState(() {
-                                        if (style.gradient != null) {
-                                          selectedBubbleGradient = style.id;
-                                        } else {
-                                          selectedBubble = style.color!.value;
-                                          selectedBubbleGradient = null;
-                                        }
-                                      });
-
-                                      setState(() {
-                                        if (style.gradient != null) {
-                                          _bubbleGradientKey = style.id;
-                                        } else {
-                                          _bubble = style.color!.value;
-                                          _bubbleGradientKey = null;
-                                        }
-                                      });
-
-                                      if (style.gradient != null) {
-                                        final colors = _gradientColors(style.gradient!);
-                                        widget.onBubbleGradientChanged?.call(colors);
-                                        await _patch({
-                                          'theme.$_uid.bubbleGradient': colors,
-                                          'theme.$_uid.bubbleColor': FieldValue.delete(),
-                                        });
-                                      } else {
-                                        final c = style.color!.value;
-                                        widget.onBubbleColorChanged?.call(c);
-                                        await _patch({
-                                          'theme.$_uid.bubbleColor': c,
-                                          'theme.$_uid.bubbleGradient': FieldValue.delete(),
+                                      final gradient = style.gradient == null
+                                          ? null : _gradientColors(style.gradient!);
+                                      final saved = await _savePreference(() => gradient != null
+                                          ? widget.preferences.setBubbleGradient(gradient)
+                                          : widget.preferences.setBubbleColor(style.color!.value));
+                                      if (!saved) return;
+                                      if (sheetContext.mounted) {
+                                        setSheetState(() {
+                                          selectedBubbleGradient = gradient != null ? style.id : null;
+                                          if (gradient == null) selectedBubble = style.color!.value;
                                         });
                                       }
-
-                                      if (style.gradient != null) {
-                                        await _patch({
-                                          'theme.$_uid.bubbleGradient':
-                                          _gradientColors(style.gradient!),
-                                          'theme.$_uid.bubbleColor':
-                                          FieldValue.delete(),
-                                        });
+                                      setState(() {
+                                        _bubbleGradientKey = gradient != null ? style.id : null;
+                                        if (gradient == null) _bubble = style.color!.value;
+                                      });
+                                      if (gradient != null) {
+                                        widget.onBubbleGradientChanged?.call(gradient);
                                       } else {
-                                        await _patch({
-                                          'theme.$_uid.bubbleColor':
-                                          style.color!.value,
-                                          'theme.$_uid.bubbleGradient':
-                                          FieldValue.delete(),
-                                        });
+                                        widget.onBubbleColorChanged?.call(style.color!.value);
                                       }
                                     },
                                   );
@@ -958,23 +932,18 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                                 selected: selectedWallpaper == style.id,
                                 isDark: isDark,
                                 onTap: () async {
-                                  setSheetState(() {
-                                    selectedWallpaper = style.id;
-                                  });
-
+                                  final saved = await _savePreference(
+                                    () => widget.preferences.setWallpaper(style.id),
+                                  );
+                                  if (!saved) return;
                                   setState(() {
                                     _wallpaper = style.id;
                                     _wallpaperGradientKey = style.id;
                                     _wallpaperUrl = null;
                                   });
                                   widget.onWallpaperChanged?.call(style.id);
-                                  await _patch({
-                                    'theme.$_uid.wallpaper': style.id,
-                                    'theme.$_uid.wallpaperUrl':
-                                    FieldValue.delete(),
-                                  });
-
                                   if (sheetContext.mounted) {
+                                    setSheetState(() => selectedWallpaper = style.id);
                                     Navigator.of(sheetContext).pop();
                                   }
                                 },
@@ -1016,12 +985,13 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
 
 
   Future<void> _pickCustomWallpaper() async {
-    try {
+    String? url;
+    final saved = await _savePreference(() async {
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         imageQuality: 72,
       );
-      if (picked == null || _uid.isEmpty) return;
+      if (picked == null || !_currentPreferences) return false;
       final ref = FirebaseStorage.instance
           .ref()
           .child('chats/${widget.chatId}/wallpaper/$_uid.jpg');
@@ -1029,19 +999,17 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
         File(picked.path),
         SettableMetadata(contentType: 'image/jpeg'),
       );
-      final url = await ref.getDownloadURL();
-      setState(() => _wallpaper = 'photo');
-      widget.onWallpaperUrlChanged?.call(url);
-      await _patch({
-        'theme.$_uid.wallpaper': 'photo',
-        'theme.$_uid.wallpaperUrl': url,
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر تعيين الخلفية: $e')),
-      );
-    }
+      if (!_currentPreferences) return false;
+      url = await ref.getDownloadURL();
+      if (!_currentPreferences) return false;
+      return widget.preferences.setWallpaper('photo', photoUrl: url);
+    });
+    if (!saved || url == null) return;
+    setState(() {
+      _wallpaper = 'photo';
+      _wallpaperUrl = url;
+    });
+    widget.onWallpaperUrlChanged?.call(url!);
   }
 
   @override
@@ -1108,9 +1076,10 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                                   : 'الإشعارات مفعّلة',
                             ),
                             value: _muted,
-                            onChanged: (value) {
-                              setState(() => _muted = value);
-                              widget.onToggleMute();
+                            onChanged: _savingPreference ? null : (value) async {
+                              if (await _savePreference(() => widget.preferences.setMuted(value))) {
+                                setState(() => _muted = value);
+                              }
                             },
                           ),
 
@@ -1130,11 +1099,10 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                                   : 'الترجمة التلقائية متوقفة',
                             ),
                             value: _auto,
-                            onChanged: (value) async {
-                              setState(() => _auto = value);
-                              await _patch({
-                                'autoTranslate.$_uid': value,
-                              });
+                            onChanged: _savingPreference ? null : (value) async {
+                              if (await _savePreference(() => widget.preferences.setAutoTranslate(value))) {
+                                setState(() => _auto = value);
+                              }
                             },
                           ),
                         ],
@@ -1153,7 +1121,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                             title: const Text('الاسم البديل'),
                             subtitle: Text(
                               _nick.text.trim().isEmpty
-                                  ? 'يظهر لك فقط'
+                                  ? 'اسم للعرض في هذه المحادثة'
                                   : _nick.text.trim(),
                             ),
                             trailing: const Icon(
@@ -3087,6 +3055,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   Timer? _typingIdle;
   Timer? _peerTypingExpiry;
   late final ChatActivityClient _chatActivity;
+  late final ChatPreferencesClient _chatPreferences;
   bool _peerTyping = false;
   bool _muted = false;
   DateTime? _peerLastActive;
@@ -3148,6 +3117,17 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       serverTimestamp: FieldValue.serverTimestamp,
       deleteField: FieldValue.delete,
     );
+    _chatPreferences = ChatPreferencesClient(
+      expectedUid: uid,
+      currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+      sessionKey: () => PublicProfileService.viewerSession,
+      merge: (data) => FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .set(data, SetOptions(merge: true)),
+      serverTimestamp: FieldValue.serverTimestamp,
+      deleteField: FieldValue.delete,
+    );
     _me = types.User(id: uid, firstName: 'أنا');
     _peer = types.User(
       id: widget.peerId,
@@ -3190,34 +3170,20 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       DateTime? peerRead;
       if (rr is Timestamp) peerRead = rr.toDate();
 
-      final mutedMap = Map<String, dynamic>.from(data['muted'] ?? {});
-      final clearedRaw = Map<String, dynamic>.from(data['clearedAt'] ?? {});
-      final cr = clearedRaw[_me.id];
-
+      final preferences = ChatPreferencesSnapshot.fromData(data, _me.id);
+      final cr = preferences.clearedAt;
+      final started = data['createdAt'];
       setState(() {
         _peerTyping = typing;
         _peerReadAt = peerRead;
-        _muted = mutedMap[_me.id] == true;
-        final nick = Map<String, dynamic>.from(data['nicknames'] ?? {});
-        final themeMap = Map<String, dynamic>.from(data['theme'] ?? {});
-        final mineTheme = Map<String, dynamic>.from(themeMap[_me.id] ?? {});
-        final autoMap = Map<String, dynamic>.from(data['autoTranslate'] ?? {});
-        final langMap = Map<String, dynamic>.from(data['autoTranslateLang'] ?? {});
-        final started = data['createdAt'];
-        _nickname = (nick[_me.id] ?? '').toString();
-        _wallpaper = (mineTheme['wallpaper'] ?? 'default').toString();
-        _wallpaperUrl = (mineTheme['wallpaperUrl'] ?? '').toString();
-        _bubbleColor = (mineTheme['bubbleColor'] as num?)?.toInt() ?? 0xFF0D9488;
-        final rawG = mineTheme['bubbleGradient'];
-        if (rawG is List && rawG.length >= 2) {
-          _bubbleGradient = rawG
-              .map((e) => Color((e as num).toInt()))
-              .toList();
-        } else {
-          _bubbleGradient = null;
-        }
-        _autoTranslate = autoMap[_me.id] == true;
-        _autoTranslateLang = (langMap[_me.id] ?? 'ar').toString();
+        _muted = preferences.muted;
+        _nickname = preferences.nickname;
+        _wallpaper = preferences.wallpaper;
+        _wallpaperUrl = preferences.wallpaperUrl;
+        _bubbleColor = preferences.bubbleColor;
+        _bubbleGradient = preferences.bubbleGradient?.map((color) => Color(color)).toList();
+        _autoTranslate = preferences.autoTranslate;
+        _autoTranslateLang = preferences.autoTranslateLang;
         _chatStartedAt = started is Timestamp ? started.toDate() : null;
         _clearedAt = cr is Timestamp ? cr.toDate() : null;
       });
@@ -3345,6 +3311,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     _typingIdle?.cancel();
     _peerTypingExpiry?.cancel();
     _chatActivity.dispose();
+    _chatPreferences.dispose();
     _recordTicker?.cancel();
     _inputCtrl.dispose();
     _searchCtrl.dispose();
@@ -3354,12 +3321,6 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     super.dispose();
   }
 
-
-  Future<void> _toggleMute() async {
-    await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
-      'muted.${_me.id}': !_muted,
-    }, SetOptions(merge: true));
-  }
 
   Future<void> _clearChat() async {
     final ok = await showDialog<bool>(
@@ -3377,10 +3338,16 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         ],
       ),
     );
-    if (ok != true) return;
-    await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
-      'clearedAt.${_me.id}': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (ok != true || !mounted || !_chatPreferences.isCurrent) return;
+    try {
+      await _chatPreferences.clearHistory();
+    } catch (_) {
+      if (mounted && _chatPreferences.isCurrent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر مسح المحادثة عندك. حاول مجددًا.')),
+        );
+      }
+    }
   }
 
   Future<void> _markChatRead() async {
@@ -4483,6 +4450,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
               tooltip: 'المزيد',
               icon: const Icon(Icons.info_outline),
               onPressed: () {
+                if (!_chatPreferences.isCurrent) return;
                 showModalBottomSheet<void>(
                   context: context,
                   isScrollControlled: true,
@@ -4505,7 +4473,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                       setState(() => _searching = true);
                     },
                     onOpenProfile: _openPeerProfile,
-                    onToggleMute: _toggleMute,
+                    preferences: _chatPreferences,
                     onClear: _clearChat,
                     onWallpaperChanged: (id) {
                       setState(() {

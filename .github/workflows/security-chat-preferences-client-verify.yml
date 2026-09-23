@@ -1,0 +1,108 @@
+name: Chat preference client verification
+on:
+  pull_request:
+    paths:
+      - 'lib/features/shell/chat_page.dart'
+      - 'lib/services/chat_preferences_client.dart'
+      - 'test/chat_preferences_client_test.dart'
+      - 'test/support/export_chat_preferences.dart'
+      - 'functions/client-test/chat-preferences-payload.test.cjs'
+      - 'functions/test/chat-preferences-client-contract.test.cjs'
+      - 'firestore.rules'
+      - '.github/workflows/security-chat-preferences-client-verify.yml'
+permissions:
+  contents: read
+jobs:
+  preferences:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Locked dependencies and temporary localization generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/tested-commit.txt
+          flutter --version > evidence/flutter-version.txt
+          node --version > evidence/node-version.txt
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.yaml pubspec.lock
+          npm ci --prefix functions --ignore-scripts
+          dart pub global activate intl_utils 2.8.16
+          stage="$(mktemp -d)"
+          cp pubspec.yaml "$stage/"
+          mkdir -p "$stage/lib"
+          cp -R lib/l10n "$stage/lib/l10n"
+          (cd "$stage" && dart pub global run intl_utils:generate)
+          mkdir -p lib/generated/intl
+          cp -R "$stage/lib/generated/intl/." lib/generated/intl/
+      - name: Reproduce two exact old-source gaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 972022ad97f404b70e74c2efb2ab907d488e6cda:lib/features/shell/chat_page.dart > /tmp/preference-old.dart
+          set +e
+          CHAT_PREFERENCE_SOURCE=/tmp/preference-old.dart node --test --test-name-pattern='^PREFERENCECLIENTREGRESSION:' functions/test/chat-preferences-client-contract.test.cjs > evidence/source-baseline.log 2>&1
+          result=$?
+          set -e
+          RESULT="$result" node <<'NODE'
+          const fs=require('fs'); const log=fs.readFileSync('evidence/source-baseline.log','utf8');
+          const names=[...log.matchAll(/^not ok \d+ - PREFERENCECLIENTREGRESSION: (.+)$/gm)].map(m=>m[1]);
+          if(process.env.RESULT!=='1'||names.length!==2||!names.includes('no literal dotted preference set keys remain')||!names.includes('bubble selection has only one persistence decision')||!/^# fail 2\s*$/m.test(log)) throw Error('Expected exactly the two source regressions.');
+          NODE
+          node --test functions/test/chat-preferences-client-contract.test.cjs 2>&1 | tee evidence/source-current.log
+      - name: Analyze production client and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter analyze lib/services/chat_preferences_client.dart test/chat_preferences_client_test.dart 2>&1 | tee evidence/analysis.log
+      - name: Run selected Flutter regressions and export real preference payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --reporter expanded test/chat_preferences_client_test.dart \
+            test/chat_activity_client_test.dart test/storage_upload_client_test.dart \
+            test/account_state_client_test.dart test/account_recovery_test.dart \
+            test/mfa_safety_test.dart test/security_sessions_test.dart \
+            test/public_profile_reader_test.dart test/public_profile_widget_test.dart \
+            test/profile_privacy_test.dart test/privacy_settings_test.dart test/widgets \
+            2>&1 | tee evidence/flutter.log
+          dart test/support/export_chat_preferences.dart > evidence/preference-payloads.json
+      - name: Apply exported payloads through real Auth and Firestore client permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          export CHAT_PREFERENCES_PAYLOADS="$PWD/evidence/preference-payloads.json"
+          npx --yes firebase-tools@15.18.0 emulators:exec --only firestore,auth \
+            --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-concurrency=1 functions/client-test/chat-preferences-payload.test.cjs" \
+            2>&1 | tee evidence/payload-integration.log
+          git diff --exit-code -- pubspec.yaml pubspec.lock functions/package.json functions/package-lock.json firestore.rules security/rules-review/firestore.candidate.rules
+          sha256sum lib/features/shell/chat_page.dart lib/services/chat_preferences_client.dart test/chat_preferences_client_test.dart test/support/export_chat_preferences.dart functions/client-test/chat-preferences-payload.test.cjs functions/test/chat-preferences-client-contract.test.cjs > evidence/source-sha256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chat-preference-client-evidence
+          path: evidence
+          retention-days: 7
