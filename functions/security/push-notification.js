@@ -2,7 +2,7 @@ const { canReceiveContentPush, contentMessages } = require('./push-content-acces
 const { createHash } = require('crypto');
 const { logger } = require('firebase-functions');
 const { pushAllowed } = require('./push-preferences');
-const { bindingAllows, registrationMatches } = require('./push-session-policy');
+const { bindingAllows, registrationMatches, authCutoffAllows } = require('./push-session-policy');
 const validId = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && !v.includes('/') && !['.','..'].includes(v);
 const unavailable = d => !d || ['disabled','deleted'].includes(d.accountStatus) || d.security?.frozen === true;
 
@@ -72,7 +72,8 @@ function createPushNotificationHandler({ db, auth, messaging }) {
         const session = validId(state?.sessionId) ? sessions.get(state.sessionId)?.data() : null;
         // Old unbound registrations must synchronize again. Never deliver by
         // trusting only a client-writable/legacy fcm_tokens document.
-        return bindingAllows({ binding: state, userId,
+        return authCutoffAllows(state?.authTime, account.tokensValidAfterTime) &&
+          bindingAllows({ binding: state, userId,
           cutoff: cutoff.exists ? cutoff.data() : null, session }) &&
           record?.token === token && registrationMatches(record, state) &&
           pushAllowed(record.preferences, data.type);
