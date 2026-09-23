@@ -73,12 +73,18 @@ function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
   };
 }
 function pushAllowed(preferences, type) {
-  // Legacy registrations retain delivery until this client first synchronizes them.
+  // Unsupported kinds have no reviewed authorization or category contract.
+  // In particular, chat/message kinds must not bypass per-chat mute checks by
+  // falling through this generic community/system notification dispatcher.
+  if (!['new_post','like','like_comment','reply','comment','repost','follow',
+    'follow_request','follow_accepted','announcement','exam_reminder'].includes(type)) return false;
+  // Preserve the helper's legacy default only for recognized kinds. The actual
+  // dispatcher separately requires a canonical, session-bound registration.
   if (preferences == null) return true;
   if (preferences.enabled !== true) return false;
   if (['new_post','like','like_comment','reply','comment','repost','follow','follow_request','follow_accepted'].includes(type)) return preferences.community === true;
   if (type === 'announcement') return preferences.announcements === true;
   if (type === 'exam_reminder') return preferences.exams === true;
-  return true;
+  return false;
 }
 module.exports = {createSyncPushDeviceHandler,pushAllowed};
