@@ -5,6 +5,7 @@ on:
       - 'lib/features/shell/chat_page.dart'
       - 'lib/services/chat_preferences_client.dart'
       - 'test/chat_preferences_client_test.dart'
+      - 'test/chat_mute_consistency_test.dart'
       - 'test/support/export_chat_preferences.dart'
       - 'functions/client-test/chat-preferences-payload.test.cjs'
       - 'functions/test/chat-preferences-client-contract.test.cjs'
@@ -71,16 +72,46 @@ jobs:
           if(process.env.RESULT!=='1'||names.length!==2||!names.includes('no literal dotted preference set keys remain')||!names.includes('bubble selection has only one persistence decision')||!/^# fail 2\s*$/m.test(log)) throw Error('Expected exactly the two source regressions.');
           NODE
           node --test --test-reporter=tap functions/test/chat-preferences-client-contract.test.cjs 2>&1 | tee evidence/source-current.log
+      - name: Reproduce mute failures on the immutable pre-fix source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 763255912be15d0a870c394c3855d97a44e5ec3f:lib/features/shell/chat_page.dart > /tmp/mute-old-page.dart
+          cp lib/services/chat_preferences_client.dart /tmp/mute-current-client.dart
+          trap 'cp /tmp/mute-current-client.dart lib/services/chat_preferences_client.dart' EXIT
+          git show 763255912be15d0a870c394c3855d97a44e5ec3f:lib/services/chat_preferences_client.dart > lib/services/chat_preferences_client.dart
+          set +e
+          flutter test --reporter expanded --plain-name 'MUTECONSISTENCYREGRESSION:' test/chat_mute_consistency_test.dart > evidence/mute-baseline-dart.log 2>&1
+          dart_result=$?
+          CHAT_PREFERENCE_SOURCE=/tmp/mute-old-page.dart node --test --test-reporter=tap --test-name-pattern='^MUTECONSISTENCYREGRESSION:' functions/test/chat-preferences-client-contract.test.cjs > evidence/mute-baseline-source.log 2>&1
+          source_result=$?
+          set -e
+          cp /tmp/mute-current-client.dart lib/services/chat_preferences_client.dart
+          trap - EXIT
+          DART_RESULT="$dart_result" SOURCE_RESULT="$source_result" node <<'NODE'
+          const fs=require('fs');
+          const dart=fs.readFileSync('evidence/mute-baseline-dart.log','utf8');
+          const source=fs.readFileSync('evidence/mute-baseline-source.log','utf8');
+          const expected=[
+            'legacy mute is visible in detail reader',
+            'explicit true writes both representations atomically',
+            'explicit false writes both representations atomically',
+          ];
+          const failed=dart.split('\n').filter(line=>/\[E\]\s*$/.test(line));
+          if(process.env.DART_RESULT!=='1'||failed.length!==3||expected.some(name=>!failed.some(line=>line.includes(name)))) throw Error('Expected precisely three behavioral mute regressions.');
+          if(process.env.SOURCE_RESULT!=='1'||[...source.matchAll(/^not ok \d+ - MUTECONSISTENCYREGRESSION:/gm)].length!==3||!/^# fail 3\s*$/m.test(source)) throw Error('Expected precisely three wiring regressions.');
+          NODE
+          git diff --exit-code -- lib/services/chat_preferences_client.dart
       - name: Analyze production client and tests
         shell: bash
         run: |
           set -euo pipefail
-          flutter analyze lib/services/chat_preferences_client.dart test/chat_preferences_client_test.dart 2>&1 | tee evidence/analysis.log
+          flutter analyze lib/services/chat_preferences_client.dart test/chat_preferences_client_test.dart test/chat_mute_consistency_test.dart 2>&1 | tee evidence/analysis.log
       - name: Run selected Flutter regressions and export real preference payloads
         shell: bash
         run: |
           set -euo pipefail
-          flutter test --reporter expanded test/chat_preferences_client_test.dart \
+          flutter test --reporter expanded test/chat_preferences_client_test.dart test/chat_mute_consistency_test.dart \
             test/chat_activity_client_test.dart test/storage_upload_client_test.dart \
             test/account_state_client_test.dart test/account_recovery_test.dart \
             test/mfa_safety_test.dart test/security_sessions_test.dart \
@@ -99,7 +130,7 @@ jobs:
             "node --test --test-reporter=tap --test-concurrency=1 functions/client-test/chat-preferences-payload.test.cjs" \
             2>&1 | tee evidence/payload-integration.log
           git diff --exit-code -- pubspec.yaml pubspec.lock functions/package.json functions/package-lock.json firestore.rules security/rules-review/firestore.candidate.rules
-          sha256sum lib/features/shell/chat_page.dart lib/services/chat_preferences_client.dart test/chat_preferences_client_test.dart test/support/export_chat_preferences.dart functions/client-test/chat-preferences-payload.test.cjs functions/test/chat-preferences-client-contract.test.cjs > evidence/source-sha256.txt
+          sha256sum lib/features/shell/chat_page.dart lib/services/chat_preferences_client.dart test/chat_preferences_client_test.dart test/chat_mute_consistency_test.dart test/support/export_chat_preferences.dart functions/client-test/chat-preferences-payload.test.cjs functions/test/chat-preferences-client-contract.test.cjs > evidence/source-sha256.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

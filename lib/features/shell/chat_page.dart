@@ -2468,8 +2468,9 @@ class _ChatPageState extends State<ChatPage> {
                   context: context,
                   globalPosition: globalPosition,
                   chatId: doc.id,
+                  ownerUid: uid,
                   pinned: doc.data()['pinned_$uid'] == true,
-                  muted: doc.data()['muted_$uid'] == true,
+                  muted: ChatPreferencesSnapshot.readMuted(doc.data(), uid),
                 );
               },
             );
@@ -2512,9 +2513,14 @@ class _ChatPageState extends State<ChatPage> {
     required BuildContext context,
     required Offset globalPosition,
     required String chatId,
+    required String ownerUid,
     required bool pinned,
     required bool muted,
   }) async {
+    // Bind the menu before its asynchronous selection, not to a later account.
+    final menuSession = PublicProfileService.viewerSession;
+    if (ownerUid.isEmpty || menuSession == null ||
+        _auth.currentUser?.uid != ownerUid) return;
     final primary = _primary(context);
     final card = _card(context);
     final secondary = _secondary(context);
@@ -2611,9 +2617,11 @@ class _ChatPageState extends State<ChatPage> {
       ],
     );
 
-    if (selected == null || !mounted) return;
+    if (selected == null || !mounted || !context.mounted ||
+        _auth.currentUser?.uid != ownerUid ||
+        PublicProfileService.viewerSession != menuSession) return;
 
-    final uid = _auth.currentUser!.uid;
+    final uid = ownerUid;
     final ref = _firestore.collection('chats').doc(chatId);
 
     switch (selected) {
@@ -2621,7 +2629,25 @@ class _ChatPageState extends State<ChatPage> {
         await ref.set({'pinned_$uid': !pinned}, SetOptions(merge: true));
         break;
       case 'mute':
-        await ref.set({'muted_$uid': !muted}, SetOptions(merge: true));
+        final preferences = ChatPreferencesClient(
+          expectedUid: ownerUid,
+          currentUid: () => mounted ? _auth.currentUser?.uid : null,
+          sessionKey: () => PublicProfileService.viewerSession,
+          merge: (data) => ref.set(data, SetOptions(merge: true)),
+          serverTimestamp: FieldValue.serverTimestamp,
+          deleteField: FieldValue.delete,
+        );
+        try {
+          await preferences.setMuted(!muted);
+        } catch (_) {
+          if (mounted && context.mounted && preferences.isCurrent) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('تعذر حفظ إعدادات المحادثة. حاول مجدداً.')),
+            );
+          }
+        } finally {
+          preferences.dispose();
+        }
         break;
       case 'delete':
         await ref.set({'deletedBy_$uid': true}, SetOptions(merge: true));

@@ -18,7 +18,7 @@ const uid = fixture.uid;
 const peerUid = `2.preferences.peer.\`${randomUUID()}`;
 const {initializeApp, deleteApp} = require('firebase-admin/app');
 const {getAuth} = require('firebase-admin/auth');
-const {getFirestore, Timestamp} = require('firebase-admin/firestore');
+const {getFirestore, Timestamp, FieldValue} = require('firebase-admin/firestore');
 const app = initializeApp({projectId:PROJECT}, `prefs-${randomUUID()}`);
 const db = getFirestore(app), auth = getAuth(app);
 const base = `http://${fh}/v1/projects/${PROJECT}/databases/(default)/documents`;
@@ -46,6 +46,7 @@ async function seed() {
   const path=`chats/preferences-${randomUUID()}`;docs.push(path);
   await db.doc(path).set({memberIds:[uid,peerUid],
     nicknames:{[uid]:'original',[peerUid]:'peer nickname'},muted:{[uid]:false,[peerUid]:true},
+    [`muted_${uid}`]:false,[`muted_${peerUid}`]:true,
     autoTranslate:{[uid]:false,[peerUid]:false},
     theme:{[uid]:{wallpaper:'photo',wallpaperUrl:'old-url',bubbleColor:1,bubbleGradient:[1,2],untouched:'keep'},
       [peerUid]:{wallpaper:'mint',bubbleColor:2}},
@@ -95,6 +96,7 @@ async function apply(path,name) {
   assert.deepEqual(data.theme[peerUid],{wallpaper:'mint',bubbleColor:2});
   assert.equal(data.nicknames[peerUid],'peer nickname');
   assert.equal(data.muted[peerUid],true);
+  assert.equal(data[`muted_${peerUid}`],true);
   return data;
 }
 test('legacy dotted set characterization: write succeeds but canonical nickname is unchanged',async()=>{
@@ -111,8 +113,12 @@ test('nickname can be cleared using its existing empty string representation',as
   const data=await apply(await seed(),'nicknameEmpty');assert.equal(data.nicknames[uid],'');
 });
 test('explicit mute and unmute round trip without touching peer',async()=>{
-  const path=await seed();assert.equal((await apply(path,'mute')).muted[uid],true);
-  assert.equal((await apply(path,'unmute')).muted[uid],false);
+  const path=await seed();
+  for (const [name,expected] of [['mute',true],['unmute',false]]) {
+    const data=await apply(path,name);
+    assert.equal(data.muted[uid],expected);
+    assert.equal(data[`muted_${uid}`],expected);
+  }
 });
 test('explicit translation flags persist without touching peer or invoking translation',async()=>{
   const path=await seed();assert.equal((await apply(path,'translate')).autoTranslate[uid],true);
@@ -150,4 +156,55 @@ test('same exported owner payload is rejected under peer authentication',async()
 test('anonymous caller cannot apply production preference payloads',async()=>{
   const response=await send(await seed(),fixture.writes.mute,null);
   assert.equal(response.status,403);assert.equal(response.body.error.status,'PERMISSION_DENIED');
+});
+
+test('legacy-only mute reconciles into both recognized fields on explicit unmute',async()=>{
+  const path=await seed();
+  // set+merge preserves UID punctuation as a literal flat key in this fixture.
+  await db.doc(path).set({muted:FieldValue.delete(),[`muted_${uid}`]:true},{merge:true});
+  const before=(await db.doc(path).get()).data();
+  assert.equal(Object.hasOwn(before,'muted'),false);assert.equal(before[`muted_${uid}`],true);
+  const response=await send(path,fixture.writes.unmute);
+  assert.equal(response.status,200,JSON.stringify(response.body));
+  const data=(await db.doc(path).get()).data();
+  assert.deepEqual(data.muted,{[uid]:false});
+  assert.equal(data[`muted_${uid}`],false);assert.equal(data[`muted_${peerUid}`],true);
+});
+test('conflicting legacy true and canonical false resolve in one authorized write',async()=>{
+  const path=await seed();await db.doc(path).set({[`muted_${uid}`]:true},{merge:true});
+  const before=(await db.doc(path).get()).data();
+  assert.equal(before.muted[uid],false);assert.equal(before[`muted_${uid}`],true);
+  const data=await apply(path,'unmute');
+  assert.equal(data.muted[uid],false);assert.equal(data[`muted_${uid}`],false);
+});
+test('peer authentication cannot apply the dual owner mute payload',async()=>{
+  const path=await seed();const response=await send(path,fixture.writes.mute,peer);
+  assert.equal(response.status,403);assert.equal(response.body.error.status,'PERMISSION_DENIED');
+  const data=(await db.doc(path).get()).data();
+  assert.equal(data.muted[uid],false);assert.equal(data[`muted_${uid}`],false);
+});
+test('a peer flat-field injection denies the entire dual mute write',async()=>{
+  const path=await seed();
+  const response=await send(path,{...fixture.writes.mute,[`muted_${peerUid}`]:false});
+  assert.equal(response.status,403);assert.equal(response.body.error.status,'PERMISSION_DENIED');
+  const data=(await db.doc(path).get()).data();
+  assert.equal(data.muted[uid],false);assert.equal(data[`muted_${uid}`],false);
+  assert.equal(data[`muted_${peerUid}`],true);
+});
+test('a peer map-field injection denies the entire dual mute write',async()=>{
+  const path=await seed();
+  const response=await send(path,{...fixture.writes.mute,muted:{[uid]:true,[peerUid]:false}});
+  assert.equal(response.status,403);assert.equal(response.body.error.status,'PERMISSION_DENIED');
+  const data=(await db.doc(path).get()).data();
+  assert.equal(data.muted[uid],false);assert.equal(data[`muted_${uid}`],false);
+  assert.equal(data.muted[peerUid],true);
+});
+test('malformed stored canonical container is denied without a partial legacy update',async()=>{
+  const path=await seed();await db.doc(path).set({muted:'malformed',[`muted_${uid}`]:true},{merge:true});
+  const before=(await db.doc(path).get()).data();
+  assert.equal(before.muted,'malformed');assert.equal(before[`muted_${uid}`],true);
+  const response=await send(path,fixture.writes.unmute);
+  assert.equal(response.status,403);assert.equal(response.body.error.status,'PERMISSION_DENIED');
+  const data=(await db.doc(path).get()).data();
+  assert.equal(data.muted,'malformed');assert.equal(data[`muted_${uid}`],true);
 });
