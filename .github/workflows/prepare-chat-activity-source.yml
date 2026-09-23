@@ -1,0 +1,168 @@
+name: Prepare reviewed chat activity source
+on:
+  push:
+    branches: ['audit/security-chat-activity-20260923']
+    paths: ['.github/workflows/prepare-chat-activity-source.yml']
+permissions:
+  contents: write
+jobs:
+  prepare-source:
+    if: github.repository == 'kholyo18/unispace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 169c9bf2c2a493487b0a87d1eb16eb1d3000e0b5
+          persist-credentials: false
+      - name: Prepare only the reviewed chat activity blob without moving refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib,json,subprocess,tempfile
+          p=Path('lib/features/shell/chat_page.dart')
+          def blob(s): return hashlib.sha1(b'blob '+str(len(s)).encode()+b'\0'+s).hexdigest()
+          assert blob(p.read_bytes())=='7cb2dc3558dd370adff0e7c0e128640a8a0be71d'
+          text=p.read_text()
+          def replace(a,b):
+              global text
+              assert text.count(a)==1,a[:80]
+              text=text.replace(a,b)
+          replace("import 'package:UniSpace/services/storage_upload_service.dart';", "import 'package:UniSpace/services/storage_upload_service.dart';\nimport 'package:UniSpace/services/chat_activity_client.dart';")
+          replace('  Timer? _typingIdle;\n  bool _peerTyping = false;', '  Timer? _typingIdle;\n  Timer? _peerTypingExpiry;\n  late final ChatActivityClient _chatActivity;\n  bool _peerTyping = false;')
+          replace("    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';\n    _me = types.User(id: uid, firstName: 'أنا');", """    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+              _chatActivity = ChatActivityClient(
+                expectedUid: uid,
+                currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+                sessionKey: () => PublicProfileService.viewerSession,
+                merge: (data) => FirebaseFirestore.instance
+                    .collection('chats')
+                    .doc(widget.chatId)
+                    .set(data, SetOptions(merge: true)),
+                serverTimestamp: FieldValue.serverTimestamp,
+                deleteField: FieldValue.delete,
+              );
+              _me = types.User(id: uid, firstName: 'أنا');""")
+          replace("""    if (uid.isNotEmpty) {
+                unawaited(
+                  FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set(
+                    {
+                      'unread.$uid': 0,
+                      'lastReadAt.$uid': FieldValue.serverTimestamp(),
+                    },
+                    SetOptions(merge: true),
+                  ),
+                );
+              }""", """    if (uid.isNotEmpty) {
+                unawaited(_markChatRead());
+              }""")
+          replace("""      if (!mounted) return;
+                final data = doc.data() ?? {};
+                final map = Map<String, dynamic>.from(data['typing'] ?? {});
+                final raw = map[widget.peerId];
+                var typing = false;
+                if (raw is Timestamp) {
+                  typing = DateTime.now().difference(raw.toDate()).inSeconds < 4;
+                }
+          
+                final readRaw = Map<String, dynamic>.from(data['lastReadAt'] ?? {});
+                final rr = readRaw[widget.peerId];""", """      if (!mounted || !_chatActivity.isCurrent) return;
+                final data = doc.data() ?? {};
+                final typingMap = data['typing'];
+                final raw = typingMap is Map ? typingMap[widget.peerId] : null;
+                final remaining = ChatActivityClient.typingRemaining(
+                  raw is Timestamp ? raw.toDate() : null,
+                  DateTime.now(),
+                );
+                final typing = remaining > Duration.zero;
+                _peerTypingExpiry?.cancel();
+                if (typing) {
+                  _peerTypingExpiry = Timer(remaining, () {
+                    if (mounted && _chatActivity.isCurrent) {
+                      setState(() => _peerTyping = false);
+                    }
+                  });
+                }
+          
+                final readRaw = data['lastReadAt'];
+                final rr = readRaw is Map ? readRaw[widget.peerId] : null;""")
+          replace("""    _sub = _msgs.orderBy('createdAt', descending: true).snapshots().listen((snap) {
+                if (!mounted) return;
+                setState(() => _messages = snap.docs.map(_toMessage).toList());
+                if (_me.id.isEmpty) return;
+                unawaited(
+                  FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
+                    'lastReadAt.${_me.id}': FieldValue.serverTimestamp(),
+                    'unread.${_me.id}': 0,
+                  }, SetOptions(merge: true)),
+                );
+              }, onError: (e) => debugPrint('messages stream error: $e'));""", """    _sub = _msgs.orderBy('createdAt', descending: true).snapshots().listen((snap) {
+                if (!mounted || !_chatActivity.isCurrent) return;
+                setState(() => _messages = snap.docs.map(_toMessage).toList());
+                if (_me.id.isEmpty) return;
+                unawaited(_markChatRead());
+              }, onError: (e) => debugPrint('messages stream error: $e'));""")
+          replace("""    _chatSub?.cancel();
+              _typingIdle?.cancel();
+              _recordTicker?.cancel();""", """    _chatSub?.cancel();
+              _typingIdle?.cancel();
+              _peerTypingExpiry?.cancel();
+              _chatActivity.dispose();
+              _recordTicker?.cancel();""")
+          replace("""  void _onComposerChanged(String _) {
+              if (_me.id.isEmpty) return;
+              FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
+                'typing.${_me.id}': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+              _typingIdle?.cancel();
+              _typingIdle = Timer(const Duration(seconds: 3), () {
+                FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
+                  'typing.${_me.id}': FieldValue.delete(),
+                }, SetOptions(merge: true));
+              });
+            }""", """  Future<void> _markChatRead() async {
+              try {
+                await _chatActivity.markRead();
+              } catch (_) {
+                debugPrint('Chat read acknowledgement failed');
+              }
+            }
+          
+            Future<void> _setChatTyping(bool active) async {
+              try {
+                await _chatActivity.setTyping(active);
+              } catch (_) {
+                debugPrint('Chat typing update failed');
+              }
+            }
+          
+            void _onComposerChanged(String text) {
+              if (!_chatActivity.isCurrent) return;
+              _typingIdle?.cancel();
+              if (text.trim().isEmpty) {
+                unawaited(_setChatTyping(false));
+                return;
+              }
+              unawaited(_setChatTyping(true));
+              _typingIdle = Timer(const Duration(seconds: 3), () {
+                unawaited(_setChatTyping(false));
+              });
+            }""")
+          replace("""      unawaited(
+                  FirebaseFirestore.instance.collection('chats').doc(widget.chatId).set({
+                    'typing.${_me.id}': FieldValue.delete(),
+                  }, SetOptions(merge: true)),
+                );""", """      _typingIdle?.cancel();
+                unawaited(_setChatTyping(false));""")
+          assert blob(text.encode())=='ecff9e09ef70a7da58e4fdbdff6947d299e16c7a'
+          with tempfile.NamedTemporaryFile(mode='w',suffix='.json') as f:
+              json.dump({'content':text,'encoding':'utf-8'},f);f.flush()
+              r=subprocess.run(['gh','api','--method','POST','repos/kholyo18/unispace/git/blobs','--input',f.name],check=True,capture_output=True,text=True)
+          sha=json.loads(r.stdout)['sha']
+          assert sha=='ecff9e09ef70a7da58e4fdbdff6947d299e16c7a'
+          print('Prepared only the verified chat activity blob:',sha)
+          PY
