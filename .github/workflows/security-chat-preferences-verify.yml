@@ -1,0 +1,83 @@
+name: Chat preference authorization verification
+on:
+  pull_request:
+    paths:
+      - 'firestore.rules'
+      - 'security/rules-review/**'
+      - 'functions/test/chat-preferences-rules.integration.test.cjs'
+      - '.github/workflows/security-chat-preferences-verify.yml'
+permissions:
+  contents: read
+jobs:
+  preferences-rules:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --prefix functions --ignore-scripts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Record source and verify synchronized rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp firestore.rules security/rules-review/firestore.candidate.rules
+          node --check functions/test/chat-preferences-rules.integration.test.cjs
+          { git rev-parse HEAD; node --version; java -version 2>&1;
+            sha256sum firestore.rules functions/test/chat-preferences-rules.integration.test.cjs; } > preferences-source.txt
+          git diff --exit-code -- pubspec.yaml pubspec.lock functions/package.json functions/package-lock.json
+      - name: Prove nine exact authorization failures under pre-fix main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 649013837dab865e3509579f404be8ece9bb6b0b:firestore.rules > .preferences-baseline.rules
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('firebase.security-test.json'));c.firestore.rules='.preferences-baseline.rules';fs.writeFileSync('.preferences-baseline.json',JSON.stringify(c))"
+          set +e
+          npx --yes firebase-tools@15.18.0 emulators:exec --only firestore,auth \
+            --project demo-unispace-security --config .preferences-baseline.json \
+            "node --test --test-reporter=tap --test-concurrency=1 --test-name-pattern='^PREFREGRESSION:' functions/test/chat-preferences-rules.integration.test.cjs" > preferences-baseline.log 2>&1
+          result=$?
+          set -e
+          cat preferences-baseline.log
+          BASELINE_EXIT="$result" node <<'NODE'
+          const fs = require('node:fs');
+          const expected = ['muted','nicknames','theme','autoTranslate','autoTranslateLang','clearedAt']
+            .map(k => `cannot replace peer ${k}`)
+            .concat(['pinned_','muted_','deletedBy_'].map(k => `cannot set peer ${k}flag`));
+          const log = fs.readFileSync('preferences-baseline.log', 'utf8');
+          const failed = [...log.matchAll(/^not ok \d+ - PREFREGRESSION: (.+)$/gm)].map(m => m[1].trim());
+          if (process.env.BASELINE_EXIT !== '1' || failed.length !== expected.length ||
+              expected.some(n => !failed.includes(n)) || !/^# fail 9\s*$/m.test(log) ||
+              !/^# skipped 0\s*$/m.test(log) || (log.match(/200 !== 403/g) || []).length !== 9) {
+            throw Error('Expected exactly nine accepted pre-fix mutations, not an environment or request error.');
+          }
+          NODE
+      - name: Verify preferences and inherited chat interaction and activity boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes firebase-tools@15.18.0 emulators:exec --only firestore,auth \
+            --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/chat-preferences-rules.integration.test.cjs functions/test/chat-activity*.test.cjs functions/test/message-metadata-rules.integration.test.cjs functions/test/chat-rules.integration.test.cjs" \
+            2>&1 | tee preferences-current.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chat-preferences-rule-evidence
+          path: |
+            preferences-source.txt
+            preferences-baseline.log
+            preferences-current.log
+          retention-days: 7
