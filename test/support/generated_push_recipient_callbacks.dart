@@ -115,4 +115,3 @@ void _openFromFcmData(Map<String, dynamic> data) {
   );
   _openNotification(ctx, n);
 }
-

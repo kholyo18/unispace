@@ -90,7 +90,7 @@ const generated = scaffold +
   `\nFuture<void> invokeForeground(RemoteMessage msg) async {\n${foreground}\n}\n` +
   `\nvoid invokeOpened(RemoteMessage msg) {\n${opened}\n}\n` +
   `\nvoid Function() deferredInitial(RemoteMessage initial) => () {\n${initial}\n};\n` +
-  '\n' + local + '\n' + open + '\n';
+  '\n' + local + '\n' + open;
 fs.mkdirSync(path.dirname(output), {recursive: true});
 fs.writeFileSync(output, generated);
 console.log(JSON.stringify({source: sourcePath, sourceSha256: digest,
