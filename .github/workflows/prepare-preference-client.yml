@@ -1,0 +1,49 @@
+name: Prepare reviewed preference source
+on:
+  push:
+    branches: ['audit/prepare-preference-client-20260923']
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.repository == 'kholyo18/unispace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '972022ad97f404b70e74c2efb2ab907d488e6cda'
+          persist-credentials: false
+      - name: Apply one reviewed patch and create only an unreferenced source blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import base64, hashlib, json, os, pathlib, subprocess, urllib.request
+          base='https://api.github.com/repos/kholyo18/unispace'
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'], 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28', 'Content-Type':'application/json'}
+          def call(route, data=None):
+              req=urllib.request.Request(base+route, headers=headers, data=None if data is None else json.dumps(data).encode(), method='GET' if data is None else 'POST')
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+          def blob(data):
+              return hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+          target=pathlib.Path('lib/features/shell/chat_page.dart')
+          assert blob(target.read_bytes())=='ecff9e09ef70a7da58e4fdbdff6947d299e16c7a'
+          patch=base64.b64decode(call('/git/blobs/4a2273e3d249a493d33cd795ad38dceb3f69fcd6')['content'])
+          assert blob(patch)=='4a2273e3d249a493d33cd795ad38dceb3f69fcd6'
+          pathlib.Path('/tmp/preference-client.patch').write_bytes(patch)
+          subprocess.run(['git','apply','--check','/tmp/preference-client.patch'],check=True)
+          subprocess.run(['git','apply','/tmp/preference-client.patch'],check=True)
+          paths=subprocess.check_output(['git','diff','--name-only']).decode().splitlines()
+          assert paths==['lib/features/shell/chat_page.dart'], paths
+          data=target.read_bytes()
+          assert blob(data)=='7dbb3f515b50e2dced26ded69ebd70163a4f3eef'
+          result=call('/git/blobs', {'content':data.decode('utf-8'),'encoding':'utf-8'})
+          assert result['sha']==blob(data)
+          print(json.dumps({'path':str(target),'source_sha':result['sha'],'sha256':hashlib.sha256(data).hexdigest(),'refs_moved':False}))
+          PY
