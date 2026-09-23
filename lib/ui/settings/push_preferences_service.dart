@@ -48,7 +48,9 @@ class PushPreferencesService with WidgetsBindingObserver {
     if (const ['new_post','like','like_comment','reply','comment','repost','follow','follow_request','follow_accepted'].contains(type)) return p['community'] == true;
     if (type == 'announcement') return p['announcements'] == true;
     if (type == 'exam_reminder') return p['exams'] == true;
-    return true;
+    // Match the server allowlist. Unknown/chat kinds have no reviewed delivery
+    // contract here and must not bypass category or per-chat mute checks.
+    return false;
   }
 
   Future<void> sync([String? refreshedToken]) {

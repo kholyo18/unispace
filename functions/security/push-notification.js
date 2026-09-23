@@ -37,6 +37,15 @@ function createPushNotificationHandler({ db, auth, messaging }) {
           ...['blocked_accounts','blocked_users','blocked_by'].flatMap(c => [db.doc(`users/${userId}/${c}/${actorId}`),db.doc(`users/${actorId}/${c}/${userId}`)])];
         const [actor,...blocks] = await db.getAll(...paths);
         if (unavailable(actor.data()) || (actorId !== userId && blocks.some(s => s.exists))) return;
+        // A Firestore profile may outlive a disabled/deleted Auth account. Check
+        // actor eligibility for non-content kinds too, again for every batch.
+        // Self-actor already passed the recipient Auth check above.
+        if (actorId !== userId) {
+          let actorAccount;
+          try { actorAccount = await auth.getUser(actorId); }
+          catch (error) { if (error.code === 'auth/user-not-found') return; throw error; }
+          if (actorAccount.disabled) return;
+        }
       }
       const batch = entries.slice(offset,offset + 500);
       // Drop deleted/reassigned token records before dispatch; preserve token-to-ref mapping.

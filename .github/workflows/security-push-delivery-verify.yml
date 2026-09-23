@@ -1,0 +1,81 @@
+name: Push delivery gate verification
+on:
+  pull_request:
+    paths:
+      - 'functions/security/push-*.js'
+      - 'functions/test/push-*.test.cjs'
+      - 'functions/test/helpers/notification-fixture.cjs'
+      - 'lib/ui/settings/push_preferences_service.dart'
+      - 'lib/main.dart'
+      - 'test/push_delivery_preferences_test.dart'
+      - '.github/workflows/security-push-delivery-verify.yml'
+permissions:
+  contents: read
+jobs:
+  push-delivery-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      GCLOUD_PROJECT: demo-unispace-security
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+      - run: npm ci --prefix functions --ignore-scripts
+      - run: flutter pub get --enforce-lockfile
+      - name: Record source and check syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          { git rev-parse HEAD; node --version; flutter --version;
+            sha256sum functions/security/push-notification.js functions/security/push-preferences.js \
+              lib/ui/settings/push_preferences_service.dart functions/test/push-delivery-*.test.cjs \
+              test/push_delivery_preferences_test.dart; } > push-gates-source.log
+          for file in functions/security/push-{notification,preferences}.js functions/test/push-delivery-*.test.cjs; do
+            node --check "$file"
+          done
+      - name: Strict scoped Dart analysis
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter analyze --fatal-infos lib/ui/settings/push_preferences_service.dart \
+            test/push_delivery_preferences_test.dart 2>&1 | tee push-gates-analysis.log
+      - name: Current Flutter behavior including the prior mute repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --reporter expanded test/push_delivery_preferences_test.dart \
+            test/chat_preferences_client_test.dart test/chat_mute_consistency_test.dart \
+            2>&1 | tee push-gates-flutter.log
+      - name: Actual production handlers with local Auth and Firestore
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${GOOGLE_APPLICATION_CREDENTIALS:-}"
+          npx --yes firebase-tools@15.18.0 emulators:exec --only firestore,auth \
+            --project demo-unispace-security --config firebase.security-test.json \
+            "node --test --test-reporter=tap --test-concurrency=1 functions/test/push-delivery-*.test.cjs functions/test/push-registration.integration.test.cjs functions/test/push-session-policy.unit.test.cjs" \
+            2>&1 | tee push-gates-backend.log
+      - name: Preserve committed rules and dependency files
+        run: git diff --exit-code -- firestore.rules security/rules-review/firestore.candidate.rules pubspec.yaml pubspec.lock functions/package.json functions/package-lock.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: push-delivery-gate-evidence
+          path: push-gates-*.log
+          retention-days: 7
