@@ -1,0 +1,57 @@
+name: Prepare reviewed recipient main blob only
+on:
+  push:
+    branches: ['audit/security-push-recipient-blob-20260923']
+permissions:
+  contents: read
+jobs:
+  prepare-blob:
+    if: github.repository == 'kholyo18/unispace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Upload only the hash-verified main blob, never update a ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 88395b4a823cd7a16e4ca5a6db9feaabfc3f8499
+          test "$(git hash-object lib/main.dart)" = 0c8a7d19ebcea3582522f794e4ab01a89f81b30a
+          printf '%s' 'LS0tIGEvbGliL21haW4uZGFydAorKysgYi9saWIvbWFpbi5kYXJ0CkBAIC00NjI2Miw5ICs0NjI2MiwxMiBAQAogICAgICk7CiAKICAgICBGaXJlYmFzZU1lc3NhZ2luZy5vbk1lc3NhZ2UubGlzdGVuKChtc2cpIGFzeW5jIHsKLSAgICAgIGlmIChGaXJlYmFzZUF1dGguaW5zdGFuY2UuY3VycmVudFVzZXIgPT0gbnVsbCB8fAotICAgICAgICAgIChtc2cuZGF0YVsncmVjaXBpZW50SWQnXSAhPSBudWxsICYmIG1zZy5kYXRhWydyZWNpcGllbnRJZCddICE9IEZpcmViYXNlQXV0aC5pbnN0YW5jZS5jdXJyZW50VXNlcj8udWlkKSB8fAotICAgICAgICAgICFQdXNoUHJlZmVyZW5jZXNTZXJ2aWNlLmluc3RhbmNlLmFsbG93cyhtc2cuZGF0YVsndHlwZSddPy50b1N0cmluZygpID8/ICcnKSkgcmV0dXJuOworICAgICAgZmluYWwgdWlkID0gRmlyZWJhc2VBdXRoLmluc3RhbmNlLmN1cnJlbnRVc2VyPy51aWQ7CisgICAgICBpZiAodWlkID09IG51bGwgfHwgbXNnLmRhdGFbJ3JlY2lwaWVudElkJ10gaXMhIFN0cmluZyB8fAorICAgICAgICAgIG1zZy5kYXRhWydyZWNpcGllbnRJZCddICE9IHVpZCB8fAorICAgICAgICAgICFQdXNoUHJlZmVyZW5jZXNTZXJ2aWNlLmluc3RhbmNlLmFsbG93cyhtc2cuZGF0YVsndHlwZSddPy50b1N0cmluZygpID8/ICcnKSkgeworICAgICAgICByZXR1cm47CisgICAgICB9CiAgICAgICBmaW5hbCBuID0gbXNnLm5vdGlmaWNhdGlvbjsKICAgICAgIGlmIChuID09IG51bGwpIHJldHVybjsKICAgICAgIGF3YWl0IF9sb2NhbE5vdGlmcy5zaG93KApAQCAtNDYzMzIsNyArNDYzMzUsMTAgQEAKIAogdm9pZCBfb3BlbkZyb21GY21EYXRhKE1hcDxTdHJpbmcsIGR5bmFtaWM+IGRhdGEpIHsKICAgZmluYWwgdWlkID0gRmlyZWJhc2VBdXRoLmluc3RhbmNlLmN1cnJlbnRVc2VyPy51aWQ7Ci0gIGlmICh1aWQgPT0gbnVsbCB8fCAoZGF0YVsncmVjaXBpZW50SWQnXSAhPSBudWxsICYmIGRhdGFbJ3JlY2lwaWVudElkJ10gIT0gdWlkKSkgcmV0dXJuOworICBpZiAodWlkID09IG51bGwgfHwgZGF0YVsncmVjaXBpZW50SWQnXSBpcyEgU3RyaW5nIHx8CisgICAgICBkYXRhWydyZWNpcGllbnRJZCddICE9IHVpZCkgeworICAgIHJldHVybjsKKyAgfQogICBmaW5hbCBjdHggPSB1bmlzcGFjZU5hdmlnYXRvcktleS5jdXJyZW50Q29udGV4dDsKICAgaWYgKGN0eCA9PSBudWxsKSByZXR1cm47CiAgIGZpbmFsIG4gPSBOb3RpZmljYXRpb25JdGVtKAo=' | base64 --decode > "$RUNNER_TEMP/recipient.patch"
+          echo "cd034198c89e7143c8db27cff126f4fe716f47a2c9d5c38d8ebf41b155cc6c90  $RUNNER_TEMP/recipient.patch" | sha256sum -c -
+          git apply --check "$RUNNER_TEMP/recipient.patch"
+          git apply "$RUNNER_TEMP/recipient.patch"
+          test "$(git diff --name-only)" = lib/main.dart
+          test "$(git hash-object lib/main.dart)" = 3655e9add10793f56262422d8491393e698a4e72
+          echo '5f497cc3f15736c568aa7b8a30620e29f4972fe0b93a4e45ed5931133982eba4  lib/main.dart' | sha256sum -c -
+          python - <<'PYCODE'
+          import json
+          from pathlib import Path
+          Path('blob-request.json').write_text(json.dumps({'content':Path('lib/main.dart').read_text(), 'encoding':'utf-8'}))
+          PYCODE
+          curl --fail-with-body --silent --show-error -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+            -H 'Content-Type: application/json' \
+            --data-binary @blob-request.json \
+            https://api.github.com/repos/kholyo18/unispace/git/blobs > recipient-main-blob.json
+          python - <<'PYCODE'
+          import json
+          from pathlib import Path
+          result=json.loads(Path('recipient-main-blob.json').read_text())
+          assert result['sha']=='3655e9add10793f56262422d8491393e698a4e72', result
+          PYCODE
+          git diff -- lib/main.dart > recipient-main.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reviewed-recipient-main-blob
+          path: |
+            recipient-main-blob.json
+            recipient-main.patch
+          retention-days: 7
