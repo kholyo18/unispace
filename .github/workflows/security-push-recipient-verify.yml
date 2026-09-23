@@ -1,0 +1,92 @@
+name: Push recipient binding verification
+on:
+  pull_request:
+    paths:
+      - 'lib/main.dart'
+      - 'lib/ui/settings/push_preferences_service.dart'
+      - 'scripts/extract_push_recipient_callbacks*'
+      - 'test/push_recipient_binding_test.dart'
+      - 'test/support/generated_push_recipient_callbacks.dart'
+      - '.github/workflows/security-push-recipient-verify.yml'
+permissions:
+  contents: read
+jobs:
+  recipient-binding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Record source and test the extraction contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          { git rev-parse HEAD; node --version; flutter --version;
+            sha256sum lib/main.dart lib/ui/settings/push_preferences_service.dart \
+              scripts/extract_push_recipient_callbacks* test/push_recipient_binding_test.dart \
+              test/support/generated_push_recipient_callbacks.dart; } > recipient-source.log
+          node --check scripts/extract_push_recipient_callbacks.cjs
+          node --test --test-reporter=tap scripts/extract_push_recipient_callbacks.test.cjs \
+            2>&1 | tee recipient-extractor.log
+      - name: Reproduce exactly nine failures in the original callback bodies
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=88395b4a823cd7a16e4ca5a6db9feaabfc3f8499
+          git show "$baseline:lib/main.dart" > "$RUNNER_TEMP/recipient-baseline.dart"
+          test "$(git hash-object "$RUNNER_TEMP/recipient-baseline.dart")" = 0c8a7d19ebcea3582522f794e4ab01a89f81b30a
+          node scripts/extract_push_recipient_callbacks.cjs --source "$RUNNER_TEMP/recipient-baseline.dart" > recipient-baseline-source.log
+          set +e
+          flutter test --no-pub --reporter json test/push_recipient_binding_test.dart > recipient-baseline.jsonl 2> recipient-baseline-stderr.log
+          status=$?
+          set -e
+          BASELINE_EXIT="$status" node <<'NODE'
+          const fs = require('node:fs');
+          const events = fs.readFileSync('recipient-baseline.jsonl','utf8').trim().split('\n').map(line => JSON.parse(line));
+          const names = new Map(events.filter(e => e.type === 'testStart').map(e => [e.test.id, e.test.name]));
+          const results = events.filter(e => e.type === 'testDone' && !e.hidden);
+          const failed = results.filter(e => e.result !== 'success').map(e => names.get(e.testID)).sort();
+          const expected = ['foreground','opened','initial','local'].flatMap(route =>
+            ['missing','null'].map(value => `RECIPIENT: ${route} rejects ${value} recipient`));
+          expected.push('missing recipient is not guessed from actor or alternate identity');
+          if (process.env.BASELINE_EXIT !== '1' || results.length !== 68 || results.some(e => e.skipped) ||
+              JSON.stringify(failed) !== JSON.stringify(expected.sort()) ||
+              events.at(-1)?.type !== 'done' || events.at(-1).success !== false) {
+            throw Error('Baseline must show exactly 59 passes / 9 specified behavior failures, not setup errors.');
+          }
+          console.log('Original callback bodies: 59 compatibility passes, 9 intended recipient failures.');
+          NODE
+      - name: Analyze and exercise current callback bodies with standard assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/extract_push_recipient_callbacks.cjs > recipient-current-source.log
+          git diff --exit-code -- test/support/generated_push_recipient_callbacks.dart
+          flutter analyze --no-pub --fatal-infos test/push_recipient_binding_test.dart \
+            test/support/generated_push_recipient_callbacks.dart 2>&1 | tee recipient-analysis.log
+          flutter test --no-pub --reporter json test/push_recipient_binding_test.dart \
+            test/push_delivery_preferences_test.dart test/chat_preferences_client_test.dart \
+            test/chat_mute_consistency_test.dart > recipient-current.jsonl 2> recipient-current-stderr.log
+          node --test --test-reporter=tap functions/test/push-delivery-client-contract.test.cjs \
+            functions/test/notification-client-contract.test.cjs 2>&1 | tee recipient-wiring.log
+      - name: Preserve source rules and dependency manifests
+        run: git diff --exit-code -- lib test/support/generated_push_recipient_callbacks.dart firestore.rules storage.rules security/rules-review/firestore.candidate.rules pubspec.yaml pubspec.lock functions/package.json functions/package-lock.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: push-recipient-binding-evidence
+          path: |
+            recipient-*.log
+            recipient-*.jsonl
+          retention-days: 7
