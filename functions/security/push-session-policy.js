@@ -8,6 +8,20 @@ function cutoffAllows(authTime, cutoff) {
     (validAuthTime(cutoff.revokedBefore) && authTime > cutoff.revokedBefore));
 }
 
+// Auth revocation can happen without updating our Firestore mirror (for
+// example, an administrator revokes tokens or a password is reset). Match the
+// Admin SDK boundary: equality is valid here; Firestore cutoffAllows stays >.
+function authCutoffAllows(authTime, tokensValidAfterTime) {
+  if (!validAuthTime(authTime)) return false;
+  // UserRecord documents this field as optional. Explicit malformed values
+  // are not an absent cutoff and must not authorize delivery.
+  if (tokensValidAfterTime === undefined) return true;
+  if (typeof tokensValidAfterTime !== 'string') return false;
+  const cutoffMillis = Date.parse(tokensValidAfterTime);
+  return Number.isFinite(cutoffMillis) && cutoffMillis >= 0 &&
+    authTime >= cutoffMillis / 1000;
+}
+
 function bindingAllows({ binding, userId, cutoff, session }) {
   if (!binding || binding.ownerId !== userId || !validSessionId(binding.sessionId) ||
       !cutoffAllows(binding.authTime, cutoff)) return false;
@@ -25,4 +39,4 @@ function registrationMatches(record, binding) {
       .every(key => typeof record.preferences[key] === 'boolean');
 }
 
-module.exports = { validAuthTime, cutoffAllows, bindingAllows, registrationMatches };
+module.exports = { validAuthTime, cutoffAllows, authCutoffAllows, bindingAllows, registrationMatches };
