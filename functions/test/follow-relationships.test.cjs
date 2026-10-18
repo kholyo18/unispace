@@ -95,3 +95,45 @@ test('concurrent block and acceptance cannot leave a blocked follower authorized
  assert.equal(await f.exists('users/'+f.owner+'/followers/'+f.from),false);
  await assert.rejects(f.profile(),{code:'not-found'});
 });
+
+test('unblocking clears caller legacy and current blocks without clearing the other user block', async () => {
+ const f=await setup(false);
+ await f.call(f.owner,'block',f.from);
+ await db.doc(`users/${f.owner}/blocked_users/${f.from}`).set({identifier:f.from});
+ await f.call(f.from,'block',f.owner);
+ await f.call(f.owner,'unblock',f.from);
+ assert.equal(await f.exists(`users/${f.owner}/blocked_users/${f.from}`),false);
+ assert.equal(await f.exists(`users/${f.owner}/blocked_accounts/${f.from}`),false);
+ assert.equal(await f.exists(`users/${f.from}/blocked_by/${f.owner}`),false);
+ assert.equal(await f.exists(`users/${f.from}/blocked_accounts/${f.owner}`),true);
+ await assert.rejects(f.profile(),{code:'not-found'});
+ await f.call(f.from,'unblock',f.owner);
+ assert.equal((await f.profile()).canViewContent,true);
+});
+test('block rules allow owner legacy listing and participant status but deny direct writes and revoked reads', async () => {
+ const f=await setup(false);
+ await f.call(f.owner,'block',f.from);
+ await db.doc(`users/${f.owner}/blocked_users/${f.from}`).set({identifier:f.from});
+ const enc=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
+ async function rest(uid,path,method='GET') {
+  const now=Math.floor(Date.now()/1000);
+  const token=`${enc({alg:'none',typ:'JWT'})}.${enc({iss:`https://securetoken.google.com/${project}`,aud:project,sub:uid,iat:now,exp:now+3600,auth_time:100})}.`;
+  return fetch(`http://${host}/v1/projects/${project}/databases/(default)/documents/${path}`,{method,
+   headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+   ...(method==='PATCH'?{body:JSON.stringify({fields:{forged:{booleanValue:true}}})}:{})});
+ }
+ const current=`users/${f.owner}/blocked_accounts/${f.from}`;
+ const reverse=`users/${f.from}/blocked_by/${f.owner}`;
+ const legacy=`users/${f.owner}/blocked_users/${f.from}`;
+ for (const path of [current,reverse]) {
+  for (const uid of [f.owner,f.from]) assert.equal((await rest(uid,path)).status,200);
+  assert.equal((await rest(f.stranger,path)).status,403);
+ }
+ assert.equal((await rest(f.owner,`users/${f.owner}/blocked_users`)).status,200);
+ assert.equal((await rest(f.from,legacy)).status,403);
+ for (const path of [current,reverse,legacy]) for (const uid of [f.owner,f.from]) {
+  for (const method of ['PATCH','DELETE']) assert.equal((await rest(uid,path,method)).status,403);
+ }
+ await db.doc(`authRevocations/${f.owner}`).set({revokedBefore:100});
+ for (const path of [current,reverse,legacy]) assert.equal((await rest(f.owner,path)).status,403);
+});

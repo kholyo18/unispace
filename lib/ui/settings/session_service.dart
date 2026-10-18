@@ -49,6 +49,19 @@ class SessionService with WidgetsBindingObserver {
 
   Future<String> getOrCreateSessionId(String uid) async {
     final prefs = await SharedPreferences.getInstance();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid != uid) {
+      throw StateError('Session account changed.');
+    }
+    final token = await user.getIdTokenResult();
+    if (FirebaseAuth.instance.currentUser?.uid != uid) {
+      throw StateError('Session account changed.');
+    }
+    final signedId = signedSessionId(token.claims);
+    if (signedId != null) {
+      await prefs.setString('$_sessionIdKeyPrefix$uid', signedId);
+      return signedId;
+    }
     final existing = prefs.getString('$_sessionIdKeyPrefix$uid');
     if (existing != null && existing.isNotEmpty) return existing;
 
@@ -87,7 +100,8 @@ class SessionService with WidgetsBindingObserver {
       await _sessionSubscription?.cancel();
       _sessionSubscription = null;
       final previous = await getCurrentSessionId(uid);
-      if (previous != null) {
+      final activeId = signedSessionId((await user.getIdTokenResult()).claims);
+      if (previous != null && previous != activeId) {
         final ref = _firestore.collection('users').doc(uid).collection('sessions').doc(previous);
         if ((await ref.get()).exists) await revokeSession(user: user, sessionId: previous);
       }
@@ -389,7 +403,7 @@ class SessionService with WidgetsBindingObserver {
           'locale': locale,
         },
       );
-      created = !existing.exists;
+      created = !existing.exists || (existing.data()?['authSessionVersion'] == 1 && existing.data()?['deviceId'] == null);
       if (record == null) return false;
       transaction.set(docRef, record, SetOptions(merge: true));
       return true;

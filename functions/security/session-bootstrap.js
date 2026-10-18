@@ -13,6 +13,7 @@ function createSessionBootstrapHandler({auth, db}) {
         typeof input.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,200}$/.test(input.sessionId)) {
       throw new HttpsError('invalid-argument', 'Invalid session ID.');
     }
+    if (input.sessionId !== token.sid) throw new HttpsError('permission-denied', 'Session does not match this login.');
     return db.runTransaction(async tx => {
       const profileRef = db.doc('users/' + uid);
       const [cutoff, profile, session] = await tx.getAll(
@@ -26,7 +27,7 @@ function createSessionBootstrapHandler({auth, db}) {
       }
       // This is display metadata, not an authorization grant. Voluntarily disabled
       // or frozen accounts still need login to reach the existing reactivation UI.
-      // Session creation remains client-owned pending the separate rules migration.
+      // The sign-in hook owns session creation; this only selects display metadata.
       if (user?.currentSessionId !== input.sessionId) tx.set(profileRef, {currentSessionId:input.sessionId}, {merge:true});
       return {uid, sessionId:input.sessionId};
     });

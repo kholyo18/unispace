@@ -1,6 +1,8 @@
+import 'package:UniSpace/l10n/auth_settings_strings.dart';
+import 'package:UniSpace/l10n/auth_terms_strings.dart';
 import 'package:flutter/material.dart';
 
-/// Read-only Arabic terms aligned with the current UniSpace service.
+/// Read-only localized terms aligned with the current UniSpace service.
 /// Opening, scrolling or closing this route does not record agreement.
 class TermsOfUseScreen extends StatelessWidget {
   const TermsOfUseScreen({super.key});
@@ -9,10 +11,10 @@ class TermsOfUseScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: Directionality.of(context),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('شروط الاستخدام'),
+          title: Text(authSettingsText(context, 'شروط الاستخدام')),
           leading: const BackButton(key: ValueKey('terms-reader-back')),
         ),
         body: SafeArea(
@@ -26,14 +28,14 @@ class TermsOfUseScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('شروط استخدام UniSpace', style: textTheme.headlineSmall),
+                      Text(authSettingsText(context, 'شروط استخدام UniSpace'), style: textTheme.headlineSmall),
                       const SizedBox(height: 8),
-                      const Text('الإصدار 1.0 — نافذ من 18 سبتمبر 2026'),
+                      Text(authSettingsText(context, 'الإصدار 1.0 — نافذ من 18 سبتمبر 2026')),
                       const SizedBox(height: 12),
-                      const Text(
-                        'تسري هذه الشروط على استخدام UniSpace من تاريخ النفاذ المبين أعلاه. '
+                      Text(
+                        authSettingsText(context, 'تسري هذه الشروط على استخدام UniSpace من تاريخ النفاذ المبين أعلاه. '
                         'قراءة النص أو الرجوع إلى شاشة الدخول لا يحدد خانة الموافقة؛ '
-                        'ويتم التعبير عن الموافقة من خلال الاختيار المخصص لذلك في مسار الدخول.',
+                        'ويتم التعبير عن الموافقة من خلال الاختيار المخصص لذلك في مسار الدخول.'),
                         key: ValueKey('terms-reader-version-notice'),
                       ),
                       const SizedBox(height: 24),
@@ -41,7 +43,7 @@ class TermsOfUseScreen extends StatelessWidget {
                         Semantics(
                           header: true,
                           child: Text(
-                            _termsSections[i].heading,
+                            authTermsText(context, i, true, _termsSections[i].heading),
                             key: ValueKey('terms-heading-${i + 1}'),
                             style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
@@ -51,7 +53,7 @@ class TermsOfUseScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _termsSections[i].body,
+                          authTermsText(context, i, false, _termsSections[i].body),
                           style: textTheme.bodyMedium?.copyWith(height: 1.7),
                         ),
                         const SizedBox(height: 24),
@@ -159,7 +161,7 @@ const _termsSections = <_TermsSection>[
   ),
   _TermsSection(
     '21. القانون والشكاوى',
-    'تخضع العلاقة للقانون الجزائري والقواعد الآمرة الواجبة. يمكن طلب حل ودي عبر بريد التواصل، دون أن يصبح شرطًا يمنع اللجوء إلى المحكمة المختصة قانونًا أو السلطة الوطنية لحماية المعطيات ذات الطابع الشخصي عند تعلق الطلب باختصاصها.\n\nلا تفرض هذه الشروط تحكيمًا إجباريًا أو تنازلًا عامًا عن حق الشكوى أو التقاضي. إذا تعذر تطبيق بند، فلا يُفسر ذلك على أنه تنازل عن الحقوق التي يقررها القانون. النص المعروض في هذه الصفحة عربي؛ ولا ندّعي نشر نسخ فرنسية أو إنجليزية محدثة ومطابقة قبل إعدادها ومراجعتها.',
+    'تخضع العلاقة للقانون الجزائري والقواعد الآمرة الواجبة. يمكن طلب حل ودي عبر بريد التواصل، دون أن يصبح شرطًا يمنع اللجوء إلى المحكمة المختصة قانونًا أو السلطة الوطنية لحماية المعطيات ذات الطابع الشخصي عند تعلق الطلب باختصاصها.\n\nلا تفرض هذه الشروط تحكيمًا إجباريًا أو تنازلًا عامًا عن حق الشكوى أو التقاضي. إذا تعذر تطبيق بند، فلا يُفسر ذلك على أنه تنازل عن الحقوق التي يقررها القانون. النص المصدر المنشور عربي؛ والنسختان الفرنسية والإنجليزية المعروضتان هنا ترجمة لهذا النص.',
   ),
   _TermsSection(
     '22. التواصل والنفاذ',

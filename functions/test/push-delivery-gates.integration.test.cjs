@@ -13,10 +13,18 @@ const { createPushNotificationHandler } = require('../security/push-notification
 after(close);
 const preferences = { enabled: true, community: true, announcements: true, exams: true };
 const sync = createSyncPushDeviceHandler({ db, auth, FieldValue });
+async function bindSignedSession(actor,sid){
+ await auth.setCustomUserClaims(actor.uid,{sid});
+ const user=await auth.getUser(actor.uid);
+ const res=await fetch('http://'+process.env.FIREBASE_AUTH_EMULATOR_HOST+'/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user.email,password:'Local-only-test-48!',returnSecureToken:true})});
+ assert.equal(res.status,200);actor.token=(await res.json()).idToken;
+ actor.authTime=JSON.parse(Buffer.from(actor.token.split('.')[1],'base64url')).auth_time;
+}
 async function setup() {
   const f = await fixture();
   const token = `delivery-gate-local-${f.owner.uid}`;
   const sessionId = 'gate-session';
+  await bindSignedSession(f.owner,sessionId);
   await db.doc(`users/${f.owner.uid}/sessions/${sessionId}`).set({
     sessionId, isRevoked: false, createdAt: Timestamp.fromMillis(42000),
   });

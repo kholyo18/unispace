@@ -29,7 +29,7 @@ test('details use the bound owner and publish previews only after saved result',
 });
 test('preference snapshot decoding is typed and earlier activity guards remain wired', () => {
   assert.match(page, /ChatPreferencesSnapshot\.fromData\(data, _me\.id\)/);
-  assert.match(page, /await _chatActivity\.markRead\(\)/);
+  assert.match(page, /await _chatActivity\.markRead\(shareReadReceipt: _shareReadReceipt\)/);
   assert.match(page, /await _chatActivity\.setTyping\(active\)/);
   assert.match(page, /_peerTypingExpiry = Timer\(remaining,/);
 });

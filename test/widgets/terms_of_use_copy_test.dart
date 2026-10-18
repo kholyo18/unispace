@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:UniSpace/features/auth/terms_of_use_screen.dart';
 
 Future<String> visibleTerms(WidgetTester tester) async {
-  await tester.pumpWidget(const MaterialApp(home: TermsOfUseScreen()));
+  await tester.pumpWidget(const MaterialApp(locale: Locale('ar'), supportedLocales: [Locale('ar')], localizationsDelegates: GlobalMaterialLocalizations.delegates, home: TermsOfUseScreen()));
   await tester.pumpAndSettle();
   return tester.widgetList<Text>(find.byType(Text)).map((widget) {
     return widget.data ?? widget.textSpan?.toPlainText() ?? '';

@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
 const root = path.resolve(__dirname, '../..');
-const main = fs.readFileSync(path.join(root, 'lib/main.dart'), 'utf8');
+const main = require('./support/read-dart-library.cjs')(path.join(root, 'lib/main.dart'));
 test('foreground notification rendering still passes through the tested preference service', () => {
   const start = main.indexOf('FirebaseMessaging.onMessage.listen((msg) async {');
   const end = main.indexOf('FirebaseMessaging.onMessageOpenedApp.listen', start);

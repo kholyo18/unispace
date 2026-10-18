@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
-const main = fs.readFileSync(path.join(root, 'lib/main.dart'), 'utf8');
+const main = require('./support/read-dart-library.cjs')(path.join(root, 'lib/main.dart'));
 function section(start, end) {
   const a = main.indexOf(start), b = main.indexOf(end, a + start.length);
   assert.ok(a >= 0 && b > a, start); return main.slice(a, b);

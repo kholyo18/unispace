@@ -27,8 +27,8 @@ class ChatActivityClient {
       currentUid() == expectedUid &&
       sessionKey() == _session;
 
-  Future<bool> markRead() => _send(() => {
-        'lastReadAt': {expectedUid: serverTimestamp()},
+  Future<bool> markRead({bool shareReadReceipt = true}) => _send(() => {
+        if (shareReadReceipt) 'lastReadAt': {expectedUid: serverTimestamp()},
         'unread': {expectedUid: 0},
       });
 

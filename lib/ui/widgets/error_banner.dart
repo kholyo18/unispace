@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/shell_strings.dart';
 import 'package:flutter/material.dart';
 
 class ErrorBanner extends StatelessWidget {
@@ -37,7 +38,7 @@ class ErrorBanner extends StatelessWidget {
             if (onRetry != null)
               TextButton(
                 onPressed: onRetry,
-                child: Text(MaterialLocalizations.of(context).viewLicensesButtonLabel),
+                child: Text(shellText(context, 'إعادة المحاولة')),
               ),
           ],
         ),

@@ -43,7 +43,7 @@ void main() {
     }));
     await tester.pumpAndSettle();
     expect(find.text('protected'), findsNothing);
-    await tester.tap(find.text('إعادة المحاولة'));
+    await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.text('challenge'), findsOneWidget);
     expect(calls, 2);
@@ -53,7 +53,7 @@ void main() {
     await tester.pumpWidget(gate(() => pending.future, timeout: const Duration(seconds: 1)));
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
-    expect(find.text('إعادة المحاولة'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
     pending.complete(false);
     await tester.pumpAndSettle();
     expect(find.text('protected'), findsNothing);

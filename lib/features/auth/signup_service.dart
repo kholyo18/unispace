@@ -1,3 +1,4 @@
+import 'signup_retry.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -42,8 +43,13 @@ class SignupService {
   Future<void> completeProfile(Map<String, dynamic> profile, {required String expectedUid}) async {
     if (_auth.currentUser?.uid != expectedUid) throw SignupServiceException('unauthenticated');
     try {
-      final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
-          .httpsCallable('completeSignupProfile').call(profile);
+      final payload = Map<String, dynamic>.unmodifiable(profile);
+      final callable = FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('completeSignupProfile', options: HttpsCallableOptions(timeout: const Duration(seconds: 90)));
+      final result = await retrySignupSave(
+        save: () => callable.call(payload),
+        isCurrentUser: () => _auth.currentUser?.uid == expectedUid,
+      );
       if (_auth.currentUser?.uid != expectedUid) throw SignupServiceException('unauthenticated');
       final data = Map<String, dynamic>.from(result.data as Map);
       if (data['completed'] != true || data['uid'] != expectedUid || data['username'] != profile['username']) {

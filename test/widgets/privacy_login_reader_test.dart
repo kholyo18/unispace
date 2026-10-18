@@ -1,10 +1,12 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:UniSpace/features/settings/privacy/privacy_policy_screen.dart';
 import 'simple_login_terms_test.dart'
-    show control, showLogin, toggleTerms, expectLoginEnabled;
+    show control, showLogin, toggleTerms, expectLoginEnabled, openLegalDetails;
 
 Future<void> openPrivacy(WidgetTester tester) async {
+  await openLegalDetails(tester);
   await tester.ensureVisible(control('read-privacy'));
   await tester.pumpAndSettle();
   await tester.tap(control('read-privacy'));
@@ -20,7 +22,7 @@ void main() {
   testWidgets('privacy opens before agreement and does not enable login',
       (tester) async {
     await showLogin(tester);
-    expect(find.text('قراءة سياسة الخصوصية'), findsOneWidget);
+    expect(find.text('قراءة سياسة الخصوصية'), findsNothing);
     expectLoginEnabled(tester, false);
 
     await openPrivacy(tester);
@@ -82,6 +84,10 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
       theme: ThemeData.light(),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(

@@ -170,7 +170,7 @@ void main() {
     });
   }
   test('unsupported foreground type remains denied', () async {
-    await h.invokeForeground(message({...data(), 'type': 'message'}));
+    await h.invokeForeground(message({...data(), 'type': 'chat_message'}));
     expectNoEffects();
   });
   test('data-only message does not create a local notification', () async {

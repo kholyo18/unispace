@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
@@ -52,7 +53,7 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
     final key = _key.text.replaceAll(RegExp(r'[-\s]'), '').toUpperCase();
     if (!RegExp(r'^[0-9A-F]{32}$').hasMatch(key) ||
         (!google && (_email.text.trim().isEmpty || _password.text.isEmpty))) {
-      setState(() => _error = 'أدخل مفتاح الاستعادة الكامل وبيانات الدخول.');
+      setState(() => _error = authSettingsText(context, 'أدخل مفتاح الاستعادة الكامل وبيانات الدخول.'));
       return;
     }
     setState(() {
@@ -97,23 +98,23 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('استعادة الوصول للحساب')),
+        appBar: AppBar(title: Text(authSettingsText(context, 'استعادة الوصول للحساب'))),
         body: ListView(padding: const EdgeInsets.all(24), children: [
           if (_complete) ...[
             const Icon(Icons.check_circle_outline, size: 56),
             const SizedBox(height: 16),
-            const Text(
-                'تمت استعادة الوصول. أُلغيت الجلسات السابقة وأُزيل تطبيق المصادقة المفقود. سجّل الدخول مجددًا، ثم فعّل التأكيد بخطوتين وأنشئ مفتاح استعادة جديدًا.'),
+            Text(
+                authSettingsText(context, 'تمت استعادة الوصول. أُلغيت الجلسات السابقة وأُزيل تطبيق المصادقة المفقود. سجّل الدخول مجددًا، ثم فعّل التأكيد بخطوتين وأنشئ مفتاح استعادة جديدًا.')),
             FilledButton(
                 onPressed: () =>
                     Navigator.of(context).popUntil((route) => route.isFirst),
-                child: const Text('العودة إلى تسجيل الدخول')),
+                child: Text(authSettingsText(context, 'العودة إلى تسجيل الدخول'))),
           ] else ...[
-            const Text(
-                'تحتاج مفتاح الاستعادة الذي أنشأته مسبقًا، مع كلمة المرور أو حساب Google. ستُلغي العملية الجلسات السابقة وتزيل تطبيق المصادقة المفقود.'),
+            Text(
+                authSettingsText(context, 'تحتاج مفتاح الاستعادة الذي أنشأته مسبقًا، مع كلمة المرور أو حساب Google. ستُلغي العملية الجلسات السابقة وتزيل تطبيق المصادقة المفقود.')),
             const SizedBox(height: 12),
-            const Text(
-                'الرموز من النسخ القديمة لا تعمل هنا. إذا لم تحفظ مفتاحًا، استخدم تطبيق المصادقة أو نسخة احتياطية منه.'),
+            Text(
+                authSettingsText(context, 'الرموز من النسخ القديمة لا تعمل هنا. إذا لم تحفظ مفتاحًا، استخدم تطبيق المصادقة أو نسخة احتياطية منه.')),
             const SizedBox(height: 20),
             TextField(
                 controller: _key,
@@ -122,35 +123,35 @@ class _AccountRecoveryScreenState extends State<AccountRecoveryScreen> {
                 autocorrect: false,
                 enableSuggestions: false,
                 textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(
-                    labelText: 'مفتاح الاستعادة',
-                    helperText: '32 حرفًا ورقمًا، دون احتساب الشرطات')),
+                decoration: InputDecoration(
+                    labelText: authSettingsText(context, 'مفتاح الاستعادة'),
+                    helperText: authSettingsText(context, '32 حرفًا ورقمًا، دون احتساب الشرطات'))),
             TextField(
                 controller: _email,
                 enabled: !_busy,
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
                 decoration:
-                    const InputDecoration(labelText: 'البريد الإلكتروني')),
+                    InputDecoration(labelText: authSettingsText(context, 'البريد الإلكتروني'))),
             TextField(
                 controller: _password,
                 enabled: !_busy,
                 obscureText: true,
                 enableSuggestions: false,
                 autocorrect: false,
-                decoration: const InputDecoration(labelText: 'كلمة المرور')),
+                decoration: InputDecoration(labelText: authSettingsText(context, 'كلمة المرور'))),
             const SizedBox(height: 20),
             if (_error != null)
-              Text(_error!,
+              Text(authSettingsText(context, _error!),
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
             if (_busy) const Center(child: CircularProgressIndicator()),
             FilledButton(
                 onPressed: _busy ? null : () => _recover(),
-                child: const Text('استعادة بكلمة المرور')),
+                child: Text(authSettingsText(context, 'استعادة بكلمة المرور'))),
             if (!kIsWeb)
               OutlinedButton(
                   onPressed: _busy ? null : () => _recover(google: true),
-                  child: const Text('استعادة بحساب Google')),
+                  child: Text(authSettingsText(context, 'استعادة بحساب Google'))),
           ],
         ]),
       );
@@ -168,24 +169,22 @@ class _RecoveryKeyScreenState extends State<RecoveryKeyScreen> {
   bool _saved = false;
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('احفظ مفتاح الاستعادة')),
+        appBar: AppBar(title: Text(authSettingsText(context, 'احفظ مفتاح الاستعادة'))),
         body: ListView(padding: const EdgeInsets.all(24), children: [
-          const Text(
-              'يظهر المفتاح في هذه الشاشة فقط. احفظه في مكان آمن خارج هذا الجهاز. إنشاء مفتاح جديد يُلغي السابق.'),
+          Text(authSettingsText(context, 'يظهر المفتاح في هذه الشاشة فقط. احفظه في مكان آمن خارج هذا الجهاز. إنشاء مفتاح جديد يُلغي السابق.')),
           const SizedBox(height: 24),
           SelectableText(widget.recoveryKey,
               textDirection: TextDirection.ltr,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 22)),
           const SizedBox(height: 16),
-          const Text(
-              'يُستخدم عند فقدان تطبيق المصادقة، مع بيانات دخولك. لا تشاركه مع أحد.'),
+          Text(authSettingsText(context, 'يُستخدم عند فقدان تطبيق المصادقة، مع بيانات دخولك. لا تشاركه مع أحد.')),
           CheckboxListTile(
               value: _saved,
               onChanged: (value) => setState(() => _saved = value ?? false),
-              title: const Text('حفظت المفتاح في مكان آمن')),
+              title: Text(authSettingsText(context, 'حفظت المفتاح في مكان آمن'))),
           FilledButton(
               onPressed: _saved ? () => Navigator.pop(context) : null,
-              child: const Text('تم')),
+              child: Text(authSettingsText(context, 'تم'))),
         ]),
       );
 }

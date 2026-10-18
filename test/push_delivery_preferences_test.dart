@@ -22,7 +22,7 @@ void main() {
     'follow_request',
     'follow_accepted'
   ];
-  for (final type in [...community, 'announcement', 'exam_reminder']) {
+  for (final type in [...community, 'announcement', 'exam_reminder', 'message']) {
     test('recognized $type remains allowed with default preferences', () {
       expect(service.allows(type), isTrue);
       AppSettings.instance.notifier.value =
@@ -33,7 +33,6 @@ void main() {
   for (final type in [
     '',
     'chat',
-    'message',
     'chat_message',
     'dm_message',
     'unknown',

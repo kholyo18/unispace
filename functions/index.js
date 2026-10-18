@@ -15,13 +15,21 @@ exports.pushOnNotification = onDocumentCreated(
 // Keep session security in the configured CommonJS entry point.
 // Sign-out, own deletion, token detach and session display bootstrap stay
 // available through their own verified-token handlers during suspension.
-const { onCall: lifecycleExemptOnCall } = require('firebase-functions/v2/https');
+const { onCall: rawOnCall } = require('firebase-functions/v2/https');
+const { beforeUserSignedIn } = require('firebase-functions/v2/identity');
+const { createSessionGuard, createSignInSessionHandler, createRevokeDeviceSessionsHandler } = require('./security/device-sessions');
+const sessionGuard = createSessionGuard({ db: getFirestore() });
+const lifecycleExemptOnCall = (options, handler) => rawOnCall(options, sessionGuard(handler));
 const { createAccountAccessGuard } = require('./security/account-access-guard');
 const accountAccessGuard = createAccountAccessGuard({ db: getFirestore() });
 const onCall = (options, handler) => lifecycleExemptOnCall(options, accountAccessGuard(handler));
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { getAuth } = require('firebase-admin/auth');
 const { FieldValue } = require('firebase-admin/firestore');
+exports.issueDeviceSession = beforeUserSignedIn({ region: 'europe-west1' },
+  createSignInSessionHandler({ db: getFirestore(), FieldValue }));
+exports.revokeDeviceSessions = lifecycleExemptOnCall({ region: 'europe-west1', timeoutSeconds: 120 },
+  createRevokeDeviceSessionsHandler({ auth: getAuth(), db: getFirestore(), FieldValue }));
 const { createRevokeAllSessionsHandler } = require('./security/revoke-all-sessions');
 
 exports.revokeAllUserSessions = lifecycleExemptOnCall(
@@ -201,11 +209,15 @@ exports.verifyCommentMediaAccess = onCall({ region: 'europe-west1', timeoutSecon
     bucket: () => getStorage().bucket(commentMediaBucket.value()) }, false, true, {verifyOnly:true}));
 
 const { createUsernameCheckHandler } = require('./security/username-check');
-exports.checkSignupUsername = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
+// Onboarding handlers verify revocation themselves and support existing logins.
+// Enforce selective session revocation as well when the sign-in token has sid.
+const onboardingOnCall = (options, handler) => rawOnCall(options, accountAccessGuard(
+  request => request.auth?.token?.sid != null ? sessionGuard(handler)(request) : handler(request)));
+exports.checkSignupUsername = onboardingOnCall({ region: 'europe-west1', timeoutSeconds: 60 },
   createUsernameCheckHandler({auth:getAuth(), db:getFirestore()}));
 
 const { createCompleteSignupHandler } = require('./security/complete-signup');
-exports.completeSignupProfile = onCall({region:'europe-west1',timeoutSeconds:60},
+exports.completeSignupProfile = onboardingOnCall({region:'europe-west1',timeoutSeconds:60},
   createCompleteSignupHandler({auth:getAuth(),db:getFirestore(),bucketName:()=>commentMediaBucket.value()}));
 
 const { createSessionBootstrapHandler } = require('./security/session-bootstrap');
@@ -259,3 +271,62 @@ const { createStorageUploadHandler } = require('./security/storage-upload');
 exports.prepareStorageUpload = onCall({ region: 'europe-west1', timeoutSeconds: 60 },
   createStorageUploadHandler({ auth: getAuth(), db: getFirestore(), FieldValue, Timestamp,
     bucketName: () => commentMediaBucket.value() }));
+
+// Private optimized playback pipeline; original media remains unchanged.
+Object.assign(exports, require('./security/playback-functions'));
+
+const {createChatViewOnceHandlers}=require('./security/chat-view-once');
+const chatViewOnceHandlers=createChatViewOnceHandlers({db:getFirestore(),auth:getAuth(),FieldValue,Timestamp,
+  bucket:()=>getStorage().bucket(commentMediaBucket.value()),
+  prepareUpload:createStorageUploadHandler({auth:getAuth(),db:getFirestore(),FieldValue,Timestamp,bucketName:()=>commentMediaBucket.value()})});
+const { createChatHandlers } = require('./security/chat-service');
+const chatHandlers = createChatHandlers({db:getFirestore(),auth:getAuth(),FieldValue,viewOnce:chatViewOnceHandlers});
+exports.openChat = onCall({region:'europe-west1'},chatHandlers.open);
+exports.sendChatMessage = onCall({region:'europe-west1'},chatHandlers.send);
+exports.voteChatPoll = onCall({region:'europe-west1'},chatHandlers.vote);
+exports.respondChatEvent = onCall({region:'europe-west1'},chatHandlers.respondEvent);
+exports.respondChatRequest = onCall({region:'europe-west1'},chatHandlers.respond);
+exports.mutateChatMessage = onCall({region:'europe-west1'},chatHandlers.mutate);
+
+const {createChatNotificationHandler}=require('./security/chat-push');
+exports.pushOnChatMessage=onDocumentCreated('chats/{chatId}/messages/{messageId}',createChatNotificationHandler({db:getFirestore(),FieldValue}));
+const {createGroupHandlers}=require('./security/chat-groups');
+const groupHandlers=createGroupHandlers({db:getFirestore(),auth:getAuth(),FieldValue});
+exports.createChatGroup=onCall({region:'europe-west1'},groupHandlers.create);
+exports.manageChatGroup=onCall({region:'europe-west1'},groupHandlers.manage);
+exports.respondGroupInvite=onCall({region:'europe-west1'},groupHandlers.respond);
+exports.manageGroupAccess=onCall({region:'europe-west1'},groupHandlers.access);
+exports.requestGroupJoin=onCall({region:'europe-west1'},groupHandlers.requestJoin);
+exports.listGroupJoinRequests=onCall({region:'europe-west1'},groupHandlers.listJoinRequests);
+exports.reviewGroupJoinRequest=onCall({region:'europe-west1'},groupHandlers.reviewJoinRequest);
+
+// Private documents use short-lived signed transfers, never broad Storage writes.
+const {createChatDocumentHandlers}=require('./security/chat-documents');
+const chatDocumentHandlers=createChatDocumentHandlers({db:getFirestore(),auth:getAuth(),FieldValue,Timestamp,
+  bucket:()=>getStorage().bucket(commentMediaBucket.value()),
+  prepareUpload:createStorageUploadHandler({auth:getAuth(),db:getFirestore(),FieldValue,Timestamp,bucketName:()=>commentMediaBucket.value()})});
+exports.prepareChatDocumentUpload=onCall({region:'europe-west1'},chatDocumentHandlers.prepare);
+exports.readChatDocumentDownload=onCall({region:'europe-west1'},chatDocumentHandlers.read);
+
+exports.prepareChatViewOnceUpload=onCall({region:'europe-west1'},chatViewOnceHandlers.prepare);
+const {onRequest}=require('firebase-functions/v2/https');
+const {pipeline}=require('node:stream/promises');
+exports.consumeChatViewOncePhoto=onRequest({region:'europe-west1',timeoutSeconds:120,memory:'256MiB'},async(req,res)=>{
+  res.set({'Cache-Control':'private, no-store, max-age=0','Pragma':'no-cache','X-Content-Type-Options':'nosniff'});
+  if(req.method!=='POST'){res.status(405).end();return;}
+  try {
+    const photo=await chatViewOnceHandlers.consume(req);
+    res.set({'Content-Type':photo.contentType,'Content-Length':String(photo.size)});
+    await pipeline(photo.file.createReadStream(),res);
+  } catch(error) {
+    if(res.headersSent||res.destroyed){res.destroy();return;}
+    const status=({'unauthenticated':401,'permission-denied':403,'not-found':404,'already-exists':410,'failed-precondition':410,'invalid-argument':400})[error.code]||503;
+    res.removeHeader('Content-Length');res.status(status).json({error:'Photo unavailable'});
+  }
+});
+exports.cleanupChatViewOncePhotos=onSchedule({schedule:'every 24 hours',region:'europe-west1',timeoutSeconds:120},()=>chatViewOnceHandlers.cleanup());
+
+exports.confirmChatViewOnceUpload=onCall({region:'europe-west1'},chatViewOnceHandlers.confirmUpload);
+
+const {createChatNotificationActionHandler}=require('./security/chat-notification-actions');
+exports.handleChatNotificationAction=onCall({region:'europe-west1'},createChatNotificationActionHandler({db:getFirestore(),auth:getAuth(),chatHandlers}));

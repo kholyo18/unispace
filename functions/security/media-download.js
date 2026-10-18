@@ -1,11 +1,17 @@
 const { HttpsError } = require('firebase-functions/v2/https');
 const { createContentSearchPageHandler } = require('./content-search-page');
+const { pickPlaybackFile } = require('./playback-variant');
 function createMediaDownloadHandler({auth, db, bucket}, batch = false, comment = false, {verifyOnly = false} = {}) {
   if (verifyOnly && (!comment || batch)) throw new Error('Access-only mode requires a single comment.');
   const readPost = createContentSearchPageHandler({auth, db}, true);
   return async request => {
     const i = request.data;
-    if (!i || typeof i !== 'object' || Array.isArray(i) || Object.keys(i).length !== (comment ? 3 : 2) ||
+    const hasDelivery = i != null && Object.hasOwn(i, 'delivery');
+    const hasIncludePost = i != null && Object.hasOwn(i, 'includePost');
+    if (!i || typeof i !== 'object' || Array.isArray(i) ||
+        (hasDelivery && (verifyOnly || i.delivery !== 'playback')) ||
+        (hasIncludePost && (!batch || comment || verifyOnly || i.includePost !== true)) ||
+        Object.keys(i).length !== (comment ? 3 : 2) + (hasDelivery ? 1 : 0) + (hasIncludePost ? 1 : 0) ||
         !Object.hasOwn(i, 'postId') || !Object.hasOwn(i, batch ? 'urls' : 'url')) {
       throw new HttpsError('invalid-argument', 'Invalid media request.');
     }
@@ -58,8 +64,7 @@ function createMediaDownloadHandler({auth, db, bucket}, batch = false, comment =
     }
     if (!urls.every(url => ownsUrl(visible.data, url))) throw new HttpsError('permission-denied', 'Media no longer belongs to this post.');
     const storage = bucket();
-    const items = [];
-    for (const source of urls) {
+    async function resolveSource(source) {
       let objectPath;
       try {
         const url = new URL(source), prefix = '/v0/b/' + storage.name + '/o/';
@@ -81,18 +86,28 @@ function createMediaDownloadHandler({auth, db, bucket}, batch = false, comment =
       try { [metadata] = await storage.file(objectPath).getMetadata(); }
       catch (e) { if (e.code === 404) throw new HttpsError('not-found', 'Media unavailable.'); throw new HttpsError('unavailable', 'Try again later.'); }
       if (!metadata.generation || Number(metadata.size) <= 0) throw new HttpsError('not-found', 'Media unavailable.');
+      const selected = i.delivery === 'playback'
+        ? await pickPlaybackFile(storage, objectPath, metadata)
+        : {file:storage.file(objectPath), metadata};
       const expiresAt = Date.now() + 5 * 60 * 1000;
       // Bind delivery to the inspected immutable object generation.
-      const [url] = await storage.file(objectPath).getSignedUrl({version:'v4', action:'read', expires:expiresAt,
-        queryParams:{generation:String(metadata.generation)}});
-      items.push({source, url, expiresAt});
+      const [url] = await selected.file.getSignedUrl({version:'v4', action:'read', expires:expiresAt,
+        queryParams:{generation:String(selected.metadata.generation)}});
+      return {source, url, expiresAt};
+    }
+    if (verifyOnly) return resolveSource(urls[0]);
+    const items = [];
+    // Keep Storage/signing work bounded and preserve the caller's URL order.
+    for (let offset = 0; offset < urls.length; offset += 4) {
+      items.push(...await Promise.all(urls.slice(offset, offset + 4).map(resolveSource)));
     }
     // Recheck all memberships before exposing any signed URL.
     const fresh = await readPost({...request, data:{postId:i.postId}});
     if (!urls.every(url => ownsUrl(fresh.data, url))) throw new HttpsError('permission-denied', 'Media unavailable.');
     if (items.some(item => item.expiresAt <= Date.now())) throw new HttpsError('unavailable', 'Try again later.');
     if (comment) return {url:items[0].url, expiresAt:items[0].expiresAt, mediaType:visibleComment(fresh.data).mediaType};
-    return batch ? {items} : {url:items[0].url, expiresAt:items[0].expiresAt};
+    return batch ? (hasIncludePost ? {items, post:fresh} : {items})
+      : {url:items[0].url, expiresAt:items[0].expiresAt};
   };
 }
 module.exports = { createMediaDownloadHandler };

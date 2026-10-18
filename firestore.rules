@@ -2,247 +2,92 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /storageUploadGrants/{grantId} { allow read, write: if false; }
+    // Signed per-login identity; client-owned metadata never grants a session.
+    function activeSession() {
+      return request.auth != null
+        && request.auth.token.get('sid', '') is string
+        && request.auth.token.get('sid', '').matches('^[a-f0-9]{64}$')
+        && request.auth.token.get('firebase', {}).get('tenant', null) == null
+        && request.auth.token.auth_time is int && request.auth.token.auth_time > 0
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sid)).data.authSessionVersion == 1
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sid)).data.sessionId == request.auth.token.sid
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sid)).data.isRevoked == false
+        && get(/databases/$(database)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore is int
+        && request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore;
+    }
+    function validSessionMetadata() {
+      let d = request.resource.data;
+      return d.get('alias', '') is string && d.get('alias', '').size() <= 200
+        && d.get('isTrusted', false) is bool
+        && d.get('deviceId', '') is string && d.get('deviceId', '').size() <= 200
+        && d.get('model', '') is string && d.get('model', '').size() <= 500
+        && d.get('platform', '') is string && d.get('platform', '').size() <= 50
+        && d.get('manufacturer', '') is string && d.get('manufacturer', '').size() <= 200
+        && d.get('osVersion', '') is string && d.get('osVersion', '').size() <= 500
+        && d.get('appVersion', '') is string && d.get('appVersion', '').size() <= 100
+        && d.get('buildNumber', '') is string && d.get('buildNumber', '').size() <= 100
+        && d.get('locale', '') is string && d.get('locale', '').size() <= 100
+        && d.updatedAt == request.time
+        && (!d.diff(resource.data).affectedKeys().hasAny(['lastSeenAt']) || d.lastSeenAt == request.time)
+        && (resource.data.get('deviceId', null) == null || d.deviceId == resource.data.deviceId);
+    }
+
     // Explicit server-only records; no broad match in this candidate grants access.
     match /communityReportLimits/{uid} { allow read, write: if false; }
     match /communityReportStatusLimits/{uid} { allow read, write: if false; }
     match /usernameReservations/{name} { allow read, write: if false; }
     match /usernameCheckLimits/{uid} { allow read, write: if false; }
     function isMod() {
-      return request.auth != null
+      return activeSession()
         && request.auth.uid in [
           'QYZAB7X4JyXYgMGGwzgV8U4Mu6f2'
         ];
     }
 
-    // Shared server-owned revocation cutoff for profiles, chats and relationships.
-    function authenticatedSession() {
-      return request.auth != null
-        && (!exists(/databases/$(database)/documents/authRevocations/$(request.auth.uid))
-          || request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(request.auth.uid)).data.revokedBefore);
-    }
-    // Separate application suspension from the user's voluntary freeze state.
-    // A newly authenticated suspended owner may inspect their own status, but
-    // cannot use protected social writes or clear the administrative record.
-    function activeSession() {
-      return authenticatedSession()
-        && (!exists(/databases/$(database)/documents/accountStateControls/$(request.auth.uid))
-          || (get(/databases/$(database)/documents/accountStateControls/$(request.auth.uid)).data.schemaVersion == 1
-            && get(/databases/$(database)/documents/accountStateControls/$(request.auth.uid)).data.adminSuspended == false));
-    }
-    match /accountStateControls/{userId} { allow read, write: if false; }
-    function isCurrentChatMember(chatId) {
-      return activeSession()
-        && request.auth.uid in
-          get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
-    }
-
-    // Message interaction metadata belongs to the acting participant, not the
-    // message author. Keep legacy single-string reactions and the six-value UI.
-    function shortReaction(value) {
-      return value is string && value.size() > 0 && value.size() <= 32;
-    }
-    function validReaction(value) {
-      return shortReaction(value)
-        || (value is list && value.size() > 0 && value.size() <= 6
-          && value.size() == value.toSet().size()
-          && shortReaction(value[0])
-          && (value.size() < 2 || shortReaction(value[1]))
-          && (value.size() < 3 || shortReaction(value[2]))
-          && (value.size() < 4 || shortReaction(value[3]))
-          && (value.size() < 5 || shortReaction(value[4]))
-          && (value.size() < 6 || shortReaction(value[5])));
-    }
-    function ownReactionValue(data) {
-      return !(request.auth.uid in data) || validReaction(data[request.auth.uid]);
-    }
-    function ownStarValue(data) {
-      return !(request.auth.uid in data) || data[request.auth.uid] == true;
-    }
-    function ownInteractionMapChange(key) {
-      let old = resource.data.get(key, {});
-      let next = request.resource.data.get(key, {});
-      return old is map && next is map
-        && next.diff(old).affectedKeys().hasOnly([request.auth.uid])
-        && (key == 'reactions' ? ownReactionValue(next) : ownStarValue(next));
-    }
-    function ownReadReceiptChange() {
-      let old = resource.data.get('readBy', []);
-      let next = request.resource.data.get('readBy', []);
-      // A receipt is monotonic. Only the caller may add their identity, and
-      // replacing/deleting the parent list cannot erase anyone's receipt.
-      return old is list && next is list
-        && next.size() == next.toSet().size()
-        && next.hasAll(old)
-        && next.toSet().difference(old.toSet()).hasOnly([request.auth.uid])
-        && next.removeAll([request.auth.uid]) == old.removeAll([request.auth.uid]);
-    }
-    function validInitialInteractions() {
-      let reactions = request.resource.data.get('reactions', {});
-      let stars = request.resource.data.get('starredBy', {});
-      let readers = request.resource.data.get('readBy', []);
-      return reactions is map && stars is map && readers is list
-        && reactions.keys().hasOnly([request.auth.uid]) && ownReactionValue(reactions)
-        && stars.keys().hasOnly([request.auth.uid]) && ownStarValue(stars)
-        && readers.hasOnly([request.auth.uid]) && readers.size() <= 1;
-    }
-    function validInteractionChanges() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      // Validate only changed containers, so unrelated edits preserve legacy
-      // data without granting clients the authority to repair other identities.
-      return (!changed.hasAny(['reactions']) || ownInteractionMapChange('reactions'))
-        && (!changed.hasAny(['starredBy']) || ownInteractionMapChange('starredBy'))
-        && (!changed.hasAny(['readBy']) || ownReadReceiptChange());
-    }
-
-    // Chat activity is participant-owned. Client timestamps must resolve to
-    // request.time; a caller cannot backdate or future-date a seen/typing mark.
-    function currentActivityTimestamp(value) {
-      return value is timestamp && value == request.time;
-    }
-    function ownActivityChange(key, mayRemove) {
-      let old = resource.data.get(key, {});
-      let next = request.resource.data.get(key, {});
-      return old is map && next is map
-        && next.diff(old).affectedKeys().hasOnly([request.auth.uid])
-        && ((mayRemove && !(request.auth.uid in next))
-          || (request.auth.uid in next
-            && currentActivityTimestamp(next[request.auth.uid])));
-    }
-    function validInitialActivity(key) {
-      let data = request.resource.data.get(key, {});
-      return data is map && data.keys().hasOnly([request.auth.uid])
-        && (!(request.auth.uid in data)
-          || currentActivityTimestamp(data[request.auth.uid]));
-    }
-    function validActivityChanges() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      // Preserve unchanged legacy data during unrelated chat operations.
-      return (!changed.hasAny(['lastReadAt']) || ownActivityChange('lastReadAt', false))
-        && (!changed.hasAny(['typing']) || ownActivityChange('typing', true));
-    }
-
-    // Personal chat preferences are writable only by their own participant.
-    // This is an integrity boundary: the containing chat is still readable by
-    // both members. It does not make nickname/theme values confidential.
-    function validDirectChatMembers(data) {
-      let ids = data.memberIds;
-      return ids is list && ids.size() == 2
-        && ids[0] is string && ids[1] is string
-        && ids[0].size() > 0 && ids[1].size() > 0
-        && ids[0] != ids[1] && request.auth.uid in ids;
-    }
-    function ownPreferenceValue(key, data) {
-      return !(request.auth.uid in data)
-        || ((key == 'muted' || key == 'autoTranslate')
-          ? data[request.auth.uid] is bool
-          : (key == 'theme' ? data[request.auth.uid] is map
-            : (key == 'clearedAt' ? currentActivityTimestamp(data[request.auth.uid])
-              : data[request.auth.uid] is string)));
-    }
-    function ownPreferenceChange(key) {
-      let old = resource.data.get(key, {});
-      let next = request.resource.data.get(key, {});
-      return old is map && next is map
-        && next.diff(old).affectedKeys().hasOnly([request.auth.uid])
-        && ownPreferenceValue(key, next);
-    }
-    function initialPreference(key) {
-      let data = request.resource.data.get(key, {});
-      return data is map && data.keys().hasOnly([request.auth.uid])
-        && ownPreferenceValue(key, data);
-    }
-    function personalFlagKeys(uid) {
-      return ['pinned_' + uid, 'muted_' + uid, 'deletedBy_' + uid];
-    }
-    function optionalBoolean(data, key) {
-      return !(key in data) || data[key] is bool;
-    }
-    function initialPersonalPreferences() {
-      let data = request.resource.data;
-      let uid = request.auth.uid;
-      let peer = data.memberIds[0] == uid ? data.memberIds[1] : data.memberIds[0];
-      return !data.keys().hasAny(personalFlagKeys(peer))
-        && optionalBoolean(data, 'pinned_' + uid)
-        && optionalBoolean(data, 'muted_' + uid)
-        && optionalBoolean(data, 'deletedBy_' + uid)
-        && initialPreference('muted') && initialPreference('clearedAt')
-        && initialPreference('nicknames') && initialPreference('theme')
-        && initialPreference('autoTranslate') && initialPreference('autoTranslateLang');
-    }
-    function personalPreferenceChanges() {
-      let data = request.resource.data;
-      let changed = data.diff(resource.data).affectedKeys();
-      let uid = request.auth.uid;
-      let ids = resource.data.memberIds;
-      let peer = ids[0] == uid ? ids[1] : ids[0];
-      // Flat keys are the existing chat-list representation. Protect the other
-      // current member's values even if unchanged legacy values are malformed.
-      return !changed.hasAny(personalFlagKeys(peer))
-        && (!changed.hasAny(['pinned_' + uid]) || optionalBoolean(data, 'pinned_' + uid))
-        && (!changed.hasAny(['muted_' + uid]) || optionalBoolean(data, 'muted_' + uid))
-        && (!changed.hasAny(['deletedBy_' + uid]) || optionalBoolean(data, 'deletedBy_' + uid))
-        && (!changed.hasAny(['muted']) || ownPreferenceChange('muted'))
-        && (!changed.hasAny(['clearedAt']) || ownPreferenceChange('clearedAt'))
-        && (!changed.hasAny(['nicknames']) || ownPreferenceChange('nicknames'))
-        && (!changed.hasAny(['theme']) || ownPreferenceChange('theme'))
-        && (!changed.hasAny(['autoTranslate']) || ownPreferenceChange('autoTranslate'))
-        && (!changed.hasAny(['autoTranslateLang']) || ownPreferenceChange('autoTranslateLang'));
-    }
-
-    // Author edits are not authority to replace a message's envelope.
-    // Creation time, media references, type, reply attribution and unknown
-    // fields remain immutable. Legacy text-only edits are still supported.
-    function validAuthorMessageEdit() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['text', 'editedAt', 'readBy', 'reactions', 'starredBy'])
-        && (!changed.hasAny(['text'])
-          || request.resource.data.get('text', null) is string)
-        && (!changed.hasAny(['editedAt'])
-          || currentActivityTimestamp(request.resource.data.get('editedAt', null)));
-    }
-
     match /chats/{chatId} {
-      allow get: if activeSession() && (
-        resource == null
-        || request.auth.uid in resource.data.memberIds
-      );
-      allow list: if activeSession()
-        && request.auth.uid in resource.data.memberIds;
-      allow create: if activeSession()
-        && validDirectChatMembers(request.resource.data)
-        && validInitialActivity('lastReadAt')
-        && validInitialActivity('typing')
-        && initialPersonalPreferences();
-      allow update: if activeSession()
-        && validDirectChatMembers(resource.data)
-        && request.resource.data.memberIds == resource.data.memberIds
-        && validActivityChanges()
-        && personalPreferenceChanges();
-      allow delete: if false;
-      match /messages/{msgId} {
-        allow read: if isCurrentChatMember(chatId);
-        allow create: if isCurrentChatMember(chatId)
-          && request.resource.data.authorId == request.auth.uid
-          && validInitialInteractions();
-        // Authorship is immutable. Being the original author never bypasses
-        // current membership or the server-owned session revocation cutoff.
-        allow update: if isCurrentChatMember(chatId)
-          && request.resource.data.authorId == resource.data.authorId
-          && validInteractionChanges()
-          && (
-            (resource.data.authorId == request.auth.uid && validAuthorMessageEdit())
-            || request.resource.data.diff(resource.data)
-                .affectedKeys()
-                .hasOnly(['readBy', 'reactions', 'starredBy'])
-          );
-        allow delete: if isCurrentChatMember(chatId)
-          && resource.data.authorId == request.auth.uid;
+      function ownMap(key) {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny([key]) || (request.resource.data.get(key, {}) is map && resource.data.get(key, {}) is map && request.resource.data.get(key, {}).diff(resource.data.get(key, {})).affectedKeys().hasOnly([request.auth.uid]));
       }
+      function activity(key, enabled) {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny([key]) || (ownMap(key) && (request.resource.data.get(key, {}).get(request.auth.uid, null) == null || (enabled && request.resource.data.get(key, {}).get(request.auth.uid, null) == request.time)));
+      }
+      function preferences() {
+        let uid = request.auth.uid;
+        let privacy = get(/databases/$(database)/documents/users/$(uid)).data.get('privacy', {});
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nicknames','muted','autoTranslate','clearedAt','theme','typing','lastReadAt','lastDeliveredAt','unread','pinned_' + uid,'muted_' + uid,'deletedBy_' + uid,'archived_' + uid])
+          && ownMap('nicknames') && ownMap('muted') && ownMap('autoTranslate') && ownMap('theme') && ownMap('unread')
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['unread']) || request.resource.data.unread.get(uid, 0) == 0)
+          && activity('clearedAt', true) && activity('lastDeliveredAt', true)
+          && activity('lastReadAt', privacy.get('readReceipts', true) == true) && activity('typing', privacy.get('typingIndicator', true) == true);
+      }
+      allow get: if activeSession() && (resource == null || request.auth.uid in resource.data.memberIds);
+      allow list: if activeSession() && request.auth.uid in resource.data.memberIds;
+      // Callables own membership, delivery, previews and unread increments.
+      allow create, delete: if false;
+      allow update: if activeSession() && request.auth.uid in resource.data.memberIds && preferences();
+      match /messages/{msgId} {
+        function member() { return activeSession() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds; }
+        function ownMessageMap(key) { return request.resource.data.get(key, {}) is map && request.resource.data.get(key, {}).diff(resource.data.get(key, {})).affectedKeys().hasOnly([request.auth.uid]); }
+        allow read: if member();
+        allow create, delete: if false;
+        allow update: if member() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions','starredBy','hiddenBy']) && ownMessageMap('reactions') && ownMessageMap('starredBy') && ownMessageMap('hiddenBy');
+      }
+    }
+    match /messageRequests/{requestId} {
+      allow read: if activeSession() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow write: if false;
+    }
+
+
+    match /groupInvites/{inviteId} {
+      allow read: if activeSession() && (resource.data.receiverId == request.auth.uid || resource.data.senderId == request.auth.uid);
+      allow write: if false;
     }
 
     function activeProfileOwner(userId) {
-      return activeSession() && request.auth.uid == userId;
+      return activeSession() && request.auth.uid == userId
+        && (!exists(/databases/$(database)/documents/authRevocations/$(userId))
+          || request.auth.token.auth_time > get(/databases/$(database)/documents/authRevocations/$(userId)).data.revokedBefore);
     }
     // Provisional allowlist: validate every editor/bootstrap path before deployment.
     function editableProfileChange() {
@@ -251,7 +96,7 @@ service cloud.firestore {
         'university','faculty','college','level','academic','department','major','studyLevel','section','work','phone','otherInfo',
         'mood','github','linkedin','portfolio','profileImageUrl','coverImageUrl','updatedAt',
         'privacy','profileVisibility','showEmailInProfile','isOnline','lastSeenAt',
-        'security'
+        'accountStatus','disabledAt','reactivatedAt','deletedAt','isDeleted','security'
       ]) && editableSecurityChange() && editableAcademicChange();
     }
     function editableAcademicChange() {
@@ -269,7 +114,7 @@ service cloud.firestore {
           && request.resource.data.get('security', {}).diff(resource.data.get('security', {}))
             .affectedKeys().hasOnly([
               'loginAlerts','loginAlertsEmail','mfaEnabled','backupCodes',
-              'compromisedAt','sessionsRevokedAt','lastLoginAlert'
+              'compromisedAt','sessionsRevokedAt','frozen','frozenAt','deletedAt','lastLoginAlert'
             ])
           // Legacy clients only clear this obsolete field; never store recovery codes here.
           && (!request.resource.data.get('security', {}).diff(resource.data.get('security', {}))
@@ -277,129 +122,105 @@ service cloud.firestore {
             || request.resource.data.get('security', {}).get('backupCodes', []) == []));
     }
     match /users/{userId} {
-      // Raw documents contain private fields. Other-profile readers must use
-      // readPublicProfile/searchPeople/readFollowList, never direct user queries.
-      allow get: if authenticatedSession() && request.auth.uid == userId;
-      allow list: if false;
+      // Other-profile reads still require migration; unchanged in this candidate slice.
+      allow read: if activeSession();
       allow update: if activeProfileOwner(userId) && editableProfileChange();
       // Signup and permanent deletion must complete through server-owned lifecycle paths.
       allow create, delete: if false;
-      // Device tokens and binding metadata are managed only by
-      // syncPushDevice/detachPushDevice. The Flutter client does not read them.
       match /fcm_tokens/{tokenId} {
-        allow read, write: if false;
+        allow read, write: if activeSession()
+                             && request.auth.uid == userId;
       }
-      // Accepted relationships are authorization evidence. Only manageFollow
-      // may create, modify or remove these records via the Admin SDK.
       match /follow_requests/{fromId} {
-        allow get: if activeSession()
-          && (request.auth.uid == userId || request.auth.uid == fromId);
-        allow list: if activeProfileOwner(userId);
+        allow get: if activeSession() && (request.auth.uid == userId || request.auth.uid == fromId);
+        allow list: if activeSession() && request.auth.uid == userId;
         allow write: if false;
       }
       match /following/{followedId} {
-        allow get: if activeSession()
-          && (request.auth.uid == userId || request.auth.uid == followedId);
-        allow list: if activeProfileOwner(userId);
+        allow get: if activeSession() && (request.auth.uid == userId || request.auth.uid == followedId);
+        allow list: if activeSession() && request.auth.uid == userId;
         allow write: if false;
       }
       match /followers/{followerId} {
-        allow get: if activeSession()
-          && (request.auth.uid == userId || request.auth.uid == followerId);
-        allow list: if activeProfileOwner(userId);
+        allow get: if activeSession() && (request.auth.uid == userId || request.auth.uid == followerId);
+        allow list: if activeSession() && request.auth.uid == userId;
         allow write: if false;
       }
       match /sessions/{sessionId} {
-        function sessionFields() {
-          return ['sessionId','deviceId','alias','platform','model','manufacturer',
-            'osVersion','appVersion','buildNumber','locale','createdAt','lastSeenAt',
-            'updatedAt','isTrusted','isRevoked','revokedAt','revokeReason','networkType'];
-        }
-        function activeSessionRecord() {
-          let d = request.resource.data;
-          return d.sessionId == sessionId
-            && d.deviceId is string && d.deviceId.size() > 0
-            && d.alias is string && d.platform is string && d.model is string
-            && d.manufacturer is string && d.osVersion is string
-            && d.appVersion is string && d.buildNumber is string && d.locale is string
-            && d.createdAt is timestamp && d.lastSeenAt is timestamp && d.updatedAt is timestamp
-            && d.isTrusted is bool && d.isRevoked == false
-            && d.revokedAt == null && d.revokeReason == null
-            && (d.get('networkType', null) == null || d.networkType is string);
-        }
-        function activityOrInitialization() {
-          let d = request.resource.data;
-          // A legacy record may be initialized by the existing Flutter helper;
-          // its unknown fields are preserved, not freely edited or removed.
-          return resource.data.get('isRevoked', false) == false
-            && d.diff(resource.data).affectedKeys().hasOnly(sessionFields())
-            && activeSessionRecord()
-            && d.sessionId == resource.data.get('sessionId', sessionId)
-            && d.deviceId == resource.data.get('deviceId', d.deviceId)
-            && d.createdAt == resource.data.get('createdAt', d.createdAt);
-        }
-        function oneWayRevocation() {
-          let d = request.resource.data;
-          // This also handles malformed/legacy records and repeated revocation.
-          // Repeating it never permits activity, identity edits or reactivation.
-          return d.diff(resource.data).affectedKeys()
-              .hasOnly(['isRevoked','revokedAt','revokeReason','updatedAt'])
-            && d.isRevoked == true
-            && d.revokedAt == request.time && d.updatedAt == request.time
-            && d.revokeReason in ['manual','logout_all','logout_all_other'];
-        }
-        allow read: if activeProfileOwner(userId);
-        allow create: if activeProfileOwner(userId)
-          && request.resource.data.keys().hasOnly(sessionFields())
-          && activeSessionRecord() && request.resource.data.isTrusted == false;
-        allow update: if activeProfileOwner(userId)
-          && (activityOrInitialization() || oneWayRevocation());
-        // Deleting a tombstone would permit recreation of a revoked session ID.
-        allow delete: if false;
+        // A revoked device can observe only its own status to sign out.
+        allow get: if request.auth != null && request.auth.uid == userId
+          && request.auth.token.get('sid', '') == sessionId;
+        allow read: if activeSession() && request.auth.uid == userId;
+        allow create, delete: if false;
+        allow update: if activeSession() && request.auth.uid == userId
+          && resource.data.authSessionVersion == 1 && resource.data.isRevoked == false
+          && validSessionMetadata()
+          && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['alias','isTrusted','updatedAt'])
+            || (sessionId == request.auth.token.sid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['alias','isTrusted','updatedAt','lastSeenAt','deviceId',
+                  'model','platform','manufacturer','osVersion','appVersion','buildNumber','locale'])));
       }
       match /saved_posts/{postId} {
-        allow read, write: if activeProfileOwner(userId);
+        allow read, write: if activeSession()
+                            && request.auth.uid == userId;
       }
       match /saved_comments/{commentId} {
-        allow read, write: if activeProfileOwner(userId);
+        allow read, write: if activeSession()
+                            && request.auth.uid == userId;
       }
       match /authored_comments/{commentId} {
         allow read: if activeSession();
-        allow write: if activeProfileOwner(userId);
+        allow write: if activeSession() && request.auth.uid == userId;
       }
       match /hidden_posts/{postId} {
-        allow read, write: if activeProfileOwner(userId);
+        allow read, write: if activeSession()
+                            && request.auth.uid == userId;
       }
       match /hidden_comments/{commentId} {
-        allow read, write: if activeProfileOwner(userId);
+        allow read, write: if activeSession()
+                            && request.auth.uid == userId;
       }
       match /blocked_accounts/{blockedId} {
-        allow get: if activeSession()
-          && (request.auth.uid == userId || request.auth.uid == blockedId);
-        allow list: if activeProfileOwner(userId);
+        allow get: if activeSession() && (request.auth.uid == userId || request.auth.uid == blockedId);
+        allow list: if activeSession() && request.auth.uid == userId;
+        allow write: if false;
+      }
+      // Preserve the deployed legacy block-reader permission.
+      match /blocked_users/{blockedId} {
+        allow read: if activeSession() && request.auth.uid == userId;
         allow write: if false;
       }
       match /blocked_by/{blockerId} {
-        allow get: if activeSession()
-          && (request.auth.uid == userId || request.auth.uid == blockerId);
-        allow list: if activeProfileOwner(userId);
-        allow write: if false;
-      }
-      // Legacy block readers still exist in notifications and settings.
-      // Owners may inspect them; the server handles unblocking by target UID.
-      match /blocked_users/{blockedId} {
-        allow read: if activeProfileOwner(userId);
+        allow get: if activeSession() && (request.auth.uid == userId || request.auth.uid == blockerId);
+        allow list: if activeSession() && request.auth.uid == userId;
         allow write: if false;
       }
       match /notifications/{notifId} {
-        // Identity, content references and delivery metadata are server-owned.
-        // Recipients may acknowledge or dismiss, never manufacture an event.
-        allow read, delete: if activeProfileOwner(userId);
-        allow create: if false;
-        allow update: if activeProfileOwner(userId)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
-          && request.resource.data.read == true;
+        function chatNotification() { return notifId.matches('^chat_.*') || resource.data.get('type', '') == 'message'; }
+        allow read: if activeSession() && request.auth.uid == userId;
+        // Chat notifications and their reserved IDs are exclusively server-created.
+        allow create: if activeSession() && !notifId.matches('^chat_.*')
+          && request.resource.data.get('type', '') != 'message'
+          && request.resource.data.actorId == request.auth.uid
+          && !exists(/databases/$(database)/documents/users/$(userId)/blocked_accounts/$(request.auth.uid))
+          && !exists(/databases/$(database)/documents/users/$(request.auth.uid)/blocked_accounts/$(userId));
+        allow update: if activeSession() && (
+          (chatNotification() && request.auth.uid == userId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+            && request.resource.data.read == true)
+          || (!chatNotification() && request.resource.data.get('type', '') != 'message'
+            && (request.auth.uid == userId || request.auth.uid in resource.data.actorIds))
+        );
+        allow delete: if activeSession() && (request.auth.uid == userId
+          || (!chatNotification() && (request.auth.uid in resource.data.actorIds || resource.data.actorId == request.auth.uid)));
       }
+
+    }
+
+    match /users/{userId}/{fileName} {
+      allow read: if activeSession();
+      allow write: if activeSession() && request.auth.uid == userId;
     }
 
     // Migrated to authenticated, server-authorized callables.

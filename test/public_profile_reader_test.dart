@@ -9,6 +9,50 @@ Map<String, dynamic> projected({bool canView = true}) => {
 };
 
 void main() {
+  test('concurrent reads share one request but later reads reauthorize', () async {
+    var calls = 0;
+    final pending = Completer<Map<String, dynamic>>();
+    final reader = PublicProfileReader(sessionKey: () => 'alice:1', fetchProfile: (_) {
+      calls++;
+      return calls == 1 ? pending.future : Future.value(projected(canView: false));
+    });
+    final first = reader.load('bob');
+    final second = reader.load('bob');
+    expect(calls, 1);
+    pending.complete(projected());
+    expect((await first)['canViewContent'], true);
+    expect((await second)['canViewContent'], true);
+    expect((await reader.load('bob'))['canViewContent'], false);
+    expect(calls, 2);
+  });
+
+  test('in-flight requests never cross login sessions', () async {
+    var session = 'alice:1';
+    final pending = Completer<Map<String, dynamic>>();
+    var calls = 0;
+    final reader = PublicProfileReader(sessionKey: () => session, fetchProfile: (_) {
+      calls++;
+      return calls == 1 ? pending.future : Future.value(projected(canView: false));
+    });
+    final old = reader.load('bob');
+    final rejected = expectLater(old, throwsStateError);
+    session = 'alice:2';
+    expect((await reader.load('bob'))['canViewContent'], false);
+    pending.complete(projected());
+    await rejected;
+    expect(calls, 2);
+  });
+
+  test('failed in-flight reads can be retried', () async {
+    var calls = 0;
+    final reader = PublicProfileReader(sessionKey: () => 'alice:1', fetchProfile: (_) async {
+      if (++calls == 1) throw StateError('offline');
+      return projected();
+    });
+    await expectLater(reader.load('bob'), throwsStateError);
+    expect((await reader.load('bob'))['canViewContent'], true);
+    expect(calls, 2);
+  });
   test('loads the authorized projection and never requests additional fields', () async {
     final requested = <String>[];
     final reader = PublicProfileReader(sessionKey: () => 'alice:1', fetchProfile: (id) async {

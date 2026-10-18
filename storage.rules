@@ -1,0 +1,58 @@
+// Session-gated deployed Storage baseline; existing media policies are preserved.
+// Bearer download URLs issued previously are not invalidated by these rules.
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function activeSession() {
+      return request.auth != null
+        && request.auth.token.get('sid', '') is string
+        && request.auth.token.get('sid', '').matches('^[a-f0-9]{64}$')
+        && request.auth.token.get('firebase', {}).get('tenant', null) == null
+        && request.auth.token.auth_time is int && request.auth.token.auth_time > 0
+        && activeRecords();
+    }
+    function activeRecords() {
+      let s = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sid)).data;
+      let c = firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data;
+      return s.authSessionVersion == 1 && s.sessionId == request.auth.token.sid && s.isRevoked == false
+        && c.revokedBefore is int && request.auth.token.auth_time > c.revokedBefore;
+    }
+    match /users/{userId}/{fileName} {
+      allow read: if activeSession();
+      allow write: if activeSession() && request.auth.uid == userId;
+    }
+    match /community_posts/{postId}/{allPaths=**} {
+      allow read: if activeSession();
+      allow write: if activeSession();
+    }
+    match /chats/{chatId}/{folder}/{fileName} {
+      allow read: if activeSession() && folder != 'files';
+      allow write: if activeSession()
+        && request.resource.size < 40 * 1024 * 1024
+        && folder in ['images', 'videos', 'audio']
+        && request.resource.contentType.matches('image/.*|video/.*|audio/.*');
+    }
+    match /chats/{chatId}/wallpaper/{fileName} {
+      function validWallpaperGrant() {
+        let id = request.resource.metadata.uploadGrantId;
+        let g = firestore.get(/databases/(default)/documents/storageUploadGrants/$(id)).data;
+        let c = firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data;
+        return id.matches('^[A-Za-z0-9_-]{20}$')
+          && request.resource.metadata.uploadedBy == request.auth.uid
+          && g.schemaVersion == 1 && g.uid == request.auth.uid
+          && g.path == 'chats/' + chatId + '/wallpaper/' + fileName
+          && g.bucket == bucket && g.authTime == request.auth.token.auth_time
+          && g.size == request.resource.size && g.contentType == request.resource.contentType
+          && g.overwrite == true && g.expiresAt > request.time
+          && c.storageSchema == 1 && c.storageAllowed == true && c.storageUntil > request.time
+          && c.revokedBefore is int && request.auth.token.auth_time > c.revokedBefore;
+      }
+      allow write: if request.auth != null && request.resource != null
+        && fileName == request.auth.uid + '.jpg'
+        && request.resource.size > 0 && request.resource.size <= 20 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*')
+        && validWallpaperGrant();
+    }
+
+  }
+}

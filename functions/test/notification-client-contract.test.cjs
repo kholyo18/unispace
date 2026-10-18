@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path');
 const root = path.resolve(__dirname, '../..');
-const main = fs.readFileSync(path.join(root, 'lib/main.dart'), 'utf8');
+const main = require('./support/read-dart-library.cjs')(path.join(root, 'lib/main.dart'));
 const service = fs.readFileSync(path.join(root, 'lib/ui/settings/push_preferences_service.dart'), 'utf8');
 test('unused client-side cross-user notification senders stay removed', () => {
   assert.doesNotMatch(main, /Future<void>\s+pushNotification(?:FromMe)?\s*\(/);

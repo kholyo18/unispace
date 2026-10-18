@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../../services/post_privacy_sync.dart';
 import '../profile_privacy.dart';
@@ -235,11 +236,11 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
   PrivacySettings _settings = const PrivacySettings();
   bool _loading = true;
 
-  static const _audienceLabels = {
-    'everyone': 'الجميع',
-    'followers': 'المتابعون',
-    'mutual': 'المتبادلون',
-    'none': 'لا أحد',
+  Map<String, String> get _audienceLabels => {
+    'everyone': authSettingsText(context, 'الجميع'),
+    'followers': authSettingsText(context, 'المتابعون'),
+    'mutual': authSettingsText(context, 'المتبادلون'),
+    'none': authSettingsText(context, 'لا أحد'),
   };
 
   String _label(String key) => _audienceLabels[key] ?? key;
@@ -270,7 +271,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       if (!mounted) return false;
       setState(() => _settings = prev);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر حفظ الإعداد')),
+        SnackBar(content: Text(authSettingsText(context, 'تعذر حفظ الإعداد'))),
       );
       return false;
     }
@@ -283,7 +284,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يجب تسجيل الدخول أولاً')),
+        SnackBar(content: Text(authSettingsText(context, 'يجب تسجيل الدخول أولاً'))),
       );
       return;
     }
@@ -383,13 +384,13 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       checkExportAccount();
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/json')],
-        text: 'نسخة بيانات UniSpace',
+        text: authSettingsText(context, 'نسخة بيانات UniSpace'),
       );
     } catch (e) {
       debugPrint('export data failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر تجهيز الملف')),
+        SnackBar(content: Text(authSettingsText(context, 'تعذر تجهيز الملف'))),
       );
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -425,48 +426,48 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     }
 
     return Directionality(
-      textDirection: ui.TextDirection.rtl,
+      textDirection: Directionality.of(context),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
           Text(
-            'الخصوصية',
+            authSettingsText(context, 'الخصوصية'),
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'تحكم في من يرى حسابك ومن يمكنه التفاعل معك.',
+            authSettingsText(context, 'تحكم في من يرى حسابك ومن يمكنه التفاعل معك.'),
             style: theme.textTheme.bodyMedium?.copyWith(color: muted),
           ),
           const SizedBox(height: 22),
 
-          _header('الحساب'),
+          _header(authSettingsText(context, 'الحساب')),
           _card([
             _switchTile(
               icon: Icons.lock_outline_rounded,
-              title: 'حساب خاص',
+              title: authSettingsText(context, 'حساب خاص'),
               subtitle:
-              'المتابعة بموافقتك. المنشورات والمتابعون يظهرون للموافق عليهم فقط.',
+              authSettingsText(context, 'المتابعة بموافقتك. المنشورات والمتابعون يظهرون للموافق عليهم فقط.'),
               value: _settings.privateAccount,
               onChanged: (v) async {
                 if (v) {
                   final ok = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      title: const Text('تحويل الحساب إلى خاص؟'),
-                      content: const Text(
-                        'المتابعون الحاليون يبقون. أي متابعة جديدة تحتاج موافقتك، ولن تظهر منشوراتك لغير المتابعين.',
+                      title: Text(authSettingsText(context, 'تحويل الحساب إلى خاص؟')),
+                      content: Text(
+                        authSettingsText(context, 'المتابعون الحاليون يبقون. أي متابعة جديدة تحتاج موافقتك، ولن تظهر منشوراتك لغير المتابعين.'),
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('إلغاء'),
+                          child: Text(authSettingsText(context, 'إلغاء')),
                         ),
                         FilledButton(
                           onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('تأكيد'),
+                          child: Text(authSettingsText(context, 'تأكيد')),
                         ),
                       ],
                     ),
@@ -482,10 +483,10 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _navTile(
               icon: Icons.groups_outlined,
-              title: 'من يرى قائمة المتابعين',
+              title: authSettingsText(context, 'من يرى قائمة المتابعين'),
               value: _label(_settings.followersVisibility),
               onTap: () => _pickAudience(
-                title: 'من يرى قائمة المتابعين',
+                title: authSettingsText(context, 'من يرى قائمة المتابعين'),
                 current: _settings.followersVisibility,
                 onSave: (v) =>
                     _apply(_settings.copyWith(followersVisibility: v)),
@@ -493,10 +494,10 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _navTile(
               icon: Icons.person_add_alt_outlined,
-              title: 'من يرى قائمة المتابَعين',
+              title: authSettingsText(context, 'من يرى قائمة المتابَعين'),
               value: _label(_settings.followingVisibility),
               onTap: () => _pickAudience(
-                title: 'من يرى قائمة المتابَعين',
+                title: authSettingsText(context, 'من يرى قائمة المتابَعين'),
                 current: _settings.followingVisibility,
                 onSave: (v) =>
                     _apply(_settings.copyWith(followingVisibility: v)),
@@ -504,12 +505,12 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
           ]),
 
-          _header('الظهور والبحث'),
+          _header(authSettingsText(context, 'الظهور والبحث')),
           _card([
             _switchTile(
               icon: Icons.search_rounded,
-              title: 'الظهور في البحث',
-              subtitle: 'السماح بظهور حسابك عند البحث بالاسم.',
+              title: authSettingsText(context, 'الظهور في البحث'),
+              subtitle: authSettingsText(context, 'السماح بظهور حسابك عند البحث بالاسم.'),
               value: _settings.appearInSearch,
               onChanged: (v) async {
                 await _apply(_settings.copyWith(appearInSearch: v));
@@ -524,36 +525,36 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _switchTile(
               icon: Icons.recommend_outlined,
-              title: 'اقتراح حسابي للآخرين',
-              subtitle: 'قد يظهر حسابك في اقتراحات المتابعة.',
+              title: authSettingsText(context, 'اقتراح حسابي للآخرين'),
+              subtitle: authSettingsText(context, 'قد يظهر حسابك في اقتراحات المتابعة.'),
               value: _settings.suggestAccount,
               onChanged: (v) =>
                   _apply(_settings.copyWith(suggestAccount: v)),
             ),
             _switchTile(
               icon: Icons.alternate_email_outlined,
-              title: 'العثور عليّ بالبريد',
-              subtitle: 'يسمح بالبحث عن حسابك إذا كُتب إيميلك كاملاً.',
+              title: authSettingsText(context, 'العثور عليّ بالبريد'),
+              subtitle: authSettingsText(context, 'يسمح بالبحث عن حسابك إذا كُتب إيميلك كاملاً.'),
               value: _settings.findByEmail,
               onChanged: (v) => _apply(_settings.copyWith(findByEmail: v)),
             ),
             _switchTile(
               icon: Icons.phone_outlined,
-              title: 'العثور عليّ برقم الهاتف',
-              subtitle: 'يسمح بالبحث عن حسابك إذا كُتب رقمك.',
+              title: authSettingsText(context, 'العثور عليّ برقم الهاتف'),
+              subtitle: authSettingsText(context, 'يسمح بالبحث عن حسابك إذا كُتب رقمك.'),
               value: _settings.findByPhone,
               onChanged: (v) => _apply(_settings.copyWith(findByPhone: v)),
             ),
           ]),
 
-          _header('المنشورات والتفاعل'),
+          _header(authSettingsText(context, 'المنشورات والتفاعل')),
           _card([
             _navTile(
               icon: Icons.mode_comment_outlined,
-              title: 'من يمكنه التعليق',
+              title: authSettingsText(context, 'من يمكنه التعليق'),
               value: _label(_settings.whoCanComment),
               onTap: () => _pickAudience(
-                title: 'من يمكنه التعليق',
+                title: authSettingsText(context, 'من يمكنه التعليق'),
                 current: _settings.whoCanComment,
                 onSave: (v) =>
                     _apply(_settings.copyWith(whoCanComment: v)),
@@ -561,10 +562,10 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _navTile(
               icon: Icons.repeat_rounded,
-              title: 'من يمكنه إعادة النشر',
+              title: authSettingsText(context, 'من يمكنه إعادة النشر'),
               value: _label(_settings.whoCanRepost),
               onTap: () => _pickAudience(
-                title: 'من يمكنه إعادة النشر',
+                title: authSettingsText(context, 'من يمكنه إعادة النشر'),
                 current: _settings.whoCanRepost,
                 onSave: (v) =>
                     _apply(_settings.copyWith(whoCanRepost: v)),
@@ -572,11 +573,11 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _navTile(
               icon: Icons.alternate_email,
-              title: 'من يمكنه الإشارة إليّ',
-              subtitle: 'الوسوم والإشارات في المنشورات والتعليقات.',
+              title: authSettingsText(context, 'من يمكنه الإشارة إليّ'),
+              subtitle: authSettingsText(context, 'الوسوم والإشارات في المنشورات والتعليقات.'),
               value: _label(_settings.whoCanMention),
               onTap: () => _pickAudience(
-                title: 'من يمكنه الإشارة إليّ',
+                title: authSettingsText(context, 'من يمكنه الإشارة إليّ'),
                 current: _settings.whoCanMention,
                 onSave: (v) =>
                     _apply(_settings.copyWith(whoCanMention: v)),
@@ -585,8 +586,8 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
 
             _switchTile(
               icon: Icons.favorite_border_rounded,
-              title: 'إخفاء عدد الإعجابات',
-              subtitle: 'لا يظهر عدد التصويتات على منشوراتك للآخرين.',
+              title: authSettingsText(context, 'إخفاء عدد الإعجابات'),
+              subtitle: authSettingsText(context, 'لا يظهر عدد التصويتات على منشوراتك للآخرين.'),
               value: _settings.hideLikeCounts,
               onChanged: (v) async {
                 await _apply(_settings.copyWith(hideLikeCounts: v));
@@ -607,14 +608,14 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             // ),
           ]),
 
-          _header('الرسائل'),
+          _header(authSettingsText(context, 'الرسائل')),
           _card([
             _navTile(
               icon: Icons.chat_bubble_outline_rounded,
-              title: 'من يمكنه مراسلتي',
+              title: authSettingsText(context, 'من يمكنه مراسلتي'),
               value: _label(_settings.whoCanMessage),
               onTap: () => _pickAudience(
-                title: 'من يمكنه مراسلتي',
+                title: authSettingsText(context, 'من يمكنه مراسلتي'),
                 current: _settings.whoCanMessage,
                 onSave: (v) =>
                     _apply(_settings.copyWith(whoCanMessage: v)),
@@ -622,90 +623,90 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _switchTile(
               icon: Icons.mark_email_unread_outlined,
-              title: 'طلبات الرسائل',
-              subtitle: 'رسائل الغرباء تذهب إلى الطلبات بدل الصندوق.',
+              title: authSettingsText(context, 'طلبات الرسائل'),
+              subtitle: authSettingsText(context, 'رسائل الغرباء تذهب إلى الطلبات بدل الصندوق.'),
               value: _settings.messageRequests,
               onChanged: (v) =>
                   _apply(_settings.copyWith(messageRequests: v)),
             ),
             _switchTile(
               icon: Icons.done_all_rounded,
-              title: 'إيصالات القراءة',
+              title: authSettingsText(context, 'إيصالات القراءة'),
               subtitle:
-              'إظهار أنك قرأت الرسالة. إن أوقفتها لن تراها عند الآخرين.',
+              authSettingsText(context, 'إظهار أنك قرأت الرسالة. إن أوقفتها لن تراها عند الآخرين.'),
               value: _settings.readReceipts,
               onChanged: (v) =>
                   _apply(_settings.copyWith(readReceipts: v)),
             ),
             _switchTile(
               icon: Icons.more_horiz_rounded,
-              title: 'مؤشر الكتابة',
-              subtitle: 'إظهار أنك تكتب الآن.',
+              title: authSettingsText(context, 'مؤشر الكتابة'),
+              subtitle: authSettingsText(context, 'إظهار أنك تكتب الآن.'),
               value: _settings.typingIndicator,
               onChanged: (v) =>
                   _apply(_settings.copyWith(typingIndicator: v)),
             ),
           ]),
 
-          _header('النشاط'),
+          _header(authSettingsText(context, 'النشاط')),
           _card([
             _switchTile(
               icon: Icons.circle,
-              title: 'إظهار أنني متصل',
-              subtitle: 'المتابعون أو من تراسلهم يرون حالة الاتصال.',
+              title: authSettingsText(context, 'إظهار أنني متصل'),
+              subtitle: authSettingsText(context, 'المتابعون أو من تراسلهم يرون حالة الاتصال.'),
               value: _settings.showOnline,
               onChanged: (v) =>
                   _apply(_settings.copyWith(showOnline: v)),
             ),
             _switchTile(
               icon: Icons.schedule_rounded,
-              title: 'آخر ظهور',
-              subtitle: 'إظهار وقت آخر نشاط على الحساب.',
+              title: authSettingsText(context, 'آخر ظهور'),
+              subtitle: authSettingsText(context, 'إظهار وقت آخر نشاط على الحساب.'),
               value: _settings.showLastSeen,
               onChanged: (v) =>
                   _apply(_settings.copyWith(showLastSeen: v)),
             ),
           ]),
 
-          _header('معلومات الملف الشخصي'),
+          _header(authSettingsText(context, 'معلومات الملف الشخصي')),
           _card([
             _switchTile(
               icon: Icons.email_outlined,
-              title: 'إظهار البريد في الملف',
-              subtitle: 'يظهر بريدك للزائرين في صفحة الحساب.',
+              title: authSettingsText(context, 'إظهار البريد في الملف'),
+              subtitle: authSettingsText(context, 'يظهر بريدك للزائرين في صفحة الحساب.'),
               value: _settings.showEmailOnProfile,
               onChanged: (v) =>
                   _apply(_settings.copyWith(showEmailOnProfile: v)),
             ),
             _switchTile(
               icon: Icons.school_outlined,
-              title: 'إظهار المعلومات الأكاديمية',
-              subtitle: 'الجامعة، الكلية، والتخصص.',
+              title: authSettingsText(context, 'إظهار المعلومات الأكاديمية'),
+              subtitle: authSettingsText(context, 'الجامعة، الكلية، والتخصص.'),
               value: _settings.showAcademicInfo,
               onChanged: (v) =>
                   _apply(_settings.copyWith(showAcademicInfo: v)),
             ),
             _switchTile(
               icon: Icons.link_rounded,
-              title: 'إظهار الروابط الاجتماعية',
-              subtitle: 'GitHub وLinkedIn والمعرض.',
+              title: authSettingsText(context, 'إظهار الروابط الاجتماعية'),
+              subtitle: authSettingsText(context, 'GitHub وLinkedIn والمعرض.'),
               value: _settings.showSocialLinks,
               onChanged: (v) =>
                   _apply(_settings.copyWith(showSocialLinks: v)),
             ),
           ]),
 
-          _header('البيانات والسلامة'),
+          _header(authSettingsText(context, 'البيانات والسلامة')),
           _card([
             _navTile(
               icon: Icons.block_rounded,
-              title: 'الحسابات المحظورة',
-              subtitle: 'إدارة من حظرتهم.',
+              title: authSettingsText(context, 'الحسابات المحظورة'),
+              subtitle: authSettingsText(context, 'إدارة من حظرتهم.'),
               onTap: () {
                 final go = PrivacyExternalRoutes.blockedAccounts;
                 if (go == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تعذر فتح القائمة')),
+                    SnackBar(content: Text(authSettingsText(context, 'تعذر فتح القائمة'))),
                   );
                   return;
                 }
@@ -714,13 +715,13 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _navTile(
               icon: Icons.visibility_off_outlined,
-              title: 'العناصر المخفية',
-              subtitle: 'منشورات أخفيتها من الفيد.',
+              title: authSettingsText(context, 'العناصر المخفية'),
+              subtitle: authSettingsText(context, 'منشورات أخفيتها من الفيد.'),
               onTap: () {
                 final go = PrivacyExternalRoutes.hiddenPosts;
                 if (go == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تعذر فتح القائمة')),
+                    SnackBar(content: Text(authSettingsText(context, 'تعذر فتح القائمة'))),
                   );
                   return;
                 }
@@ -735,8 +736,8 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             // ),
             _navTile(
               icon: Icons.delete_forever_outlined,
-              title: 'حذف الحساب والبيانات',
-              subtitle: 'طلب حذف حسابك والبيانات المرتبطة به.',
+              title: authSettingsText(context, 'حذف الحساب والبيانات'),
+              subtitle: authSettingsText(context, 'طلب حذف حسابك والبيانات المرتبطة به.'),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -747,7 +748,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
             ),
             _navTile(
               icon: Icons.privacy_tip_outlined,
-              title: 'سياسة الخصوصية',
+              title: authSettingsText(context, 'سياسة الخصوصية'),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -831,11 +832,11 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     required String current,
     required Future<void> Function(String value) onSave,
   }) async {
-    const options = <(String, String, String)>[
-      ('everyone', 'الجميع', 'أي شخص في UniSpace'),
-      ('followers', 'المتابعون', 'من يتابعك فقط'),
-      ('mutual', 'المتبادلون', 'من تتابعانه بعضكما'),
-      ('none', 'لا أحد', 'أنت فقط'),
+    final options = <(String, String, String)>[
+      ('everyone', authSettingsText(context, 'الجميع'), authSettingsText(context, 'أي شخص في UniSpace')),
+      ('followers', authSettingsText(context, 'المتابعون'), authSettingsText(context, 'من يتابعك فقط')),
+      ('mutual', authSettingsText(context, 'المتبادلون'), authSettingsText(context, 'من تتابعانه بعضكما')),
+      ('none', authSettingsText(context, 'لا أحد'), authSettingsText(context, 'أنت فقط')),
     ];
 
     final picked = await showModalBottomSheet<String>(
@@ -974,13 +975,13 @@ class _HiddenWordsSheetState extends State<_HiddenWordsSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'الكلمات المخفية',
+          Text(
+            authSettingsText(context, 'الكلمات المخفية'),
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
           ),
           const SizedBox(height: 4),
           Text(
-            'لن تظهر لك التعليقات التي تحتوي هذه الكلمات.',
+            authSettingsText(context, 'لن تظهر لك التعليقات التي تحتوي هذه الكلمات.'),
             style: TextStyle(color: Theme.of(context).hintColor),
           ),
           const SizedBox(height: 12),
@@ -990,8 +991,8 @@ class _HiddenWordsSheetState extends State<_HiddenWordsSheet> {
                 child: TextField(
                   controller: _ctrl,
                   textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    hintText: 'أضف كلمة أو عبارة',
+                  decoration: InputDecoration(
+                    hintText: authSettingsText(context, 'أضف كلمة أو عبارة'),
                     isDense: true,
                   ),
                   onSubmitted: (_) => _add(),
@@ -1008,7 +1009,7 @@ class _HiddenWordsSheetState extends State<_HiddenWordsSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
-                'لا توجد كلمات بعد',
+                authSettingsText(context, 'لا توجد كلمات بعد'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Theme.of(context).hintColor),
               ),
@@ -1035,7 +1036,7 @@ class _HiddenWordsSheetState extends State<_HiddenWordsSheet> {
           const SizedBox(height: 8),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(List<String>.from(_words)),
-            child: const Text('حفظ'),
+            child: Text(authSettingsText(context, 'حفظ')),
           ),
         ],
       ),

@@ -61,6 +61,8 @@ android {
 }
 
 dependencies {
+    implementation("androidx.media3:media3-transformer:1.5.1")
+    implementation("androidx.media3:media3-effect:1.5.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
 

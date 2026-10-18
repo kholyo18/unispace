@@ -51,8 +51,10 @@ function createContentSearchPageHandler({ auth, db, now = Date.now }, singlePost
         (input.page === 0 && input.token === null))) throw new HttpsError('invalid-argument', 'Invalid search page.');
     if (feed && !authorComments) {
       const c = input?.cursor;
+      const hasPageSize = feed === true && input != null && Object.hasOwn(input, 'pageSize');
       if (!input || typeof input !== 'object' || Array.isArray(input) ||
-          Object.keys(input).length !== ((reactions || profilePosts) ? 2 : 1) || !Object.hasOwn(input, 'cursor') ||
+          Object.keys(input).length !== ((reactions || profilePosts) ? 2 : hasPageSize ? 2 : 1) || !Object.hasOwn(input, 'cursor') ||
+          (hasPageSize && (!Number.isInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 25)) ||
           (reactions && !['like', 'dislike'].includes(input.reaction)) ||
           (profilePosts && !validId(input.userId)) ||
           (c !== null && (!c || typeof c !== 'object' || Array.isArray(c) ||
@@ -63,8 +65,14 @@ function createContentSearchPageHandler({ auth, db, now = Date.now }, singlePost
       }
     }
     const uid = request.auth?.uid;
-    // Reuse the existing verified bearer / revocation / availability boundary.
-    await readProfile({ ...request, data: { userId: uid } });
+    // Share entry verification with interior projections in this invocation only.
+    // Every exit still uses raw readProfile to recheck Auth revocation afresh.
+    let verifiedToken;
+    const readRequestProfile = createPublicProfileHandler({ db, auth: {
+      verifyIdToken: (...args) => verifiedToken ??= Promise.resolve().then(() => auth.verifyIdToken(...args)),
+      getUser: (...args) => auth.getUser(...args),
+    } });
+    await readRequestProfile({ ...request, data: { userId: uid } });
     await db.runTransaction(async tx => {
       const ref = db.doc(`${profilePosts ? 'profilePostLimits' : authorComments ? 'profileCommentLimits' : reactions ? 'contentReactionLimits' : feed ? 'contentFeedLimits' : 'contentSearchLimits'}/${uid}`), snap = await tx.get(ref);
       const previous = snap.data(), timestamp = now();
@@ -76,7 +84,7 @@ function createContentSearchPageHandler({ auth, db, now = Date.now }, singlePost
     const profiles = new Map();
     function profile(id) {
       if (!validId(id)) return Promise.resolve(null);
-      if (!profiles.has(id)) profiles.set(id, readProfile({ ...request, data: { userId: id } }).catch(error => {
+      if (!profiles.has(id)) profiles.set(id, readRequestProfile({ ...request, data: { userId: id } }).catch(error => {
         if (error.code === 'not-found' || error.code === 'permission-denied') return null;
         throw error;
       }));
@@ -87,11 +95,19 @@ function createContentSearchPageHandler({ auth, db, now = Date.now }, singlePost
     async function comments(raw, depth = 0, hidden = new Set()) {
       if (depth > 30) throw new HttpsError('resource-exhausted', 'Comment nesting limit exceeded.');
       const result = [];
-      for (const c of list(raw)) {
-        if (!c || typeof c !== 'object' || hidden.has(c.id) || removed(c) || !await profile(c.authorId)) continue;
-        result.push({ ...pick(c, ['id', 'author', 'authorId', 'authorPhotoUrl', 'text', 'replyToId',
-          'replyToAuthor', 'votes', 'mediaUrl', 'mediaType', 'isEdited']), ...voteState(c),
-          createdAt: date(c.createdAt), replies: await comments(c.replies, depth + 1, hidden) });
+      const rows = list(raw).filter(c => c && typeof c === 'object' && !hidden.has(c.id) && !removed(c));
+      for (let offset = 0; offset < rows.length; offset += 4) {
+        const chunk = rows.slice(offset, offset + 4);
+        // Only sibling author checks overlap; ordered recursion prevents fanout
+        // from multiplying with nesting depth. Profiles remain invocation-local.
+        const authors = await Promise.all(chunk.map(c => profile(c.authorId)));
+        for (let index = 0; index < chunk.length; index++) {
+          if (!authors[index]) continue;
+          const c = chunk[index];
+          result.push({ ...pick(c, ['id', 'author', 'authorId', 'authorPhotoUrl', 'text', 'replyToId',
+            'replyToAuthor', 'votes', 'mediaUrl', 'mediaType', 'isEdited']), ...voteState(c),
+            createdAt: date(c.createdAt), replies: await comments(c.replies, depth + 1, hidden) });
+        }
       }
       return result;
     }
@@ -219,15 +235,21 @@ function createContentSearchPageHandler({ auth, db, now = Date.now }, singlePost
         .orderBy(FieldPath.documentId(), 'desc');
       if (input.cursor) query = query.startAfter(
         new Timestamp(input.cursor.seconds, input.cursor.nanoseconds), input.cursor.id);
-      const snapshot = await query.limit(25).get();
+      const pageSize = feed === true && Object.hasOwn(input, 'pageSize') ? input.pageSize : 25;
+      const snapshot = await query.limit(pageSize).get();
       const posts = [];
       let bytes = 0;
-      for (const doc of snapshot.docs) {
-        const data = await project(doc.id, doc.data());
-        if (!data) continue;
-        bytes += Buffer.byteLength(JSON.stringify(data));
-        if (bytes > 6 * 1024 * 1024) throw new HttpsError('resource-exhausted', 'Feed page is too large.');
-        posts.push({ id: doc.id, data });
+      // Bound independent projections while retaining query order and privacy checks.
+      for (let offset = 0; offset < snapshot.docs.length; offset += 4) {
+        const chunk = snapshot.docs.slice(offset, offset + 4);
+        const projected = await Promise.all(chunk.map(doc => project(doc.id, doc.data())));
+        for (let index = 0; index < chunk.length; index++) {
+          const data = projected[index];
+          if (!data) continue;
+          bytes += Buffer.byteLength(JSON.stringify(data));
+          if (bytes > 6 * 1024 * 1024) throw new HttpsError('resource-exhausted', 'Feed page is too large.');
+          posts.push({ id: chunk[index].id, data });
+        }
       }
       if (profilePosts && input.cursor === null) {
         const target = await db.doc('users/' + input.userId).get();
@@ -249,8 +271,37 @@ function createContentSearchPageHandler({ auth, db, now = Date.now }, singlePost
       if (last && !(createdAt instanceof Timestamp)) {
         throw new HttpsError('failed-precondition', 'Invalid post timestamp.');
       }
+      if (feed === true) {
+        // A returned feed page is an authorization boundary for its client.
+        // Re-read every exposed post/repost author after projection, bypassing
+        // the invocation's projection memo so mid-request privacy changes win.
+        const authorIds = new Set();
+        function ancestors(data) {
+          const ids = [data.authorId];
+          if (data.repostOf) ids.push(...ancestors(data.repostOf));
+          return ids;
+        }
+        for (const post of posts) for (const id of ancestors(post.data)) authorIds.add(id);
+        const ids = [...authorIds], freshAuthors = new Map();
+        for (let offset = 0; offset < ids.length; offset += 4) {
+          await Promise.all(ids.slice(offset, offset + 4).map(async id => {
+            try {
+              freshAuthors.set(id, await readRequestProfile({ ...request, data: { userId: id } }));
+            } catch (error) {
+              if (error.code !== 'not-found' && error.code !== 'permission-denied') throw error;
+              freshAuthors.set(id, null);
+            }
+          }));
+        }
+        for (let index = posts.length - 1; index >= 0; index--) {
+          if (ancestors(posts[index].data).some(id => freshAuthors.get(id)?.canViewContent !== true)) {
+            posts.splice(index, 1);
+          }
+        }
+      }
       await readProfile({ ...request, data: { userId: uid } });
-      return { posts, exhausted: snapshot.size < 25, cursor: last ? {
+      return { posts, ...(feed === true ? { authorAccessRechecked: true } : {}),
+        exhausted: snapshot.size < pageSize, cursor: last ? {
         id: last.id, seconds: createdAt.seconds, nanoseconds: createdAt.nanoseconds,
       } : null };
     }

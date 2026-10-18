@@ -34,7 +34,7 @@ function createFollowListHandler({ auth, db }) {
     let token;
     try { token = await auth.verifyIdToken(header.slice(7), true); }
     catch (_) { throw new HttpsError('unauthenticated', 'Sign in again.'); }
-    if (token.uid !== uid || !Number.isFinite(token.auth_time) || token.firebase?.tenant) {
+    if (token.uid !== uid || (!Number.isSafeInteger(token.auth_time) || token.auth_time <= 0) || token.firebase?.tenant) {
       throw new HttpsError('unauthenticated', 'Invalid session.');
     }
     let account;
@@ -49,7 +49,7 @@ function createFollowListHandler({ auth, db }) {
       const refs = [`authRevocations/${uid}`, `users/${owner}`, `users/${owner}/followers/${uid}`,
         `users/${uid}/followers/${owner}`, ...blockPaths(uid, owner)];
       const [cutoff, profile, follower, reverse, ...blocks] = await tx.getAll(...refs.map(p => db.doc(p)));
-      if (cutoff.exists && token.auth_time <= cutoff.data().revokedBefore) {
+      if (cutoff.exists && (!Number.isSafeInteger(cutoff.data().revokedBefore) || cutoff.data().revokedBefore < 0 || token.auth_time <= cutoff.data().revokedBefore)) {
         throw new HttpsError('unauthenticated', 'Session revoked.');
       }
       if (unavailable(profile.data()) || (uid !== owner && blocks.some(b => b.exists))) {

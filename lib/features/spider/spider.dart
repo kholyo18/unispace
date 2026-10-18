@@ -1,3 +1,4 @@
+import '../../l10n/feature_strings.dart';
 import 'dart:math';
 import 'dart:ui';
 
@@ -298,9 +299,9 @@ class _PowerButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: on ? 'إطفاء شاشة التلفاز' : 'تشغيل شاشة التلفاز',
+      label: on ? featureText(context, 'إطفاء شاشة التلفاز') : featureText(context, 'تشغيل شاشة التلفاز'),
       child: Tooltip(
-        message: on ? 'إطفاء الشاشة' : 'تشغيل الشاشة',
+        message: on ? featureText(context, 'إطفاء الشاشة') : featureText(context, 'تشغيل الشاشة'),
         child: IconButton(
           onPressed: onTap,
           visualDensity: VisualDensity.compact,

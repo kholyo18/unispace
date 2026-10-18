@@ -8,6 +8,9 @@ class PublicProfileReader {
 
   final String? Function() sessionKey;
   final Future<Map<String, dynamic>> Function(String userId) fetchProfile;
+  // Share only active requests within one login. Completed permissions are
+  // never cached: subsequent reads must observe server-side privacy changes.
+  final _inFlight = <(String, String), Future<Map<String, dynamic>>>{};
 
   Future<Map<String, dynamic>> load(String userId) async {
     if (userId.isEmpty || userId.length > 128 || userId.contains('/') ||
@@ -16,12 +19,18 @@ class PublicProfileReader {
     }
     final session = sessionKey();
     if (session == null) throw StateError('Sign in before reading a profile');
-    final response = await fetchProfile(userId);
-    if (sessionKey() != session) throw StateError('Profile session changed');
-    if (response['canViewContent'] is! bool || response['privacy'] is! Map) {
-      throw StateError('Invalid profile response');
+    final key = (session, userId);
+    final pending = _inFlight.putIfAbsent(key, () => fetchProfile(userId));
+    try {
+      final response = await pending;
+      if (sessionKey() != session) throw StateError('Profile session changed');
+      if (response['canViewContent'] is! bool || response['privacy'] is! Map) {
+        throw StateError('Invalid profile response');
+      }
+      return Map<String, dynamic>.from(response);
+    } finally {
+      if (identical(_inFlight[key], pending)) _inFlight.remove(key);
     }
-    return Map<String, dynamic>.from(response);
   }
 
   // A private account can still be available: canViewContent is NOT an account

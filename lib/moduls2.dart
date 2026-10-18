@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/modules_strings.dart';
 // =======================
 // 1. DEFINITIONS (MODELS)
 // =======================
@@ -6,12 +7,14 @@ import 'package:UniSpace/generated/l10n.dart';
 
 class ProgramComponent {
   final String label;   // TD / TP / EXAM / CC...
+  String displayLabel(BuildContext context) => academicText(context, label);
   final double weight;  // نسبة مئوية 0..100
   const ProgramComponent(this.label, this.weight);
 }
 
 class ProgramModule {
   final String name;
+  String displayName(BuildContext context) => academicText(context, name);
   final int coef;
   final int credits;
   final List<ProgramComponent> components;
@@ -26,6 +29,7 @@ class ProgramModule {
 
 class ProgramSemester {
   final String label;         // S1 / S2
+  String displayLabel(BuildContext context) => academicText(context, label);
   final List<ProgramModule> modules;
 
   const ProgramSemester({
@@ -36,6 +40,7 @@ class ProgramSemester {
 
 class ProgramTrack {
   final String name;          // L1 / L2 / L3 specialization
+  String displayName(BuildContext context) => academicText(context, name);
   final String level;
   final List<ProgramSemester> semesters;
 
@@ -49,6 +54,7 @@ class ProgramTrack {
 
 class ProgramMajor {
   final String name;          // التخصص
+  String displayName(BuildContext context) => academicText(context, name);
 
   final List<ProgramTrack> tracks;
 
@@ -61,6 +67,7 @@ class ProgramMajor {
 
 class ProgramFaculty {
   final String name;          // الكلية
+  String displayName(BuildContext context) => academicText(context, name);
   final List<ProgramMajor> majors;
 
   const ProgramFaculty({

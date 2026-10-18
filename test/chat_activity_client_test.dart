@@ -37,6 +37,10 @@ void main() {
     });
     expect(writes.single.keys.any((key) => key.contains('.')), isFalse);
   });
+  test('disabled read receipts clear own badge without publishing read time', () async {
+    expect(await client.markRead(shareReadReceipt: false), isTrue);
+    expect(writes.single, {'unread': {uid: 0}});
+  });
   test('typing start uses server timestamp under the exact UID segment', () async {
     expect(await client.setTyping(true), isTrue);
     expect(writes.single, {'typing': {uid: same(timestamp)}});

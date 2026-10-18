@@ -1,3 +1,9 @@
+import 'chat_download_coordinator.dart';
+import '../features/shell/chat/chat_transfer_center.dart';
+import 'chat_local_persistence.dart';
+import 'chat_media_policy.dart';
+import 'chat_audio_coordinator.dart';
+import 'chat_message_service.dart';
 import '../ui/settings/push_preferences_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -16,6 +22,13 @@ class AuthSessionService {
       await beforeSignOut();
     }
 
+    await chatDownloads.clear();
+    chatTransfers.clear();
+    ChatOutboxStore.clear();
+    ChatDraftStore.clear();
+    chatImageMemoryCache.clear();
+    await chatAudioCoordinator.stop();
+    await ChatLocalPersistence.purgeActive();
     await PushPreferencesService.instance.prepareSignOut();
     try {
       await FirebaseAuth.instance.signOut();

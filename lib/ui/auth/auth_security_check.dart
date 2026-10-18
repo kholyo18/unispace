@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:flutter/material.dart';
 
 /// Failure to read a security requirement must never grant access.
@@ -30,8 +31,8 @@ class _AuthSecurityCheckState extends State<AuthSecurityCheck> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.shield_outlined, size: 40),
             const SizedBox(height: 16),
-            const Text('تعذر التحقق من متطلبات الأمان. تحقق من الاتصال ثم حاول مجددًا.', textAlign: TextAlign.center),
-            TextButton(onPressed: () => setState(() { _result = _check(); }), child: const Text('إعادة المحاولة')),
+            Text(authSettingsText(context, 'تعذر التحقق من متطلبات الأمان. تحقق من الاتصال ثم حاول مجددًا.'), textAlign: TextAlign.center),
+            TextButton(onPressed: () => setState(() { _result = _check(); }), child: Text(authSettingsText(context, 'إعادة المحاولة'))),
           ]),
         )));
       }

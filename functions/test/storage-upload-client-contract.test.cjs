@@ -1,7 +1,7 @@
 // Static wiring checks; Dart behavior is covered by executable Flutter tests.
 const { test }=require('node:test');const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');const root=path.resolve(__dirname,'../..');
-const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const read=p=>require('./support/read-dart-library.cjs')(path.join(root,p));
 test('all 17 existing upload sites use the tested guarded service',()=>{
  for(const [file,count] of [['lib/main.dart',8],['lib/features/auth/signup_flow.dart',1],['lib/features/shell/chat_page.dart',8]]) {
   const s=read(file);assert.equal((s.match(/StorageUploadService\.put(?:Data|File)\(/g)||[]).length,count,file);

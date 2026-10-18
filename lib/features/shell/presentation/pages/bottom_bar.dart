@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/shell_strings.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -193,7 +194,11 @@ class _ModernUniSpaceBottomBarState extends State<ModernUniSpaceBottomBar> {
                                 final item = items[index];
                                 final selected = _visualIndex == index;
                                 return Expanded(
-                                  child: Center(
+                                  child: Semantics(
+                                    label: shellText(context, item.label),
+                                    button: true,
+                                    selected: selected,
+                                    child: Center(
                                     child: AnimatedScale(
                                       scale: selected ? 1.12 : 1.0,
                                       duration:
@@ -219,6 +224,7 @@ class _ModernUniSpaceBottomBarState extends State<ModernUniSpaceBottomBar> {
                                         .withValues(alpha: 0.55),
                                   ),
                                     ),
+                                  ),
                                   ),
                                 );
                               }),

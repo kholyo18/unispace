@@ -7,10 +7,18 @@ after(close);
 const sync = createSyncPushDeviceHandler({ auth, db, FieldValue });
 const detach = createSyncPushDeviceHandler({ auth, db, FieldValue }, true);
 const preferences = { enabled: true, community: true, announcements: true, exams: true };
+async function bindSignedSession(actor,sid){
+ await auth.setCustomUserClaims(actor.uid,{sid});
+ const user=await auth.getUser(actor.uid);
+ const res=await fetch('http://'+process.env.FIREBASE_AUTH_EMULATOR_HOST+'/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:user.email,password:'Local-only-test-48!',returnSecureToken:true})});
+ assert.equal(res.status,200);actor.token=(await res.json()).idToken;
+ actor.authTime=JSON.parse(Buffer.from(actor.token.split('.')[1],'base64url')).auth_time;
+}
 async function setup({ register = true } = {}) {
   const f = await fixture();
   const token = `emulator-only-${f.owner.uid}`;
   const sessionId = 'session-1';
+  await bindSignedSession(f.owner,sessionId);
   const sessionRef = db.doc(`users/${f.owner.uid}/sessions/${sessionId}`);
   await sessionRef.set({ sessionId, isRevoked: false, createdAt: Timestamp.fromMillis(42000) });
   const data = { token, sessionId, platform: 'android', preferences };
@@ -148,6 +156,7 @@ test('frozen user can still detach their device to reduce data exposure', async 
 test('switching device ownership revokes the previous account registration', async () => {
   const f = await setup();
   await db.doc(`users/${f.actor.uid}/sessions/session-2`).set({ sessionId: 'session-2', isRevoked: false, createdAt: Timestamp.now() });
+  await bindSignedSession(f.actor,'session-2');
   await sync(callableRequest(f.actor, { ...f.data, sessionId: 'session-2' }));
   assert.equal((await f.bindingRef.get()).data().ownerId, f.actor.uid);
   await assert.rejects(sync(f.request), { code: 'unauthenticated' });

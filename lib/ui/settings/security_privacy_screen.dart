@@ -56,7 +56,7 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Directionality(
-              textDirection: TextDirection.rtl,
+              textDirection: Directionality.of(context),
               child: CupertinoSlidingSegmentedControl<_SecurityPrivacySegment>(
                 groupValue: _segment,
                 children: {

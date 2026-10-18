@@ -1,3 +1,4 @@
+const {normalize} = require('./search-text');
 const { HttpsError } = require('firebase-functions/v2/https');
 const invalid = () => { throw new HttpsError('invalid-argument', 'Invalid post content.'); };
 const object = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -58,10 +59,9 @@ function searchKeywords(c, author) {
   const words = [...c.title.split(/\s+/), ...c.body.split(/\s+/), ...c.tags, ...String(author || '').split(/\s+/)];
   const out = new Set();
   for (const word of words) {
-    const normalized = word.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '')
-      .replace(/[أإآٱ]/g,'ا').replace(/[ىئ]/g,'ي').replace(/ؤ/g,'و').replace(/ة/g,'ه')
-      .replace(/[^\w\u0600-\u06FF]+/g,' ').replace(/\s+/g,' ').trim();
-    if (normalized.length >= 2) out.add(normalized);
+    for (const normalized of normalize(word).split(' ')) {
+      if (normalized.length >= 2 && out.size < 40) out.add(normalized);
+    }
     if (out.size >= 40) break;
   }
   return [...out];

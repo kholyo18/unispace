@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location is used only when you choose to share it in a conversation.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose photos and videos to preview and share in your conversations.</string>
 </dict>
 </plist>

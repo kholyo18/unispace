@@ -1,3 +1,6 @@
+import 'package:UniSpace/features/guide/app_guide.dart';
+import '../../l10n/modules_strings.dart';
+import '../../l10n/feature_strings.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -25,6 +28,13 @@ import 'package:UniSpace/ui/settings/app_settings.dart';
 import 'package:UniSpace/ui/widgets/metric_tile.dart';
 import 'package:UniSpace/ui/settings/user_profile_service.dart';
 import 'package:translator/translator.dart';
+
+Future<String> _translatedAcademicSubject(BuildContext context, String canonical) {
+  if (AcademicStrings.hasTranslation(canonical)) {
+    return Future.value(academicText(context, canonical));
+  }
+  return translateSubject(context, canonical);
+}
 
 SemesterSpec _pickSemester(List<SemesterSpec> specs, String label) {
   final normalizedLabel = label.toUpperCase();
@@ -263,7 +273,14 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
     final faculties = getDemoFaculties(context).take(6).toList();
     final quickFaculty = faculties.isNotEmpty ? faculties.first : null;
 
-    return AppScaffold(
+    return AppGuide(
+      id: 'gpa',
+      steps: const [
+        GuideStep('gpa.normal', 'gpa.normal'),
+        GuideStep('gpa.quick', 'gpa.quick'),
+        GuideStep('gpa.search', 'gpa.search'),
+      ],
+      child: AppScaffold(
       padding: EdgeInsets.zero,
       appBar: widget.showAppBar
           ? AppBar(
@@ -271,6 +288,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
         centerTitle: false,
         automaticallyImplyLeading: true,
         titleSpacing: 16,
+
         title: Text(
           S.of(context).gpu,
           style: theme.textTheme.titleMedium?.copyWith(
@@ -298,13 +316,15 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                   const SizedBox(height: 6),
                   Center(
                       child:Text(
-                    'ابحث عن تخصصك, قم بادخال علاماتك واضطلع على معدلك',
+                    featureText(context, 'ابحث عن تخصصك, قم بادخال علاماتك واضطلع على معدلك'),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
                   )),
                   const SizedBox(height: 18),
-                  Material(
+                  GuideTarget(
+                    id: 'gpa.search',
+                    child: Material(
                     color: colorScheme.surfaceContainerHighest.withValues(
                       alpha: 0.65,
                     ),
@@ -340,7 +360,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                             }
 
                             return IconButton(
-                              tooltip: 'مسح',
+                              tooltip: featureText(context, 'مسح'),
                               onPressed: _searchController.clear,
                               icon: const Icon(Icons.close_rounded),
                             );
@@ -373,6 +393,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                         ),
                       ),
                     ),
+                    ),
                   ),
                 ],
               ),
@@ -404,7 +425,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'اختر كليتك وتخصصك للوصول السريع إلى حساب المعدل والمواد.',
+                            featureText(context, 'اختر كليتك وتخصصك للوصول السريع إلى حساب المعدل والمواد.'),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                               height: 1.6,
@@ -556,7 +577,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                           const SizedBox(height: 18),
                           if (facultyName.isNotEmpty)
                             Text(
-                              facultyName,
+                              academicText(context, facultyName),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleMedium?.copyWith(
@@ -637,7 +658,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'الكليات',
+                      featureText(context, 'الكليات'),
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w900,
                         color: colorScheme.onSurface,
@@ -682,7 +703,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
                 padding: const EdgeInsets.all(24),
                 child: Center(
                   child: Text(
-                    'لا توجد كليات متاحة حالياً',
+                    featureText(context, 'لا توجد كليات متاحة حالياً'),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -697,6 +718,7 @@ class _HomeLandingScreenState extends State<HomeLandingScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -772,7 +794,7 @@ class _AcademicShortcutHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            'جامعي',
+            featureText(context, 'جامعي'),
             style: theme.textTheme.labelSmall?.copyWith(
               color: isDark ? Colors.white70 : const Color(0xFF6B7280),
               fontWeight: FontWeight.w700,
@@ -808,21 +830,27 @@ class _AcademicShortcutActions extends StatelessWidget {
       children: [
         Expanded(
           flex: 6,
-          child: _AcademicShortcutButton(
+          child: GuideTarget(
+            id: 'gpa.normal',
+            child: _AcademicShortcutButton(
             label: primaryLabel,
             icon: primaryIcon,
             onPressed: onPrimaryPressed,
             primary: true,
+            ),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           flex: 5,
-          child: _AcademicShortcutButton(
+          child: GuideTarget(
+            id: 'gpa.quick',
+            child: _AcademicShortcutButton(
             label: secondaryLabel,
             icon: secondaryIcon,
             onPressed: onSecondaryPressed,
             primary: false,
+            ),
           ),
         ),
       ],
@@ -952,7 +980,7 @@ class _FacultyQuickCard extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      faculty.name,
+                      academicText(context, faculty.name),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
@@ -1327,7 +1355,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
       SnackBar(
         content: Text(
           syncFailed
-              ? 'Saved locally. Sync failed.'
+              ? featureText(context, 'Saved locally. Sync failed.')
               : S.of(context).academicSettingsSaved,
         ),
       ),
@@ -1396,7 +1424,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                       return ListTile(
                         dense: true,
                         title: Text(
-                          displayStringForOption(option),
+                          academicText(context, displayStringForOption(option)),
                           textAlign: TextAlign.start,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
@@ -1467,7 +1495,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'بياناتك الأكاديمية',
+                        featureText(context, 'بياناتك الأكاديمية'),
                         style: theme.textTheme.titleMedium?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
@@ -1506,7 +1534,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                   focusNode: _collegeFocusNode,
                   labelText: S.of(context).academicCollegeLabel,
                   icon: Icons.account_balance_rounded,
-                  hint: 'ابدأ الكتابة لاختيار الكلية',
+                  hint: featureText(context, 'ابدأ الكتابة لاختيار الكلية'),
                   enabled: true,
                   optionsBuilder: _facultyOptions,
                   displayStringForOption: (faculty) => faculty.name,
@@ -1526,8 +1554,8 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                   labelText: S.of(context).academicclass,
                   icon: Icons.apartment_rounded,
                   hint: _selectedFaculty == null
-                      ? 'اختر الكلية أولاً'
-                      : 'اختر القسم',
+                      ? featureText(context, 'اختر الكلية أولاً')
+                      : featureText(context, 'اختر القسم'),
                   enabled: _selectedFaculty != null,
                   optionsBuilder: _departmentOptions,
                   displayStringForOption: (major) => major.name,
@@ -1546,8 +1574,8 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                   labelText: S.of(context).academicMajorLabel,
                   icon: Icons.school_outlined,
                   hint: _selectedDepartment == null
-                      ? 'اختر القسم أولاً'
-                      : 'اختر التخصص',
+                      ? featureText(context, 'اختر القسم أولاً')
+                      : featureText(context, 'اختر التخصص'),
                   enabled: _selectedDepartment != null,
                   optionsBuilder: _specialtyOptions,
                   displayStringForOption: (track) => track.name,
@@ -1566,7 +1594,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
                   decoration: _fieldDecoration(
                     label: S.of(context).academicLevelLabel,
                     icon: Icons.layers_rounded,
-                    hint: 'يُملأ تلقائيًا',
+                    hint: featureText(context, 'يُملأ تلقائيًا'),
                   ),
                 ),
               ],
@@ -1673,7 +1701,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
     _hasSavedState = true;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saved ✅')),
+      SnackBar(content: Text(featureText(context, 'Saved ✅'))),
     );
   }
 
@@ -1754,7 +1782,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
       threshold = 10;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cleared ✅')),
+      SnackBar(content: Text(featureText(context, 'Cleared ✅'))),
     );
   }
 
@@ -1766,9 +1794,9 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Deleted'),
+        content: Text(featureText(context, 'Deleted')),
         action: SnackBarAction(
-          label: 'UNDO',
+          label: featureText(context, 'UNDO'),
           onPressed: () async {
             subjects.insert(index, removed);
             setState(() {});
@@ -1798,7 +1826,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
 
   String get _statusText {
     if (avg == 0) return '—';
-    return avg >= threshold ? 'Succeeded' : 'Failed';
+    return avg >= threshold ? featureText(context, 'Succeeded') : featureText(context, 'Failed');
   }
 
   Widget _calcKey({
@@ -1866,9 +1894,9 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                   alignment: Alignment.centerRight,
                   child: Text(
                     failed
-                        ? 'FAILED'
+                        ? featureText(context, 'FAILED')
                         : passed
-                        ? 'SUCCEED'
+                        ? featureText(context, 'SUCCEED')
                         : 'MOYENNE',
                     style: TextStyle(
                       color: failed
@@ -1901,7 +1929,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    'CRED  ${totalcred.toStringAsFixed(0)}',
+                    '${featureText(context, 'CRED')}  ${totalcred.toStringAsFixed(0)}',
                     style: const TextStyle(
                       color: Color(0xFF8E8E93),
                       fontSize: 16,
@@ -1915,9 +1943,9 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
           ),
           Expanded(
             child: subjects.isEmpty
-                ? const Center(
+                ? Center(
               child: Text(
-                'أضف مادة',
+                featureText(context, 'أضف مادة'),
                 style: TextStyle(color: Color(0xFF8E8E93)),
               ),
             )
@@ -2093,8 +2121,8 @@ class _QuickCalcDismissibleItemState extends State<_QuickCalcDismissibleItem> {
               ),
             ),
             const SizedBox(width: 6),
-            const Text(
-              'حذف',
+            Text(
+              featureText(context, 'حذف'),
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -2256,8 +2284,8 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
-                  decoration: const InputDecoration(
-                    hintText: 'المادة',
+                  decoration: InputDecoration(
+                    hintText: featureText(context, 'المادة'),
                     hintStyle: TextStyle(
                       color: Color(0xFF636366),
                       fontWeight: FontWeight.w600,
@@ -2294,7 +2322,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
               children: [
                 Expanded(
                   child: _keyPad(
-                    label: 'COEF',
+                    label: featureText(context, 'COEF'),
                     controller: coefController,
                     maxLength: 1,
                     onChanged: (v) {
@@ -2306,7 +2334,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _keyPad(
-                    label: 'CRED',
+                    label: featureText(context, 'CRED'),
                     controller: credController,
                     maxLength: 1,
                     onChanged: (v) {
@@ -2322,7 +2350,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
               children: [
                 Expanded(
                   child: _keyPad(
-                    label: 'TD',
+                    label: featureText(context, 'TD'),
                     controller: tdController,
                     onChanged: (v) {
                       widget.data.td = double.tryParse(v) ?? 0;
@@ -2333,7 +2361,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _keyPad(
-                    label: 'TP',
+                    label: featureText(context, 'TP'),
                     controller: tpController,
                     onChanged: (v) {
                       widget.data.tp = double.tryParse(v) ?? 0;
@@ -2344,7 +2372,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _keyPad(
-                    label: 'EXAM',
+                    label: featureText(context, 'EXAM'),
                     controller: examController,
                     onChanged: (v) {
                       widget.data.exam = double.tryParse(v) ?? 0;
@@ -2359,7 +2387,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
               children: [
                 Expanded(
                   child: _keyPad(
-                    label: 'W.TD',
+                    label: featureText(context, 'W.TD'),
                     controller: WtdController,
                     onChanged: (v) {
                       widget.data.Wtd = double.tryParse(v) ?? 0;
@@ -2370,7 +2398,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _keyPad(
-                    label: 'W.TP',
+                    label: featureText(context, 'W.TP'),
                     controller: WtpController,
                     onChanged: (v) {
                       widget.data.Wtp = double.tryParse(v) ?? 0;
@@ -2381,7 +2409,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _keyPad(
-                    label: 'W.EX',
+                    label: featureText(context, 'W.EX'),
                     controller: WexamController,
                     onChanged: (v) {
                       widget.data.Wexam = double.tryParse(v) ?? 0;
@@ -2806,7 +2834,7 @@ class FacultiesScreen extends StatelessWidget {
               ? S.of(context).noMajorsYet
               : majorsCount == 1
               ? S.of(context).oneMajor
-              : '$majorsCount تخصصات';
+              : featureText(context, 'majorCount').replaceAll('{count}', '$majorsCount');
           return Card(
             margin: EdgeInsets.zero,
             color: theme.colorScheme.surfaceVariant
@@ -2827,7 +2855,7 @@ class FacultiesScreen extends StatelessWidget {
                   foregroundColor: theme.colorScheme.primary,
                   child: const Icon(Icons.apartment_rounded),
                 ),
-                title: Text(f.name),
+                title: Text(academicText(context, f.name)),
                 subtitle: Text(
                   subtitleText,
                   style: theme.textTheme.bodySmall
@@ -2889,7 +2917,7 @@ class FacultyMajorsScreen extends StatelessWidget {
     return AppScaffold(
       padding: EdgeInsets.zero,
       appBar: AppBar(
-        title: Text(faculty.name),
+        title: Text(academicText(context, faculty.name)),
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -2911,10 +2939,10 @@ class FacultyMajorsScreen extends StatelessWidget {
               final accent = _accents[index % _accents.length];
               final tracksCount = major.tracks.length;
               final subtitle = tracksCount == 0
-                  ? 'لا توجد مسارات'
+                  ? featureText(context, 'لا توجد مسارات')
                   : tracksCount == 1
-                  ? 'مسار واحد'
-                  : '$tracksCount مسارات';
+                  ? featureText(context, 'مسار واحد')
+                  : featureText(context, 'trackCount').replaceAll('{count}', '$tracksCount');
 
               return Padding(
                 padding: EdgeInsets.only(
@@ -2977,7 +3005,7 @@ class FacultyMajorsScreen extends StatelessWidget {
                                       MainAxisAlignment.center,
                                       children: [
                                         Text(
-                                          major.name,
+                                          academicText(context, major.name),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: theme.textTheme.titleMedium
@@ -2997,7 +3025,7 @@ class FacultyMajorsScreen extends StatelessWidget {
                                               isDark: isDark,
                                             ),
                                             _MajorChip(
-                                              label: 'عرض المسارات',
+                                              label: featureText(context, 'عرض المسارات'),
                                               accent: theme.colorScheme
                                                   .onSurfaceVariant,
                                               isDark: isDark,
@@ -3110,7 +3138,7 @@ class _FacultySummary extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      facultyName,
+                      academicText(context, facultyName),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleLarge?.copyWith(
@@ -3120,7 +3148,7 @@ class _FacultySummary extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'التخصصات الأكاديمية المتاحة',
+                      featureText(context, 'التخصصات الأكاديمية المتاحة'),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
@@ -3137,14 +3165,14 @@ class _FacultySummary extends StatelessWidget {
               Expanded(
                 child: _SummaryStat(
                   value: '$totalMajors',
-                  label: 'تخصص',
+                  label: featureText(context, 'تخصص'),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _SummaryStat(
                   value: '$totalTracks',
-                  label: 'مسار',
+                  label: featureText(context, 'مسار'),
                 ),
               ),
             ],
@@ -3252,7 +3280,7 @@ class _EmptyMajorsState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'لا توجد أقسام متاحة حاليًا',
+            featureText(context, 'لا توجد أقسام متاحة حاليًا'),
             textAlign: TextAlign.center,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
@@ -3313,7 +3341,7 @@ class MajorTracksScreen extends StatelessWidget {
       padding: EdgeInsets.zero,
       appBar: AppBar(
         automaticallyImplyLeading: true,
-        title: Text(major.name),
+        title: Text(academicText(context, major.name)),
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -3450,7 +3478,7 @@ class _TrackSummary extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      majorName,
+                      academicText(context, majorName),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleLarge?.copyWith(
@@ -3460,7 +3488,7 @@ class _TrackSummary extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      facultyName,
+                      academicText(context, facultyName),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -3479,14 +3507,14 @@ class _TrackSummary extends StatelessWidget {
               Expanded(
                 child: _TrackSummaryStat(
                   value: '$totalTracks',
-                  label: 'مسار',
+                  label: featureText(context, 'مسار'),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _TrackSummaryStat(
                   value: '$totalLevels',
-                  label: 'مستوى',
+                  label: featureText(context, 'مستوى'),
                 ),
               ),
             ],
@@ -3681,7 +3709,7 @@ class _TrackSpecialtyCard extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              track.name,
+                              academicText(context, track.name),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleMedium?.copyWith(
@@ -3701,7 +3729,7 @@ class _TrackSpecialtyCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                track.level,
+                                academicText(context, track.level),
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                                   fontWeight: FontWeight.w800,
@@ -3754,7 +3782,7 @@ class _EmptyTracksState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'لا توجد مسارات متاحة حاليًا',
+            featureText(context, 'لا توجد مسارات متاحة حاليًا'),
             textAlign: TextAlign.center,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
@@ -3875,7 +3903,7 @@ class _StudiesTableScreenState extends State<StudiesTableScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved')),
+          SnackBar(content: Text(featureText(context, 'Saved'))),
         );
       }
     } catch (error, stackTrace) {
@@ -4011,18 +4039,18 @@ class _StudiesTableScreenState extends State<StudiesTableScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          widget.facultyName,
+          academicText(context, widget.facultyName),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
           IconButton(
-            tooltip: 'حفظ',
+            tooltip: featureText(context, 'حفظ'),
             onPressed: saveCurrentSemesterNotes,
             icon: const Icon(Icons.save_outlined),
           ),
           IconButton(
-            tooltip: 'كشف النقاط',
+            tooltip: featureText(context, 'كشف النقاط'),
             onPressed: () {
               Navigator.push(
                 context,
@@ -4148,8 +4176,8 @@ class _CinemaSemesterSwitch extends StatelessWidget {
           ),
           Row(
             children: [
-              _cell(theme, 'الفصل 1', () => onSelect(0)),
-              _cell(theme, 'الفصل 2', () => onSelect(1)),
+              _cell(theme, featureText(context, 'الفصل 1'), () => onSelect(0)),
+              _cell(theme, featureText(context, 'الفصل 2'), () => onSelect(1)),
             ],
           ),
         ],
@@ -4721,7 +4749,7 @@ class _NoteCardState extends State<NoteCard> {
   }
   void _loadTranslatedSubject() async {
     try {
-      final result = await translateSubject(context, widget.subject);
+      final result = await _translatedAcademicSubject(context, widget.subject);
       if (mounted) {
         setState(() {
           translatedSubject = result;
@@ -4855,7 +4883,7 @@ class _NoteCardState extends State<NoteCard> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               FutureBuilder<String>(
-                future: translateSubject(context,widget.subject),
+                future: _translatedAcademicSubject(context,widget.subject),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return Text('...'); // أثناء التحميل
@@ -4879,19 +4907,19 @@ class _NoteCardState extends State<NoteCard> {
               TextField(
                   controller: wTDController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: "W. TD"),
+                  decoration: InputDecoration(labelText: featureText(context, "W. TD")),
                   textAlign: TextAlign.center
               ),const SizedBox(height: 10,),
               TextField(
                 controller: wEXController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: "W. EXAM",),
+                decoration: InputDecoration(labelText: featureText(context, "W. EXAM"),),
                 textAlign: TextAlign.center,
               ),const SizedBox(height: 10,),
               TextField(
                 controller: wTPController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: "W. TP"),
+                decoration: InputDecoration(labelText: featureText(context, "W. TP")),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -4909,7 +4937,7 @@ class _NoteCardState extends State<NoteCard> {
 
                 Navigator.pop(context);
               },
-              child: Text("OK"),
+              child: Text(featureText(context, "OK")),
             ),
           ],
         );
@@ -4972,7 +5000,7 @@ class _NoteCardState extends State<NoteCard> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const Text("Coef", style: TextStyle(fontSize: 14)),
+                      Text(featureText(context, "Coef"), style: TextStyle(fontSize: 14)),
                       const SizedBox(height: 2),
                       Container(
                         width: 60,
@@ -5023,7 +5051,7 @@ class _NoteCardState extends State<NoteCard> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const Text("Cred", style: TextStyle(fontSize: 14)),
+                      Text(featureText(context, "Cred"), style: TextStyle(fontSize: 14)),
                       const SizedBox(height: 2),
                       Container(
                           width: 60,
@@ -5112,7 +5140,7 @@ class _NoteCardState extends State<NoteCard> {
                 if (wEX != 0)
                   Column(
                     children: [
-                      const Text("EXAM"),
+                      Text(featureText(context, "EXAM")),
                       const SizedBox(height: 2),
                       Container(
                         width: 70,
@@ -5146,7 +5174,7 @@ class _NoteCardState extends State<NoteCard> {
                   Column(
                     children: [
 
-                      const Text("TD"),
+                      Text(featureText(context, "TD")),
                       const SizedBox(height: 2),
                       Container(
                         width: 70,
@@ -5180,7 +5208,7 @@ class _NoteCardState extends State<NoteCard> {
                   Column(
                     children: [
 
-                      const Text("TP"),
+                      Text(featureText(context, "TP")),
                       const SizedBox(height: 2),
                       Container(
                         width: 70,
@@ -5214,7 +5242,7 @@ class _NoteCardState extends State<NoteCard> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text("Moy:        ",
+                  Text(featureText(context, "Moy:        "),
                       style: TextStyle(
                         fontSize: 15,
 
@@ -5333,7 +5361,7 @@ class _AnnualSummaryCard extends StatelessWidget {
         if (showS1)
           Directionality(
               textDirection:
-              TextDirection.ltr, // ← يمنع الانعكاس داخل البطاقة فقط
+              Directionality.of(context), // ← يمنع الانعكاس داخل البطاقة فقط
               child: Container(
                 padding: const EdgeInsets.all(20),
                 margin: const EdgeInsets.symmetric(vertical: 6),
@@ -5348,19 +5376,19 @@ class _AnnualSummaryCard extends StatelessWidget {
                   children: [
                     Align(
                         alignment: Alignment.centerLeft,
-                        child: Text("S1 Résumé",
-                            textDirection: TextDirection.ltr,
+                        child: Text(featureText(context, "S1 Résumé"),
+                            textDirection: Directionality.of(context),
                             style: TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.bold))),
                     const SizedBox(height: 10),
                     Row(
-                      textDirection: TextDirection.ltr,
+                      textDirection: Directionality.of(context),
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         buildInfoCard(
-                            "S1 Moyenne", moy1, Icons.filter_1, context),
+                            featureText(context, "S1 Moyenne"), moy1, Icons.filter_1, context),
                         buildInfoCard(
-                            "S1 Credits", S1cred, Icons.auto_graph, context),
+                            featureText(context, "S1 Credits"), S1cred, Icons.auto_graph, context),
                       ],
                     ),
                   ],
@@ -5371,7 +5399,7 @@ class _AnnualSummaryCard extends StatelessWidget {
         if (showS2)
           Directionality(
               textDirection:
-              TextDirection.ltr, // ← يمنع الانعكاس داخل البطاقة فقط
+              Directionality.of(context), // ← يمنع الانعكاس داخل البطاقة فقط
               child: Container(
                 padding: const EdgeInsets.all(20),
                 margin: const EdgeInsets.symmetric(vertical: 6),
@@ -5386,19 +5414,19 @@ class _AnnualSummaryCard extends StatelessWidget {
                   children: [
                     Align(
                         alignment: Alignment.centerLeft,
-                        child: Text("S2 Résumé",
-                            textDirection: TextDirection.ltr,
+                        child: Text(featureText(context, "S2 Résumé"),
+                            textDirection: Directionality.of(context),
                             style: TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.bold))),
                     const SizedBox(height: 10),
                     Row(
-                      textDirection: TextDirection.ltr,
+                      textDirection: Directionality.of(context),
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         buildInfoCard(
-                            "S2 Moyenne", moy2, Icons.filter_2, context),
+                            featureText(context, "S2 Moyenne"), moy2, Icons.filter_2, context),
                         buildInfoCard(
-                            "S2 Credits", S2cred, Icons.auto_graph, context),
+                            featureText(context, "S2 Credits"), S2cred, Icons.auto_graph, context),
                       ],
                     ),
                   ],
@@ -5409,7 +5437,7 @@ class _AnnualSummaryCard extends StatelessWidget {
         if (showAnnual)
           Directionality(
               textDirection:
-              TextDirection.ltr, // ← يمنع الانعكاس داخل البطاقة فقط
+              Directionality.of(context), // ← يمنع الانعكاس داخل البطاقة فقط
               child: Container(
                 padding: const EdgeInsets.all(20),
                 margin: const EdgeInsets.symmetric(vertical: 6),
@@ -5424,18 +5452,18 @@ class _AnnualSummaryCard extends StatelessWidget {
                   children: [
                     Align(
                         alignment: Alignment.centerLeft,
-                        child: Text("Résumé Annual",
-                            textDirection: TextDirection.ltr,
+                        child: Text(featureText(context, "Résumé Annual"),
+                            textDirection: Directionality.of(context),
                             style: TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.bold))),
                     const SizedBox(height: 10),
                     Row(
-                      textDirection: TextDirection.ltr,
+                      textDirection: Directionality.of(context),
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        buildInfoCard("Année", ann, Icons.verified, context),
+                        buildInfoCard(featureText(context, "Année"), ann, Icons.verified, context),
                         buildInfoCard(
-                            "Total Credits", creds, Icons.auto_graph, context),
+                            featureText(context, "Total Credits"), creds, Icons.auto_graph, context),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -5461,8 +5489,8 @@ class _AnnualSummaryCard extends StatelessWidget {
                           Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                "Résultat:",
-                                textDirection: TextDirection.ltr,
+                                featureText(context, "Résultat:"),
+                                textDirection: Directionality.of(context),
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -5477,8 +5505,8 @@ class _AnnualSummaryCard extends StatelessWidget {
                               ann == 0
                                   ? '---'
                                   : (ann >= 10
-                                  ? '✨u Succeeded✨'
-                                  : 'u Failed ❌'),
+                                  ? featureText(context, '✨u Succeeded✨')
+                                  : featureText(context, 'u Failed ❌')),
                               style: GoogleFonts.dmMono(
                                   textStyle: TextStyle(
                                     fontWeight: FontWeight.bold,
@@ -5585,7 +5613,7 @@ class ResultsScreen extends StatelessWidget {
     final double totalCred = cred1 + cred2;
 
     final decisionColor = _decisionColor(context, ann);
-    final decisionText = _decisionText(ann);
+    final decisionText = featureText(context, _decisionText(ann));
 
     return Scaffold(
       appBar: AppBar(
@@ -5595,7 +5623,8 @@ class ResultsScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final file = await PdfReportService.generateReport(
-            faculty: facultyName.isNotEmpty ? facultyName : programLabel,
+            languageCode: Localizations.localeOf(context).languageCode,
+faculty: facultyName.isNotEmpty ? facultyName : programLabel,
             program: programLabel,
             level: level,
             semester1: semester1,
@@ -5614,7 +5643,7 @@ class ResultsScreen extends StatelessWidget {
             // ---------- عنوان السنة / البرنامج ----------
             if (programLabel.isNotEmpty) ...[
               Text(
-                programLabel,
+                academicText(context, programLabel),
                 style:
                 const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
@@ -5641,8 +5670,8 @@ class ResultsScreen extends StatelessWidget {
                   Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Decision :',
-                        textDirection: TextDirection.ltr,
+                        featureText(context, 'Decision :'),
+                        textDirection: Directionality.of(context),
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -5651,7 +5680,7 @@ class ResultsScreen extends StatelessWidget {
                       )),
                   const SizedBox(height: 8),
                   Row(
-                    textDirection: TextDirection.ltr,
+                    textDirection: Directionality.of(context),
                     children: [
                       // -------- بطاقة المعدل السنوي --------
                       Expanded(
@@ -5668,7 +5697,7 @@ class ResultsScreen extends StatelessWidget {
                           child: Column(
                             children: [
                               Text(
-                                'Année',
+                                featureText(context, 'Année'),
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   color:
@@ -5707,7 +5736,7 @@ class ResultsScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             Text(
-                              'Total Credits',
+                              featureText(context, 'Total Credits'),
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: Theme.of(context).colorScheme.onSurface,
@@ -5741,7 +5770,7 @@ class ResultsScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             Text(
-                              'Résultat',
+                              featureText(context, 'Résultat'),
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: ann == 0
@@ -5780,9 +5809,9 @@ class ResultsScreen extends StatelessWidget {
 
             // ---------- قوائم المواد: S1 ثم S2 ----------
 
-            _buildModuleListSection(context, 'S1 Modules', semester1.modules),
+            _buildModuleListSection(context, featureText(context, 'S1 Modules'), semester1.modules),
             const SizedBox(height: 16),
-            _buildModuleListSection(context, 'S2 Modules', semester2.modules),
+            _buildModuleListSection(context, featureText(context, 'S2 Modules'), semester2.modules),
           ],
         ),
       ),
@@ -5837,7 +5866,7 @@ class ResultsScreen extends StatelessWidget {
                 color: scheme.surface,
               ),
               child: Text(
-                'Moy: ${moy == 0 ? '---' : moy.toStringAsFixed(2)}',
+                '${featureText(ctx, 'Average')}: ${moy == 0 ? '---' : moy.toStringAsFixed(2)}',
                 style: TextStyle(
                   color: color,
                   fontWeight: FontWeight.bold,
@@ -5856,7 +5885,7 @@ class ResultsScreen extends StatelessWidget {
                 color: scheme.surface,
               ),
               child: Text(
-                'Credits: ${creds.toStringAsFixed(0)}',
+                '${featureText(ctx, 'Credits')}: ${creds.toStringAsFixed(0)}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: scheme.onSurface,
@@ -5933,7 +5962,7 @@ class ResultsScreen extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        entry.key,
+                        academicText(context, featureText(context, entry.key)),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
@@ -5981,7 +6010,7 @@ class ResultsScreen extends StatelessWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         title: FutureBuilder<String>(
-          future: translateSubject(context, m.title),
+          future: _translatedAcademicSubject(context, m.title),
           builder: (context, snapshot) {
             return Text(
               snapshot.data ?? m.title,
@@ -6017,7 +6046,7 @@ class ResultsScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    _gradeLabel(grade),
+                    featureText(context, _gradeLabel(grade)),
                     style: TextStyle(color: gradeColor),
                   ),
                 ],
@@ -6040,7 +6069,7 @@ class ResultsScreen extends StatelessWidget {
       context: context,
       builder: (_) => AlertDialog(
         title: FutureBuilder<String>(
-          future: translateSubject(context, m.title),
+          future: _translatedAcademicSubject(context, m.title),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return Text('...'); // أثناء التحميل
@@ -6109,7 +6138,9 @@ class PdfReportService {
     required SemesterModel semester2,
     String level = '',
     String department = '',
+    String languageCode = 'en',
   }) async {
+    String t(String key) => featureTextForLanguage(languageCode, key);
     final generatedAt = DateTime.now();
     final regularFont =
     pw.Font.ttf(await rootBundle.load('assets/fonts/Tajawal-Regular.ttf'));
@@ -6124,14 +6155,14 @@ class PdfReportService {
     final totalCred = cred1 + cred2;
     final decision = ann == 0
         ? '---'
-        : (ann >= 10 ? 'Admitted (regular session)' : 'Not admitted');
+        : (ann >= 10 ? t('Admitted (regular session)') : t('Not admitted'));
     final academicYear = _academicYear(generatedAt);
     final docId = _buildDocumentId(generatedAt, semester1, semester2);
 
     final user = FirebaseAuth.instance.currentUser;
     final fullName = (user?.displayName?.trim().isNotEmpty ?? false)
         ? user!.displayName!.trim()
-        : 'UniSpace student';
+        : t('UniSpace student');
     final names = _splitName(fullName);
     final email = _maskEmail(user?.email);
 
@@ -6139,12 +6170,12 @@ class PdfReportService {
     final translatedTitles = await _translateAll([
       ...semester1.modules,
       ...semester2.modules,
-    ]);
+    ], languageCode);
 
     final pdf = pw.Document(
-      title: 'UniSpace grade report',
+      title: t('UniSpace grade report'),
       author: 'UniSpace',
-      subject: 'Annual grade report',
+      subject: t('Annual grade report'),
       creator: 'UniSpace Flutter App',
     );
 
@@ -6153,9 +6184,11 @@ class PdfReportService {
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.fromLTRB(18, 16, 18, 18),
         theme: pw.ThemeData.withFont(base: regularFont, bold: boldFont),
-        footer: (context) => _footer(context, generatedAt, docId),
+        textDirection: languageCode == 'ar' ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        footer: (context) => _footer(context, generatedAt, docId, t),
         build: (context) => [
           _header(
+            t: t,
             logo: logo,
             faculty: faculty,
             program: program,
@@ -6165,7 +6198,7 @@ class PdfReportService {
           pw.SizedBox(height: 8),
           pw.Center(
             child: pw.Text(
-              'GRADE REPORT',
+              t('GRADE REPORT'),
               style: pw.TextStyle(
                 font: boldFont,
                 fontSize: 16,
@@ -6175,6 +6208,7 @@ class PdfReportService {
           ),
           pw.SizedBox(height: 8),
           _identityBlock(
+            t: t,
             year: academicYear,
             lastName: names.$1,
             firstName: names.$2,
@@ -6189,7 +6223,8 @@ class PdfReportService {
           ),
           pw.SizedBox(height: 10),
           _semesterBlock(
-            title: 'Semester 1',
+            t: t,
+            title: t('Semester 1'),
             semester: semester1,
             moyenne: moy1,
             credits: cred1,
@@ -6199,7 +6234,8 @@ class PdfReportService {
           ),
           pw.SizedBox(height: 10),
           _semesterBlock(
-            title: 'Semester 2',
+            t: t,
+            title: t('Semester 2'),
             semester: semester2,
             moyenne: moy2,
             credits: cred2,
@@ -6209,6 +6245,7 @@ class PdfReportService {
           ),
           pw.SizedBox(height: 10),
           _decisionBlock(
+            t: t,
             moyenne: ann,
             decision: decision,
             yearCredits: totalCred,
@@ -6224,6 +6261,7 @@ class PdfReportService {
   }
 
   static pw.Widget _header({
+    required String Function(String) t,
     required pw.Widget logo,
     required String faculty,
     required String program,
@@ -6239,17 +6277,17 @@ class PdfReportService {
             children: [
               pw.Text('UniSpace',
                   style: pw.TextStyle(font: bold, fontSize: 11)),
-              pw.Text('University platform',
+              pw.Text(t('University platform'),
                   style: const pw.TextStyle(fontSize: 8)),
               pw.Text(
-                'Faculty: ${faculty.isEmpty ? 'Not specified' : faculty}',
+                '${t('Faculty')}: ${faculty.isEmpty ? t('Not specified') : faculty}',
                 style: const pw.TextStyle(fontSize: 8),
               ),
               if (department.isNotEmpty)
-                pw.Text('Department: $department',
+                pw.Text('${t('Department')}: $department',
                     style: const pw.TextStyle(fontSize: 8)),
               pw.Text(
-                'Major: ${program.isEmpty ? 'Not specified' : program}',
+                '${t('Major')}: ${program.isEmpty ? t('Not specified') : program}',
                 style: const pw.TextStyle(fontSize: 8),
               ),
             ],
@@ -6262,6 +6300,7 @@ class PdfReportService {
   }
 
   static pw.Widget _identityBlock({
+    required String Function(String) t,
     required String year,
     required String lastName,
     required String firstName,
@@ -6295,19 +6334,19 @@ class PdfReportService {
     return pw.Column(
       children: [
         pw.Row(children: [
-          pw.Expanded(child: cell('Academic year', year)),
-          pw.Expanded(child: cell('Last name', lastName)),
-          pw.Expanded(child: cell('First name', firstName)),
+          pw.Expanded(child: cell(t('Academic year'), year)),
+          pw.Expanded(child: cell(t('Last name'), lastName)),
+          pw.Expanded(child: cell(t('First name'), firstName)),
         ]),
         pw.Row(children: [
-          pw.Expanded(child: cell('ID', inscription)),
-          pw.Expanded(child: cell('Level', level)),
-          pw.Expanded(child: cell('Major', program)),
+          pw.Expanded(child: cell(t('ID'), inscription)),
+          pw.Expanded(child: cell(t('Level'), level)),
+          pw.Expanded(child: cell(t('Major'), program)),
         ]),
         pw.Row(children: [
-          pw.Expanded(child: cell('Faculty', faculty)),
-          pw.Expanded(child: cell('Email', email ?? 'Not specified')),
-          pw.Expanded(child: cell('Degree', level)),
+          pw.Expanded(child: cell(t('Faculty'), faculty)),
+          pw.Expanded(child: cell(t('Email'), email ?? t('Not specified'))),
+          pw.Expanded(child: cell(t('Degree'), level)),
         ]),
       ],
     );
@@ -6317,6 +6356,7 @@ class PdfReportService {
   static const _modWidths = <double>[3.4, 0.85, 0.8, 0.85, 0.95, 0.7];
 
   static pw.Widget _semesterBlock({
+    required String Function(String) t,
     required String title,
     required SemesterModel semester,
     required double moyenne,
@@ -6330,8 +6370,8 @@ class PdfReportService {
       pw.TableRow(
         decoration: const pw.BoxDecoration(color: PdfColors.grey300),
         children: [
-          _headCell('Teaching unit (UE)'),
-          _headCell('Subject(s) of the teaching unit'),
+          _headCell(t('Teaching unit (UE)')),
+          _headCell(t('Subject(s) of the teaching unit')),
         ],
       ),
       pw.TableRow(
@@ -6341,13 +6381,13 @@ class PdfReportService {
             widths: _ueWidths,
             rows: [
               pw.TableRow(children: [
-                _th('Type'),
-                _th('UE code'),
-                _th('Credits'),
-                _th('Coef'),
-                _th('Avg'),
-                _th('Earned'),
-                _th('Sess'),
+                _th(t('Type')),
+                _th(t('UE code')),
+                _th(t('Credits')),
+                _th(t('Coef')),
+                _th(t('Avg')),
+                _th(t('Earned')),
+                _th(t('Sess')),
               ]),
             ],
           ),
@@ -6355,12 +6395,12 @@ class PdfReportService {
             widths: _modWidths,
             rows: [
               pw.TableRow(children: [
-                _th('Title'),
-                _th('Credits'),
-                _th('Coef'),
-                _th('Avg'),
-                _th('Earned'),
-                _th('Sess'),
+                _th(t('Title')),
+                _th(t('Credits')),
+                _th(t('Coef')),
+                _th(t('Avg')),
+                _th(t('Earned')),
+                _th(t('Sess')),
               ]),
             ],
           ),
@@ -6452,15 +6492,15 @@ class PdfReportService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                '$title average: ${moyenne == 0 ? '—' : moyenne.toStringAsFixed(2)}',
+                '$title ${t('Average')}: ${moyenne == 0 ? '—' : moyenne.toStringAsFixed(2)}',
                 style: pw.TextStyle(font: bold, fontSize: 8),
               ),
               pw.Text(
-                '$title credits: ${credits.toStringAsFixed(0)}',
+                '$title ${t('Credits')}: ${credits.toStringAsFixed(0)}',
                 style: pw.TextStyle(font: bold, fontSize: 8),
               ),
               pw.Text(
-                'N = regular session    R = resit',
+                t('N = regular session    R = resit'),
                 style: const pw.TextStyle(fontSize: 7),
               ),
             ],
@@ -6487,6 +6527,7 @@ class PdfReportService {
   }
 
   static pw.Widget _decisionBlock({
+    required String Function(String) t,
     required double moyenne,
     required String decision,
     required double yearCredits,
@@ -6496,15 +6537,15 @@ class PdfReportService {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
         pw.Text(
-          'Annual average: ${moyenne == 0 ? '—' : moyenne.toStringAsFixed(2)}',
+          '${t('Annual average')}: ${moyenne == 0 ? '—' : moyenne.toStringAsFixed(2)}',
           style: pw.TextStyle(font: bold, fontSize: 10),
         ),
         pw.Text(
-          'Decision: $decision',
+          '${t('Decision')}: $decision',
           style: pw.TextStyle(font: bold, fontSize: 10),
         ),
         pw.Text(
-          'Credits earned this year: ${yearCredits.toStringAsFixed(0)}',
+          '${t('Credits earned this year')}: ${yearCredits.toStringAsFixed(0)}',
           style: const pw.TextStyle(fontSize: 9),
         ),
       ],
@@ -6586,6 +6627,7 @@ class PdfReportService {
 
   static Future<Map<String, String>> _translateAll(
       List<ModuleModel> modules,
+      String languageCode,
       ) async {
     final out = <String, String>{};
     final cache = <String, String>{};
@@ -6593,9 +6635,12 @@ class PdfReportService {
     Future<String> fr(String raw) async {
       final src = raw.trim();
       if (src.isEmpty) return src;
+      if (AcademicStrings.hasTranslation(src)) {
+        return AcademicStrings.text(languageCode, src);
+      }
       if (cache.containsKey(src)) return cache[src]!;
       try {
-        final result = await GoogleTranslator().translate(src, to: 'fr');
+        final result = await GoogleTranslator().translate(src, to: languageCode);
         final text = result.text.trim();
         cache[src] = text.isEmpty ? src : text;
       } catch (_) {
@@ -6687,17 +6732,18 @@ class PdfReportService {
       pw.Context context,
       DateTime generatedAt,
       String docId,
+      String Function(String) t,
       ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Divider(color: PdfColors.grey400),
         pw.Text(
-          'Generated on ${_formatDate(generatedAt)}  •  Document ID: $docId  •  Page ${context.pageNumber}/${context.pagesCount}',
+          '${t('Generated on')} ${_formatDate(generatedAt)}  •  ${t('Document ID')}: $docId  •  ${t('Page')} ${context.pageNumber}/${context.pagesCount}',
           style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
         ),
         pw.Text(
-          'Generated by UniSpace. This document has no official administrative value.',
+          t('Generated by UniSpace. This document has no official administrative value.'),
           style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
         ),
       ],

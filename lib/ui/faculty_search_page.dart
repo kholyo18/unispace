@@ -55,8 +55,9 @@ class _FacultySearchPageState extends State<FacultySearchPage> {
     }
     return widget.faculties
         .where((faculty) {
-          final name = faculty.name.trim();
-          return name.toLowerCase().contains(normalizedQuery);
+          final name = faculty.displayName(context).trim();
+          return name.toLowerCase().contains(normalizedQuery) ||
+              faculty.name.toLowerCase().contains(normalizedQuery);
         })
         .toList(growable: false);
   }
@@ -187,7 +188,7 @@ class _FacultySearchCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  faculty.name,
+                  faculty.displayName(context),
                   style: theme.textTheme.titleMedium,
                   textAlign: TextAlign.start,
                 ),

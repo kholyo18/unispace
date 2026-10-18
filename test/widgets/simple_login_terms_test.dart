@@ -31,6 +31,14 @@ Future<void> toggleTerms(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> openLegalDetails(WidgetTester tester) async {
+  if (control('read-terms').evaluate().isNotEmpty) return;
+  await tester.ensureVisible(control('legal-details'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('الشروط والخصوصية'));
+  await tester.pumpAndSettle();
+}
+
 void expectLoginEnabled(WidgetTester tester, bool enabled) {
   expect(tester.widget<FilledButton>(control('email-submit')).onPressed,
       enabled ? isNotNull : isNull);
@@ -43,6 +51,10 @@ void main() {
     await showLogin(tester);
     expect(tester.widget<CheckboxListTile>(control('terms-consent')).value, false);
     expect(find.text('أوافق على شروط الاستخدام'), findsOneWidget);
+    expect(find.text('الشروط والخصوصية'), findsOneWidget);
+    expect(control('read-terms'), findsNothing);
+    expect(control('read-privacy'), findsNothing);
+    expect(control('read-community'), findsNothing);
     expectLoginEnabled(tester, false);
     await toggleTerms(tester);
     expect(tester.widget<CheckboxListTile>(control('terms-consent')).value, true);

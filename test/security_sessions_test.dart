@@ -4,6 +4,30 @@ import 'package:UniSpace/ui/settings/session_record.dart';
 import 'package:UniSpace/ui/settings/session_service.dart';
 
 void main() {
+  test('signed session claims select only a valid server identifier', () {
+    final id = 'a' * 64;
+    expect(signedSessionId({'sid': id}), id);
+    for (final value in [null, '', 'local-session', false, 'g' * 64]) {
+      expect(signedSessionId({'sid': value}), isNull);
+    }
+  });
+  test('signed sessions cannot be created or reactivated by the client', () {
+    final id = 'a' * 64;
+    for (final existing in [null, {'sessionId': id, 'isRevoked': false},
+      {'sessionId': id, 'isRevoked': true, 'authSessionVersion': 1}]) {
+      expect(sessionInitialization(existing: existing, sessionId: id,
+        deviceId: 'device', metadata: {'model': 'phone'}), isNull);
+    }
+    final record = sessionInitialization(existing: {
+      'sessionId': id, 'isRevoked': false, 'authSessionVersion': 1,
+    }, sessionId: id, deviceId: 'device', metadata: {
+      'model': 'phone', 'isRevoked': false, 'authSessionVersion': 99,
+    })!;
+    expect(record['model'], 'phone');
+    for (final key in ['isRevoked','authSessionVersion','sessionId','isTrusted','revokedAt']) {
+      expect(record.containsKey(key), isFalse);
+    }
+  });
   group('Session lifecycle invariants', () {
     final metadata = <String, dynamic>{'model': 'Test device', 'platform': 'android'};
 

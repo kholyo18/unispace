@@ -1,3 +1,4 @@
+import '../../../l10n/feature_strings.dart';
 import '../../../ui/settings/account_state_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,20 +23,20 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('تأكيد طلب حذف الحساب'),
-        content: const Text(
-          'سيتم تسجيل طلب الحذف وإلغاء جلسات الحساب. قد تستغرق إزالة البيانات '
-          'من الأنظمة التشغيلية حتى 30 يومًا. لا يمكن استخدام هذا الطلب لحذف حساب شخص آخر.',
+        title: Text(featureText(context, 'تأكيد طلب حذف الحساب')),
+        content: Text(
+          featureText(context, 'سيتم تسجيل طلب الحذف وإلغاء جلسات الحساب. قد تستغرق إزالة البيانات '
+          'من الأنظمة التشغيلية حتى 30 يومًا. لا يمكن استخدام هذا الطلب لحذف حساب شخص آخر.'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
+            child: Text(featureText(context, 'إلغاء')),
           ),
           FilledButton(
             key: const ValueKey('account-delete-dialog-confirm'),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('تأكيد الطلب'),
+            child: Text(featureText(context, 'تأكيد الطلب')),
           ),
         ],
       ),
@@ -52,16 +53,16 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          title: const Text('تم تسجيل الطلب'),
-          content: const Text(
-            'سُجل طلب حذف حسابك. سنعالج البيانات التشغيلية خلال مدة لا تتجاوز '
-            '30 يومًا، مع الاحتفاظ المحدود فقط عندما يوجد سبب قانوني أو أمني مشروع.',
+          title: Text(featureText(context, 'تم تسجيل الطلب')),
+          content: Text(
+            featureText(context, 'سُجل طلب حذف حسابك. سنعالج البيانات التشغيلية خلال مدة لا تتجاوز '
+            '30 يومًا، مع الاحتفاظ المحدود فقط عندما يوجد سبب قانوني أو أمني مشروع.'),
           ),
           actions: [
             FilledButton(
               key: const ValueKey('account-delete-success-close'),
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('حسنًا'),
+              child: Text(featureText(context, 'حسنًا')),
             ),
           ],
         ),
@@ -72,17 +73,17 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
     } on FirebaseFunctionsException catch (error) {
       if (!mounted) return;
       final message = switch (error.code) {
-        'unauthenticated' => 'انتهت جلسة الدخول. سجّل الدخول مجددًا ثم أعد المحاولة.',
-        'invalid-argument' => 'تعذر تأكيد الطلب. أعد المحاولة.',
-        _ => 'تعذر تسجيل طلب الحذف الآن.',
+        'unauthenticated' => featureText(context, 'انتهت جلسة الدخول. سجّل الدخول مجددًا ثم أعد المحاولة.'),
+        'invalid-argument' => featureText(context, 'تعذر تأكيد الطلب. أعد المحاولة.'),
+        _ => featureText(context, 'تعذر تسجيل طلب الحذف الآن.'),
       };
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
+        SnackBar(content: Text(featureText(context, message))),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر تسجيل طلب الحذف الآن.')),
+        SnackBar(content: Text(featureText(context, 'تعذر تسجيل طلب الحذف الآن.'))),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -95,10 +96,10 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
     final muted = theme.colorScheme.onSurfaceVariant;
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: Directionality.of(context),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('حذف الحساب والبيانات'),
+          title: Text(featureText(context, 'حذف الحساب والبيانات')),
         ),
         body: SafeArea(
           child: SingleChildScrollView(
@@ -108,7 +109,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
               Text(
-                'طلب حذف حساب UniSpace',
+                featureText(context, 'طلب حذف حساب UniSpace'),
                 key: const ValueKey('account-delete-title'),
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w800,
@@ -116,8 +117,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                'يمكنك طلب حذف حسابك والبيانات المرتبطة به من الأنظمة التي نديرها. '
-                'هذا ليس تعطيلًا مؤقتًا للحساب.',
+                featureText(context, 'يمكنك طلب حذف حسابك والبيانات المرتبطة به من الأنظمة التي نديرها. '
+                'هذا ليس تعطيلًا مؤقتًا للحساب.'),
                 style: theme.textTheme.bodyLarge?.copyWith(height: 1.6),
               ),
               const SizedBox(height: 22),
@@ -158,8 +159,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                     : (value) => setState(() => _understood = value ?? false),
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
-                title: const Text(
-                  'أفهم أن هذا طلب لحذف الحساب والبيانات وليس مجرد تسجيل خروج.',
+                title: Text(
+                  featureText(context, 'أفهم أن هذا طلب لحذف الحساب والبيانات وليس مجرد تسجيل خروج.'),
                 ),
               ),
               const SizedBox(height: 8),
@@ -173,7 +174,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.delete_forever_outlined),
-                label: Text(_submitting ? 'جارٍ تسجيل الطلب…' : 'طلب حذف الحساب'),
+                label: Text(_submitting ? featureText(context, 'جارٍ تسجيل الطلب…') : featureText(context, 'طلب حذف الحساب')),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
                   backgroundColor: theme.colorScheme.error,
@@ -182,8 +183,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                'هذه الواجهة تسجل طلب الحذف على الخادم. إكمال إزالة جميع البيانات '
-                'المشتركة والنسخ لدى مزودي الخدمة يخضع لعملية الحذف والاحتفاظ المعلنة.',
+                featureText(context, 'هذه الواجهة تسجل طلب الحذف على الخادم. إكمال إزالة جميع البيانات '
+                'المشتركة والنسخ لدى مزودي الخدمة يخضع لعملية الحذف والاحتفاظ المعلنة.'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
@@ -217,7 +218,7 @@ class _InfoCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              title,
+              featureText(context, title),
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
@@ -229,10 +230,10 @@ class _InfoCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('•  '),
+                    Text('•  '),
                     Expanded(
                       child: Text(
-                        item,
+                        featureText(context, item),
                         style: theme.textTheme.bodyMedium?.copyWith(height: 1.55),
                       ),
                     ),

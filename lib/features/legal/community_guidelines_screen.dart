@@ -1,3 +1,4 @@
+import '../../l10n/feature_strings.dart';
 import 'package:flutter/material.dart';
 
 class CommunityGuidelinesScreen extends StatelessWidget {
@@ -6,12 +7,14 @@ class CommunityGuidelinesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final sections = featureLegalSections(context, 'community',
+      _communitySections.map((s) => (heading: s.heading, body: s.body)).toList());
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: Directionality.of(context),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('قواعد المجتمع'),
+          title: Text(featureText(context, 'قواعد المجتمع')),
           leading: const BackButton(key: ValueKey('community-reader-back')),
         ),
         body: SafeArea(
@@ -26,25 +29,25 @@ class CommunityGuidelinesScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'قواعد مجتمع UniSpace',
+                        featureText(context, 'قواعد مجتمع UniSpace'),
                         key: const ValueKey('community-reader-title'),
                         style: textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 8),
-                      const Text('الإصدار 1.0 — نافذ من 18 سبتمبر 2026'),
+                      Text(featureText(context, 'الإصدار 1.0 — نافذ من 18 سبتمبر 2026')),
                       const SizedBox(height: 12),
-                      const Text(
-                        'هذه القواعد تكمل شروط الاستخدام وتحدد السلوك المتوقع داخل '
+                      Text(
+                        featureText(context, 'هذه القواعد تكمل شروط الاستخدام وتحدد السلوك المتوقع داخل '
                         'مساحات المجتمع في UniSpace. قراءة الصفحة وحدها لا تحدد خانة '
-                        'الموافقة في شاشة الدخول.',
+                        'الموافقة في شاشة الدخول.'),
                         key: ValueKey('community-reader-policy-notice'),
                       ),
                       const SizedBox(height: 24),
-                      for (var i = 0; i < _communitySections.length; i++) ...[
+                      for (var i = 0; i < sections.length; i++) ...[
                         Semantics(
                           header: true,
                           child: Text(
-                            _communitySections[i].heading,
+                            sections[i].heading,
                             key: ValueKey('community-heading-${i + 1}'),
                             style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
@@ -54,7 +57,7 @@ class CommunityGuidelinesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _communitySections[i].body,
+                          sections[i].body,
                           style: textTheme.bodyMedium?.copyWith(height: 1.7),
                         ),
                         const SizedBox(height: 24),

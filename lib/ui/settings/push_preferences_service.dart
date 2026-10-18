@@ -1,4 +1,5 @@
 import 'session_service.dart';
+import 'package:intl/intl.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -16,6 +17,11 @@ class PushPreferencesService with WidgetsBindingObserver {
   String? _lastSettings;
   int _revision = 0;
   String? _signingOutUid;
+
+  String get _pushLocale {
+    final language = (Intl.defaultLocale ?? 'ar').split(RegExp('[-_]')).first;
+    return const ['ar', 'fr', 'en'].contains(language) ? language : 'ar';
+  }
 
   Map<String, bool> get _preferences {
     final s = AppSettings.instance.notifier.value;
@@ -45,10 +51,11 @@ class PushPreferencesService with WidgetsBindingObserver {
   bool allows(String type) {
     final p = _preferences;
     if (p['enabled'] != true) return false;
+    if (type == 'message') return true;
     if (const ['new_post','like','like_comment','reply','comment','repost','follow','follow_request','follow_accepted'].contains(type)) return p['community'] == true;
     if (type == 'announcement') return p['announcements'] == true;
     if (type == 'exam_reminder') return p['exams'] == true;
-    // Match the server allowlist. Unknown/chat kinds have no reviewed delivery
+    // Match the server allowlist. Unknown kinds have no reviewed delivery
     // contract here and must not bypass category or per-chat mute checks.
     return false;
   }
@@ -68,9 +75,10 @@ class PushPreferencesService with WidgetsBindingObserver {
         final sessionId = await SessionService.instance.getCurrentSessionId(uid);
         if (revision != _revision || FirebaseAuth.instance.currentUser?.uid != uid) return;
         if (sessionId == null || sessionId.isEmpty) throw StateError('Device session not ready');
+        if (revision != _revision || FirebaseAuth.instance.currentUser?.uid != uid) return;
         final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
             .httpsCallable('syncPushDevice', options: HttpsCallableOptions(timeout: const Duration(seconds: 20)))
-            .call<Map<String, dynamic>>({'token':token,'sessionId':sessionId,'platform':defaultTargetPlatform.name,'preferences':_preferences});
+            .call<Map<String, dynamic>>({'token':token,'sessionId':sessionId,'platform':defaultTargetPlatform.name,'preferences':_preferences,'chatActionsVersion':1,'locale':_pushLocale});
         if (result.data['synced'] != true) throw StateError('Unconfirmed push preferences');
         if (revision == _revision && FirebaseAuth.instance.currentUser?.uid == uid) {
           status.value = 'تمت مزامنة إعدادات إشعارات هذا الجهاز.';

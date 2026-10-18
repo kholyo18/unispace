@@ -5,13 +5,17 @@ import 'otp_service.dart';
 class EmailVerificationService {
   EmailVerificationService._();
 
-  static final EmailVerificationService instance =
-      EmailVerificationService._();
+  static final EmailVerificationService instance = EmailVerificationService._();
 
   Future<OtpSendResult> sendOtp({required User user}) async {
-    if (user.email == null) {
-      throw Exception('Email not available');
+    final email = user.email?.trim();
+    if (email == null || email.isEmpty) {
+      throw StateError('Email not available');
     }
-    return OtpService.instance.sendEmailOtp(email: user.email!);
+    await user.sendEmailVerification();
+    return const OtpSendResult(
+      cooldownSeconds: 60,
+      expiresInSeconds: 0,
+    );
   }
 }

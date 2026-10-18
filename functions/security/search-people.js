@@ -2,14 +2,7 @@ const { HttpsError } = require('firebase-functions/v2/https');
 const { FieldPath } = require('firebase-admin/firestore');
 
 const text = value => typeof value === 'string' ? value.trim() : '';
-function normalize(value) {
-  return value.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '')
-    .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ؤ/g, 'و')
-    .replace(/ئ/g, 'ي').replace(/ة/g, 'ه').replace(/[^\w\u0600-\u06FF]+/g, ' ')
-    .replace(/\s+/g, ' ').trim();
-}
-const stop = new Set(['في', 'من', 'على', 'الى', 'الي', 'عن', 'مع', 'ما', 'لا',
-  'ان', 'او', 'و', 'هذا', 'هذه', 'ذلك', 'the', 'and']);
+const {normalize} = require('./search-text');
 function matchPerson(id, data, query) {
   const privacy = data.privacy || {};
   if (privacy.appearInSearch === false || data.security?.frozen === true ||
@@ -19,10 +12,10 @@ function matchPerson(id, data, query) {
   const username = text(data.username) || text(data.userName);
   const name = [first, last].filter(Boolean).join(' ') || display || username;
   if (!name) return null;
-  const tokens = normalize(query).split(' ').filter(t => t.length >= 2 && !stop.has(t));
+  const tokens = normalize(query).split(' ').filter(Boolean);
   const words = normalize(`${name} ${username} ${display}`).split(' ');
   const nameHit = tokens.length ? tokens.every(t => words.some(w => w === t ||
-    (t.length >= 4 && w.startsWith(t)) || w === `${t}s` || w === `${t}es`)) :
+    (t.length >= 2 && w.startsWith(t)) || w === `${t}s` || w === `${t}es`)) :
     !!normalize(query) && normalize(`${name} ${username}`).includes(normalize(query));
   // Contact discovery is opt-in and exact: never allow partial address/number enumeration.
   const emailHit = query.includes('@') && privacy.findByEmail === true &&

@@ -1,4 +1,6 @@
-const { canReceiveContentPush, contentMessages } = require('./push-content-access');
+const {chatPushAllowed}=require('./chat-push');
+const { deliveryLocale, notificationBody } = require('./push-notification-text');
+const { canReceiveContentPush } = require('./push-content-access');
 const { createHash } = require('crypto');
 const { logger } = require('firebase-functions');
 const { pushAllowed } = require('./push-preferences');
@@ -14,14 +16,33 @@ function createPushNotificationHandler({ db, auth, messaging }) {
     const notificationRef = event.data.ref;
     const tokenSnapshot = await db.collection(`users/${userId}/fcm_tokens`).get();
     const byToken = new Map();
+    const localeByToken = new Map();
+    const actionsByToken = new Map();
     for (const doc of tokenSnapshot.docs) {
       const token = doc.data().token;
       if (typeof token !== 'string' || !token.trim()) continue;
       if (!byToken.has(token)) byToken.set(token,[]);
       byToken.get(token).push(doc.ref);
+      if (doc.id === createHash('sha256').update(token).digest('hex')) {
+        localeByToken.set(token, deliveryLocale(doc.data().locale));
+        actionsByToken.set(token,doc.data().platform==='android'&&doc.data().chatActionsVersion===1);
+      }
     }
-    const entries = [...byToken.entries()];
-    for (let offset = 0; offset < entries.length; offset += 500) {
+    const localeGroups = new Map();
+    for (const entry of byToken.entries()) {
+      const locale = localeByToken.get(entry[0]) || 'ar';
+      const key=locale+'|'+(actionsByToken.get(entry[0])?'actions':'legacy');
+      if (!localeGroups.has(key)) localeGroups.set(key, []);
+      localeGroups.get(key).push(entry);
+    }
+    const batches = [];
+    for (const [key, entries] of localeGroups) {
+      for (let offset = 0; offset < entries.length; offset += 500) {
+        batches.push({ locale:key.split('|')[0],actions:key.endsWith('|actions'), batch: entries.slice(offset, offset + 500) });
+      }
+    }
+    // Every locale batch passes the same fresh authorization gates before sending.
+    for (const { locale, actions, batch } of batches) {
       const [notification,recipient] = await db.getAll(notificationRef,db.doc(`users/${userId}`));
       if (!notification.exists || notification.data().read === true || unavailable(recipient.data())) return;
       // A deleted and recreated notification must not receive the old event's push.
@@ -51,7 +72,7 @@ function createPushNotificationHandler({ db, auth, messaging }) {
           if (actorAccount.disabled) return;
         }
       }
-      const batch = entries.slice(offset,offset + 500);
+
       // Drop deleted/reassigned token records before dispatch; preserve token-to-ref mapping.
       const live = await db.getAll(...batch.flatMap(([,refs]) => refs));
       const records = new Map(live.filter(s => s.exists).map(s => [s.id, s.data()]));
@@ -76,18 +97,18 @@ function createPushNotificationHandler({ db, auth, messaging }) {
           bindingAllows({ binding: state, userId,
           cutoff: cutoff.exists ? cutoff.data() : null, session }) &&
           record?.token === token && registrationMatches(record, state) &&
-          pushAllowed(record.preferences, data.type);
+          (data.type==='message' ? record.preferences?.enabled===true : pushAllowed(record.preferences, data.type));
       });
       if (!active.length) continue;
       if (!await canReceiveContentPush({db,auth,userId,notification:data})) return;
-      const title = String(data.actorName || 'UniSpace');
-      const body = Object.hasOwn(contentMessages,data.type) ? contentMessages[data.type] :
-        (data.postId ? 'لديك تحديث على محتوى تتابعه' : String(data.message || 'لديك إشعار جديد'));
+      if(data.type==='message'&&!await chatPushAllowed({db,userId,notification:data,notificationId:notifId}))return;
+      const title = data.type==='message'?'UniSpace':String(data.actorName || 'UniSpace');
+      const body = data.type==='message'?({ar:'لديك رسالة جديدة',en:'You have a new message',fr:'Vous avez un nouveau message'}[locale]):notificationBody(data, locale);
       const response = await messaging.sendEachForMulticast({
-        tokens:active.map(([token]) => token),notification:{title,body},
-        data:{recipientId:userId,type:String(data.type || ''),actorId:String(actorId || ''),actorName:String(data.actorName || ''),
-          message:body,postId:String(data.postId || ''),commentId:String(data.commentId || ''),notificationId:String(notifId)},
-        android:{priority:'high',notification:{channelId:'unispace_notifications'}},
+        tokens:active.map(([token]) => token),...(data.type==='message'&&actions?{}:{notification:{title,body}}),
+        data:{recipientId:userId,type:String(data.type || ''),actorId:String(actorId || ''),actorName:data.type==='message'?'':String(data.actorName || ''),locale,
+          message:body,postId:String(data.postId || ''),commentId:String(data.commentId || ''),notificationId:String(notifId),...(data.type==='message'?{chatId:String(data.chatId),messageId:String(data.messageId),chatActionsVersion:actions?'1':'0'}:{})},
+        android:{priority:'high',...(data.type==='message'&&actions?{}:{notification:{channelId:'unispace_notifications',tag:String(notifId)}})},
       });
       const stale = [];
       let otherFailures = 0;

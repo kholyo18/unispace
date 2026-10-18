@@ -19,15 +19,19 @@ after(async () => { await db.terminate(); await deleteApp(app); });
 const unique = () => randomUUID().replaceAll('-', '').slice(0, 18);
 function setup() {
   const uid = 'signup-' + unique();
+  let signedSid = 'session-one';
   const auth = {
     verifyIdToken:async (token, checkRevoked) => {
       assert.equal(checkRevoked, true);
       if (token === 'revoked') throw Error('revoked ID token');
-      return {uid:token, auth_time:100};
+      return {uid:token, auth_time:100, sid:signedSid};
     },
     getUser:async id => ({uid:id, email:id + '@example.invalid', disabled:false}),
   };
-  const request = (data, id = uid) => ({auth:{uid:id}, rawRequest:{headers:{authorization:'Bearer ' + id}}, data});
+  const request = (data, id = uid) => {
+    signedSid = data?.sessionId || signedSid;
+    return {auth:{uid:id}, rawRequest:{headers:{authorization:'Bearer ' + id}}, data};
+  };
   const bootstrap = createSessionBootstrapHandler({auth, db});
   const complete = createCompleteSignupHandler({auth, db, bucketName:() => 'demo-bucket'});
   const check = createUsernameCheckHandler({auth, db, now:() => 100000});

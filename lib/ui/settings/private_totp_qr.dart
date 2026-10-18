@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:qr/qr.dart';
 
@@ -8,7 +9,7 @@ class PrivateTotpQr extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'رمز إعداد تطبيق المصادقة. يمكن استخدام المفتاح النصي أسفله.',
+    label: authSettingsText(context, 'رمز إعداد تطبيق المصادقة. يمكن استخدام المفتاح النصي أسفله.'),
     child: CustomPaint(
       size: const Size.square(220),
       painter: _QrPainter(QrImage(QrCode.fromData(data: data, errorCorrectLevel: QrErrorCorrectLevel.M))),

@@ -1,101 +1,149 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const { randomUUID } = require('node:crypto');
 const { initializeApp, deleteApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { createRevokeAllSessionsHandler } = require('../security/revoke-all-sessions');
-
-const project = 'demo-unispace-security';
-const host = process.env.FIRESTORE_EMULATOR_HOST;
-if (!host || !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) {
-  throw new Error('Run only through the local Firestore emulator. Production access is forbidden.');
+const { createSignInSessionHandler, createRevokeDeviceSessionsHandler } = require('../security/device-sessions');
+const project='demo-unispace-security', host=process.env.FIRESTORE_EMULATOR_HOST;
+if (!host || !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw Error('Local Firestore emulator required; production forbidden.');
+const app=initializeApp({projectId:project}), db=getFirestore(app);
+const base='http://'+host+'/v1/projects/'+project+'/databases/(default)/documents';
+const encode=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
+const issue=createSignInSessionHandler({db,FieldValue});
+async function actor(uid='actor-'+randomUUID()) {
+  const {sessionClaims:{sid}}=await issue({eventId:randomUUID(),data:{uid}});
+  await db.doc('users/'+uid).set({name:'Owner'});
+  return {uid,sid,authTime:100};
 }
-const app = initializeApp({ projectId: project });
-const db = getFirestore(app);
-const base = `http://${host}/v1/projects/${project}/databases/(default)/documents`;
-const encode = x => Buffer.from(JSON.stringify(x)).toString('base64url');
-function token(uid, authTime = 100) {
-  const now = Math.floor(Date.now() / 1000);
-  return `${encode({alg:'none',typ:'JWT'})}.${encode({
-    iss:`https://securetoken.google.com/${project}`,aud:project,sub:uid,user_id:uid,
-    iat:now,exp:now+3600,auth_time:authTime,firebase:{sign_in_provider:'password'},
-  })}.`;
+function token(a) {
+  const now=Math.floor(Date.now()/1000);
+  return encode({alg:'none',typ:'JWT'})+'.'+encode({iss:'https://securetoken.google.com/'+project,
+    aud:project,sub:a.uid,user_id:a.uid,iat:now,exp:now+3600,auth_time:a.authTime,sid:a.sid,
+    firebase:{sign_in_provider:'password'}})+'.';
 }
 function fields(data) {
-  return Object.fromEntries(Object.entries(data).map(([k,v]) => [k,
-    v === null ? {nullValue:null} : typeof v === 'boolean' ? {booleanValue:v}
-      : typeof v === 'number' ? {integerValue:String(v)}
-      : v instanceof Date ? {timestampValue:v.toISOString()} : {stringValue:v},
-  ]));
+  return Object.fromEntries(Object.entries(data).map(([k,v])=>[k,
+    v===null?{nullValue:null}:typeof v==='boolean'?{booleanValue:v}:typeof v==='number'?{integerValue:String(v)}
+      :v instanceof Date?{timestampValue:v.toISOString()}:{stringValue:v}]));
 }
-async function request(path, {uid, authTime=100, method='GET', body}={}) {
-  return fetch(`${base}${path}`, {method, headers:{
-    'Content-Type':'application/json',...(uid?{Authorization:`Bearer ${token(uid,authTime)}`}:{})},
-    ...(body?{body:JSON.stringify(body)}:{}),
-  });
+async function http(path,a,method='GET',body) {
+  return fetch(base+path,{method,headers:{'Content-Type':'application/json',...(a?{Authorization:'Bearer '+token(a)}:{})},
+    ...(body?{body:JSON.stringify(body)}:{})});
 }
-async function commit(doc, data, {uid, authTime=100, patch=false, timestamps=[]}={}) {
-  return request(':commit', {uid,authTime,method:'POST',body:{writes:[{
-    update:{name:`projects/${project}/databases/(default)/documents/${doc}`,fields:fields(data)},
-    ...(patch?{updateMask:{fieldPaths:Object.keys(data)}}:{}),
-    ...(timestamps.length?{updateTransforms:timestamps.map(fieldPath=>({fieldPath,setToServerValue:'REQUEST_TIME'}))}:{}),
-  }]}});
+async function patch(path,a,data,timestamps=['updatedAt']) {
+  return http(':commit',a,'POST',{writes:[{update:{name:'projects/'+project+'/databases/(default)/documents/'+path,fields:fields(data)},
+    updateMask:{fieldPaths:Object.keys(data)},updateTransforms:timestamps.map(fieldPath=>({fieldPath,setToServerValue:'REQUEST_TIME'}))}]});
 }
-async function status(response, expected) {
-  assert.equal(response.status,expected,await response.text());
+async function status(r,want){assert.equal(r.status,want,await r.text());}
+const path=a=>'users/'+a.uid+'/sessions/'+a.sid;
+async function revoke(a,target=a.sid) {
+  const auth={verifyIdToken:async()=>({uid:a.uid,sid:a.sid,auth_time:a.authTime})};
+  return createRevokeDeviceSessionsHandler({auth,db,FieldValue})({
+    auth:{uid:a.uid},rawRequest:{headers:{authorization:'Bearer local-test'}},data:{mode:'single',sessionId:target}});
 }
-function session(id) {
-  const date=new Date('2026-01-01T00:00:00Z');
-  return {sessionId:id,deviceId:'installation-123',alias:'Phone',platform:'android',model:'Phone',
-    manufacturer:'Test',osVersion:'16',appVersion:'1',buildNumber:'1',locale:'ar',
-    createdAt:date,lastSeenAt:date,updatedAt:date,isTrusted:false,isRevoked:false,
-    revokedAt:null,revokeReason:null,networkType:null};
-}
-before(async()=>{
-  const res=await fetch(`http://${host}/emulator/v1/projects/${project}/databases/(default)/documents`,{method:'DELETE'});
-  assert.equal(res.status,200);
-});
 after(async()=>{await db.terminate();await deleteApp(app);});
 
-test('owner may create/read a session; anonymous and other users cannot',async()=>{
-  await status(await commit('users/alice/sessions/a',session('a'),{uid:'alice'}),200);
-  await status(await request('/users/alice/sessions/a',{uid:'alice'}),200);
-  await status(await request('/users/alice/sessions/a'),403);
-  await status(await request('/users/alice/sessions/a',{uid:'bob'}),403);
-  await status(await commit('users/alice/sessions/b',session('b'),{uid:'bob'}),403);
+test('server creates sessions; owner reads while anonymous and other users cannot',async()=>{
+  const a=await actor(),b=await actor();
+  await status(await http('/'+path(a),a),200);
+  await status(await http('/'+path(a)),403);
+  await status(await http('/'+path(a),b),403);
+  await status(await patch('users/'+a.uid+'/sessions/forged',a,{isRevoked:false}),403);
 });
-test('activity and alias updates remain allowed',async()=>{
-  await status(await commit('users/alice/sessions/a',{alias:'My phone',lastSeenAt:new Date()},{uid:'alice',patch:true}),200);
+test('activity and aliases remain allowed with server timestamps',async()=>{
+  const a=await actor();
+  await status(await patch(path(a),a,{alias:'My phone'},['updatedAt','lastSeenAt']),200);
 });
-test('revocation is permanent even when an old client writes isRevoked=false',async()=>{
-  await status(await commit('users/alice/sessions/a',{isRevoked:true,revokeReason:'manual'},
-    {uid:'alice',patch:true,timestamps:['revokedAt','updatedAt']}),200);
-  await status(await commit('users/alice/sessions/a',{isRevoked:false,revokedAt:null,revokeReason:null},
-    {uid:'alice',patch:true}),403);
-  await status(await request('/users/alice/sessions/a',{uid:'alice',method:'DELETE'}),403);
+test('revocation cannot be undone or deleted even by another active device',async()=>{
+  const a=await actor(),b=await actor(a.uid);await revoke(b,a.sid);
+  await status(await patch(path(a),b,{isRevoked:false,revokedAt:null,revokeReason:null}),403);
+  await status(await http('/'+path(a),b,'DELETE'),403);
 });
-test('legacy sessions can be revoked without allowing arbitrary legacy edits',async()=>{
-  await db.doc('users/legacy/sessions/old').set({deviceName:'Old phone',platform:'android'});
-  await status(await commit('users/legacy/sessions/old',{deviceName:'Changed'},{uid:'legacy',patch:true}),403);
-  await status(await commit('users/legacy/sessions/old',{isRevoked:true,revokeReason:'manual'},
-    {uid:'legacy',patch:true,timestamps:['revokedAt','updatedAt']}),200);
+test('legacy sessions can be revoked through server only',async()=>{
+  const a=await actor();
+  const old='b'.repeat(64);
+  await db.doc('users/'+a.uid+'/sessions/'+old).set({deviceName:'Old phone',platform:'android'});
+  await status(await patch('users/'+a.uid+'/sessions/'+old,a,{deviceName:'Changed'}),403);
+  await revoke(a,old);
+  assert.equal((await db.doc('users/'+a.uid+'/sessions/'+old).get()).data().isRevoked,true);
 });
 test('clients cannot read or change the server revocation cutoff',async()=>{
-  await db.doc('authRevocations/cutoff-user').set({revokedBefore:100});
-  await status(await request('/authRevocations/cutoff-user',{uid:'cutoff-user',authTime:101}),403);
-  await status(await commit('authRevocations/cutoff-user',{revokedBefore:0},{uid:'cutoff-user',authTime:101}),403);
+  const a=await actor();
+  await status(await http('/authRevocations/'+a.uid,a),403);
+  await status(await patch('authRevocations/'+a.uid,a,{revokedBefore:0}),403);
 });
-test('old and equal-time logins lose access; a later login regains access',async()=>{
-  await db.doc('users/cutoff-user').set({name:'User'});
-  await db.doc('users/cutoff-user/sessions/s').set(session('s'));
+test('old and equal-time logins lose data access; later authenticated session remains usable',async()=>{
+  const a=await actor();await db.doc('authRevocations/'+a.uid).set({revokedBefore:100});
   for(const authTime of [99,100]) {
-    await status(await request('/users/cutoff-user',{uid:'cutoff-user',authTime}),403);
-    await status(await request('/users/cutoff-user/sessions/s',{uid:'cutoff-user',authTime}),403);
-    await status(await commit('users/cutoff-user/sessions/new',session('new'),{uid:'cutoff-user',authTime}),403);
-    await status(await commit('users/cutoff-user',{name:'Changed'},{uid:'cutoff-user',authTime,patch:true}),403);
+    await status(await http('/users/'+a.uid,{...a,authTime}),403);
+    await status(await patch('users/'+a.uid,{...a,authTime},{name:'Changed'},[]),403);
   }
-  await status(await request('/users/cutoff-user',{uid:'cutoff-user',authTime:101}),200);
-  await status(await commit('users/cutoff-user/sessions/new',session('new'),{uid:'cutoff-user',authTime:101}),200);
+  await status(await http('/users/'+a.uid,{...a,authTime:101}),200);
 });
+test('revoked sessions reject heartbeat, alias changes and full replacement',async()=>{
+  const a=await actor(),b=await actor(a.uid);await revoke(b,a.sid);
+  for(const data of [{alias:'Restored'},{isTrusted:true},{isRevoked:false}]) await status(await patch(path(a),b,data),403);
+  await status(await patch(path(a),a,{},['lastSeenAt','updatedAt']),403);
+});
+test('session identity stays immutable while current metadata refreshes',async()=>{
+  const a=await actor();
+  await status(await patch(path(a),a,{deviceId:'installation',model:'Phone',appVersion:'2',isTrusted:true},['lastSeenAt','updatedAt']),200);
+  for(const data of [{sessionId:'other'},{deviceId:'other'},{createdAt:new Date()},{authSessionVersion:2},{role:'admin'}]) {
+    await status(await patch(path(a),a,data),403);
+  }
+});
+test('metadata and trusted-device preferences remain editable',async()=>{
+  const a=await actor(),b=await actor(a.uid);
+  await status(await patch(path(a),a,{alias:'Renamed',isTrusted:true,model:'Phone',osVersion:'17',appVersion:'2',buildNumber:'2',locale:'fr'},['lastSeenAt','updatedAt']),200);
+  await status(await patch(path(a),b,{alias:'My other phone',isTrusted:false}),200);
+});
+test('heartbeat cannot create a missing record',async()=>{
+  const a=await actor();await status(await patch('users/'+a.uid+'/sessions/missing',a,{},['lastSeenAt','updatedAt']),403);
+});
+test('initialization without optional networkType matches Flutter metadata writer',async()=>{
+  const a=await actor();await status(await patch(path(a),a,{deviceId:'installation',alias:'Phone',model:'Phone',platform:'android',manufacturer:'Test',osVersion:'16',appVersion:'1',buildNumber:'1',locale:'ar'},['lastSeenAt','updatedAt']),200);
+});
+test('legacy initialization cannot promote a client-created record to authority',async()=>{
+  const a=await actor(),p='users/'+a.uid+'/sessions/legacy';
+  await db.doc(p).set({deviceName:'Legacy',platform:'android',legacyValue:'unchanged'});
+  await status(await patch(p,a,{authSessionVersion:1,sessionId:a.sid,isRevoked:false}),403);
+  assert.equal((await db.doc(p).get()).data().legacyValue,'unchanged');
+});
+test('unknown fields and malformed metadata are denied',async()=>{
+  const a=await actor();
+  for(const data of [{admin:true},{alias:42},{isTrusted:'true'},{lastSeenAt:'invalid'},{isRevoked:'false'},{revokedAt:new Date()},{revokeReason:'forged'}]) {
+    await status(await patch(path(a),a,data),403);
+  }
+});
+test('forged revocation timestamps and reasons are denied',async()=>{
+  const a=await actor();await status(await patch(path(a),a,{isRevoked:true,revokeReason:'manual',revokedAt:new Date(0)},[]),403);
+  await status(await patch(path(a),a,{isRevoked:true,revokeReason:'unexpected'}),403);
+});
+test('repeat selective revocation is idempotent without resurrection',async()=>{
+  const a=await actor(),b=await actor(a.uid);
+  await revoke(b,a.sid);await revoke(b,a.sid);
+  await status(await patch(path(a),b,{alias:'not allowed'}),403);
+  await status(await patch(path(a),a,{},['lastSeenAt','updatedAt']),403);
+});
+test('session documents cannot be deleted even before revocation',async()=>{
+  const a=await actor();await status(await http('/'+path(a),a,'DELETE'),403);
+});
+test('active and full session queries stay owner scoped',async()=>{
+  const a=await actor(),b=await actor();
+  await status(await http('/users/'+a.uid+'/sessions',a),200);
+  await status(await http('/users/'+a.uid+'/sessions',b),403);
+  const body={structuredQuery:{from:[{collectionId:'sessions'}],where:{fieldFilter:{field:{fieldPath:'isRevoked'},op:'EQUAL',value:{booleanValue:false}}},orderBy:[{field:{fieldPath:'lastSeenAt'},direction:'DESCENDING'}]}};
+  await status(await http('/users/'+a.uid+':runQuery',a,'POST',body),200);
+  await status(await http('/users/'+a.uid+':runQuery',b,'POST',body),403);
+});
+test('malformed cutoff denies profile and other session reads',async()=>{
+  const a=await actor(),b=await actor(a.uid);await db.doc('authRevocations/'+a.uid).set({revokedBefore:'invalid'});
+  await status(await http('/users/'+a.uid,a),403);
+  await status(await http('/'+path(b),a),403);
+});
+
+// Retained global logout handler regression coverage.
 function backend(uid,{authTime=100,cutoff=200,invalid=false}={}) {
   const calls=[];
   const auth={
@@ -115,116 +163,23 @@ test('callable rejects anonymous, foreign targets, mismatched uid and revoked to
   assert.deepEqual(calls,[]);
 });
 test('server revokes only the authenticated user, including more than one batch',async()=>{
+  const uid='server-user-'+randomUUID(), untouched='untouched-'+randomUUID();
   let batch=db.batch();
   for(let i=0;i<401;i++){
-    batch.set(db.doc(`users/server-user/sessions/s${i}`),{isRevoked:false});
+    batch.set(db.doc(`users/${uid}/sessions/s${i}`),{isRevoked:false});
     if(i===399){await batch.commit();batch=db.batch();}
   }
   await batch.commit();
-  await db.doc('users/untouched/sessions/a').set({isRevoked:false});
-  const {handler,calls}=backend('server-user');
-  assert.deepEqual(await handler(callableRequest('server-user')),{revoked:true});
-  assert.deepEqual(calls,['server-user']);
-  assert.equal((await db.doc('authRevocations/server-user').get()).data().revokedBefore,200);
-  const docs=await db.collection('users/server-user/sessions').get();
+  await db.doc('users/'+untouched+'/sessions/a').set({isRevoked:false});
+  const {handler,calls}=backend(uid);
+  assert.deepEqual(await handler(callableRequest(uid)),{revoked:true});
+  assert.deepEqual(calls,[uid]);
+  assert.equal((await db.doc('authRevocations/'+uid).get()).data().revokedBefore,200);
+  const docs=await db.collection('users/'+uid+'/sessions').get();
   assert.equal(docs.size,401);
   assert.ok(docs.docs.every(d=>d.data().isRevoked===true));
-  assert.equal((await db.doc('users/untouched/sessions/a').get()).data().isRevoked,false);
-  await assert.rejects(handler(callableRequest('server-user')),e=>e.code==='unauthenticated');
-  assert.deepEqual(calls,['server-user']);
+  assert.equal((await db.doc('users/'+untouched+'/sessions/a').get()).data().isRevoked,false);
+  await assert.rejects(handler(callableRequest(uid)),e=>e.code==='unauthenticated');
+  assert.deepEqual(calls,[uid]);
 });
 
-// Regression/compatibility coverage added after the full-backend audit exposed
-// three failures in the inherited session policy. All writes target the emulator.
-test('session metadata and trusted-device preferences remain editable',async()=>{
-  const path='users/metadata-owner/sessions/device';
-  await status(await commit(path,session('device'),{uid:'metadata-owner'}),200);
-  await status(await commit(path,{alias:'Renamed phone',isTrusted:true,model:'Updated model',
-    osVersion:'17',appVersion:'2',buildNumber:'2',locale:'fr',networkType:'wifi'},
-    {uid:'metadata-owner',patch:true,timestamps:['lastSeenAt','updatedAt']}),200);
-});
-test('session heartbeat cannot create a missing record',async()=>{
-  await status(await commit('users/missing-owner/sessions/missing',{},
-    {uid:'missing-owner',patch:true,timestamps:['lastSeenAt','updatedAt']}),403);
-});
-test('session identity and original creation time are immutable',async()=>{
-  const path='users/immutable-owner/sessions/device';
-  await status(await commit(path,session('device'),{uid:'immutable-owner'}),200);
-  for(const change of [{sessionId:'other'},{deviceId:'other'},{createdAt:new Date()}]) {
-    await status(await commit(path,change,{uid:'immutable-owner',patch:true}),403);
-  }
-});
-test('initialization without optional networkType matches the Flutter writer',async()=>{
-  const record=session('new');delete record.networkType;
-  await status(await commit('users/flutter-owner/sessions/new',record,{uid:'flutter-owner'}),200);
-});
-test('legacy initialization preserves legacy fields without granting arbitrary edits',async()=>{
-  const path='users/legacy-init/sessions/old';
-  await db.doc(path).set({deviceName:'Legacy name',platform:'android',legacyValue:'unchanged'});
-  const record=session('old');delete record.networkType;
-  await status(await commit(path,record,{uid:'legacy-init',patch:true}),200);
-  assert.equal((await db.doc(path).get()).data().legacyValue,'unchanged');
-  await status(await commit(path,{legacyValue:'forged'},{uid:'legacy-init',patch:true}),403);
-  await status(await commit(path,{alias:'New alias'},{uid:'legacy-init',patch:true}),200);
-});
-test('unknown session fields and malformed metadata are denied',async()=>{
-  const path='users/schema-owner/sessions/device';
-  await status(await commit(path,{...session('device'),admin:true},{uid:'schema-owner'}),403);
-  await status(await commit(path,{...session('device'),sessionId:'wrong'},{uid:'schema-owner'}),403);
-  await status(await commit(path,{...session('device'),isTrusted:true},{uid:'schema-owner'}),403);
-  await status(await commit(path,session('device'),{uid:'schema-owner'}),200);
-  for(const change of [{admin:true},{alias:42},{isTrusted:'true'},{lastSeenAt:'invalid'},
-    {isRevoked:'false'},{revokedAt:new Date()},{revokeReason:'forged'}]) {
-    await status(await commit(path,change,{uid:'schema-owner',patch:true}),403);
-  }
-});
-test('all current Flutter revocation reasons are allowed with server timestamps',async()=>{
-  for(const reason of ['manual','logout_all','logout_all_other']) {
-    const path=`users/reasons-owner/sessions/${reason}`;
-    await status(await commit(path,session(reason),{uid:'reasons-owner'}),200);
-    await status(await commit(path,{isRevoked:true,revokeReason:reason},
-      {uid:'reasons-owner',patch:true,timestamps:['revokedAt','updatedAt']}),200);
-  }
-});
-test('forged revocation timestamps and reasons are denied',async()=>{
-  const path='users/revocation-owner/sessions/device';
-  await status(await commit(path,session('device'),{uid:'revocation-owner'}),200);
-  await status(await commit(path,{isRevoked:true,revokeReason:'manual',revokedAt:new Date(0),updatedAt:new Date(0)},
-    {uid:'revocation-owner',patch:true}),403);
-  await status(await commit(path,{isRevoked:true,revokeReason:'unexpected'},
-    {uid:'revocation-owner',patch:true,timestamps:['revokedAt','updatedAt']}),403);
-});
-test('repeat revocation works without allowing revoked-record edits or resurrection',async()=>{
-  const path='users/repeat-owner/sessions/device';
-  await status(await commit(path,session('device'),{uid:'repeat-owner'}),200);
-  for(let i=0;i<2;i++)await status(await commit(path,{isRevoked:true,revokeReason:'manual'},
-    {uid:'repeat-owner',patch:true,timestamps:['revokedAt','updatedAt']}),200);
-  await status(await commit(path,{alias:'not allowed'}, {uid:'repeat-owner',patch:true}),403);
-  await status(await commit(path,{}, {uid:'repeat-owner',patch:true,timestamps:['lastSeenAt','updatedAt']}),403);
-  await status(await commit(path,session('device'),{uid:'repeat-owner'}),403);
-  await status(await request('/'+path,{uid:'repeat-owner',method:'DELETE'}),403);
-});
-test('session documents cannot be deleted even before revocation',async()=>{
-  const path='users/no-delete-owner/sessions/device';
-  await status(await commit(path,session('device'),{uid:'no-delete-owner'}),200);
-  await status(await request('/'+path,{uid:'no-delete-owner',method:'DELETE'}),403);
-});
-test('active-session and full-session queries remain owner-scoped',async()=>{
-  const path='users/list-owner/sessions/device';
-  await status(await commit(path,session('device'),{uid:'list-owner'}),200);
-  await status(await request('/users/list-owner/sessions',{uid:'list-owner'}),200);
-  await status(await request('/users/list-owner/sessions',{uid:'stranger'}),403);
-  const body={structuredQuery:{from:[{collectionId:'sessions'}],where:{fieldFilter:{
-    field:{fieldPath:'isRevoked'},op:'EQUAL',value:{booleanValue:false},
-  }},orderBy:[{field:{fieldPath:'lastSeenAt'},direction:'DESCENDING'}]}};
-  await status(await request('/users/list-owner:runQuery',{uid:'list-owner',method:'POST',body}),200);
-  await status(await request('/users/list-owner:runQuery',{uid:'stranger',method:'POST',body}),403);
-});
-test('malformed server cutoff denies profile and session reads',async()=>{
-  const uid='malformed-cutoff-owner',path=`users/${uid}/sessions/device`;
-  await db.doc(`users/${uid}`).set({displayName:'Owner'});
-  await db.doc(path).set(session('device'));
-  await db.doc(`authRevocations/${uid}`).set({revokedBefore:'invalid'});
-  await status(await request(`/users/${uid}`,{uid}),403);
-  await status(await request('/'+path,{uid}),403);
-});

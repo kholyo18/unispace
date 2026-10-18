@@ -60,3 +60,36 @@ test('owner response remains sanitized and privacy changes are read fresh',async
  await db.doc(`users/${f.target}`).update({'privacy.showEmailOnProfile':true});assert.equal((await f.handler(f.request)).email,'private@example.com');
  await db.doc(`users/${f.target}`).update({'privacy.showEmailOnProfile':false});assert.ok(!('email'in await f.handler(f.request)));
 });
+
+test('messaging audience matches settings defaults and rejects malformed values',async()=>{
+ const f=await setup();
+ assert.equal((await f.handler(f.request)).privacy.whoCanMessage,'mutual');
+ for (const value of ['everyone','followers','mutual','none']) {
+  await db.doc(`users/${f.target}`).update({'privacy.whoCanMessage':value});
+  assert.equal((await f.handler(f.request)).privacy.whoCanMessage,value);
+ }
+ for (const value of [true,7,{},['everyone'],'invalid']) {
+  await db.doc(`users/${f.target}`).update({'privacy.whoCanMessage':value});
+  assert.equal((await f.handler(f.request)).privacy.whoCanMessage,'none');
+ }
+});
+
+test('private visitor receives messaging policy without hidden profile data',async()=>{
+ const f=await setup();
+ await db.doc(`users/${f.target}`).update({'privacy.privateAccount':true,'privacy.whoCanMessage':'followers'});
+ const result=await f.handler(f.request);
+ assert.equal(result.canViewContent,false);
+ assert.equal(result.privacy.whoCanMessage,'followers');
+ for (const key of ['email','security','phoneNumber','academic','coverImageUrl']) assert.ok(!(key in result),key);
+ await db.doc(`users/${f.target}/blocked_accounts/${f.viewer}`).set({});
+ await assert.rejects(f.handler(f.request),{code:'not-found'});
+});
+test('malformed revocation cutoffs fail closed without disclosing a profile',async()=>{
+ const f=await setup();
+ for(const value of [null,false,'invalid',0.5,-1,Number.MAX_SAFE_INTEGER+1]){
+  await db.doc('authRevocations/'+f.viewer).set({revokedBefore:value});
+  await assert.rejects(f.handler(f.request),{code:'unauthenticated'});
+ }
+ await db.doc('authRevocations/'+f.viewer).set({revokedBefore:99});
+ assert.equal((await f.handler(f.request)).canViewContent,true);
+});

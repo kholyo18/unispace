@@ -1,3 +1,4 @@
+const { pushLocales } = require('./push-notification-text');
 const { HttpsError } = require('firebase-functions/v2/https');
 const { createHash } = require('crypto');
 const { validAuthTime, cutoffAllows } = require('./push-session-policy');
@@ -8,7 +9,11 @@ function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
     const uid = request.auth?.uid, header = request.rawRequest?.headers?.authorization || '';
     if (!uid || !header.startsWith('Bearer ')) throw new HttpsError('unauthenticated','Sign in first.');
     const i = request.data;
-    if (!i || typeof i !== 'object' || Array.isArray(i) || Object.keys(i).length !== (detach ? 1 : 4) ||
+    if (!i || typeof i !== 'object' || Array.isArray(i) || (detach ? Object.keys(i).length !== 1 :
+          (Object.keys(i).length < 4 || Object.keys(i).length > 6 ||
+           Object.keys(i).some(key => !['token','sessionId','platform','preferences','locale','chatActionsVersion'].includes(key)) ||
+           (Object.hasOwn(i, 'locale') && !pushLocales.includes(i.locale)) ||
+           (Object.hasOwn(i, 'chatActionsVersion') && ![0,1].includes(i.chatActionsVersion)))) ||
         typeof i.token !== 'string' || !i.token.trim() || i.token.length > 4096 ||
         (!detach && (!validSessionId(i.sessionId) || !['android','iOS','macOS','windows','linux','fuchsia'].includes(i.platform) ||
         !i.preferences || Array.isArray(i.preferences) || Object.keys(i.preferences).length !== 4 ||
@@ -19,6 +24,7 @@ function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
     try { token = await auth.verifyIdToken(header.slice(7),true); }
     catch (_) { throw new HttpsError('unauthenticated','Sign in again.'); }
     if (token.uid !== uid || !validAuthTime(token.auth_time) || token.firebase?.tenant) throw new HttpsError('unauthenticated','Invalid session.');
+    if (!detach && i.sessionId !== token.sid) throw new HttpsError('permission-denied', 'Session does not match this login.');
     const deviceId = createHash('sha256').update(i.token).digest('hex');
     return db.runTransaction(async tx => {
       const [cutoff,profile] = await tx.getAll(db.doc(`authRevocations/${uid}`),db.doc(`users/${uid}`));
@@ -66,7 +72,7 @@ function createSyncPushDeviceHandler({auth,db,FieldValue}, detach = false) {
         tx.set(oldRef,{authTime:Math.max(previous.authTime,old.data()?.authTime || 0)});
       }
       tx.set(bindingRef,{ownerId:uid,authTime:token.auth_time,sessionId:i.sessionId,sessionCreatedAt:session.data().createdAt,updatedAt:FieldValue.serverTimestamp()});
-      tx.set(collection.doc(deviceId),{token:i.token,authTime:token.auth_time,sessionId:i.sessionId,platform:i.platform,preferences:i.preferences,updatedAt:FieldValue.serverTimestamp()});
+      tx.set(collection.doc(deviceId),{token:i.token,authTime:token.auth_time,sessionId:i.sessionId,platform:i.platform,chatActionsVersion:i.chatActionsVersion??0,preferences:i.preferences,locale:i.locale ?? 'ar',updatedAt:FieldValue.serverTimestamp()});
       for (const doc of duplicates.docs) if (doc.id !== deviceId) tx.delete(doc.ref);
       return {synced:true};
     });

@@ -1,3 +1,4 @@
+const {requestAccepted,validChatMembers}=require('./chat-service');
 const { HttpsError } = require('firebase-functions/v2/https');
 const { readState, validCutoff } = require('./account-state-policy');
 const { removed } = require('./content-search-page');
@@ -73,17 +74,20 @@ function createStorageUploadHandler({ auth, db, FieldValue, Timestamp, bucketNam
       if (policy.chatId) {
         const chat = await tx.get(db.doc(`chats/${policy.chatId}`));
         const members = chat.data()?.memberIds;
-        if (!Array.isArray(members) || members.length !== 2 || new Set(members).size !== 2 ||
-            !members.every(validId) || !members.includes(uid)) throw new HttpsError('permission-denied', 'Chat unavailable.');
+        const group=chat.data()?.type==='group';
+        if(policy.kind!=='wallpaper'&&group&&chat.data()?.adminsOnlyMessaging===true&&!chat.data()?.adminIds?.includes(uid))throw new HttpsError('permission-denied','Only administrators may upload group attachments.');
+        if (!validChatMembers(chat.data()) || !members.includes(uid)) throw new HttpsError('permission-denied', 'Chat unavailable.');
         if (policy.kind !== 'wallpaper') {
-          const peer = members.find(id => id !== uid);
+          const accepted = group ? false : requestAccepted((await tx.get(db.doc(`messageRequests/${policy.chatId}`))).data(),uid,members.find(id=>id!==uid),policy.chatId);
+          for(const peer of members.filter(id=>id!==uid)) {
           await providerAvailable(peer);
           const [owner, state, pendingDelete, following, reverse, ...blocked] = await tx.getAll(
             db.doc(`users/${peer}`), db.doc(`accountStateControls/${peer}`), db.doc(`account_deletion_requests/${peer}`),
             db.doc(`users/${peer}/followers/${uid}`), db.doc(`users/${uid}/followers/${peer}`), ...blocks(uid, peer).map(p => db.doc(p)));
           usable(owner.data(), state.data(), pendingDelete.exists);
-          if (blocked.some(s => s.exists) || !audienceAllows(owner.data().privacy?.whoCanMessage, following.exists, reverse.exists, 'mutual')) {
+          if (blocked.some(s => s.exists) || owner.data().privacy?.whoCanMessage==='none' || (!group && !accepted && !audienceAllows(owner.data().privacy?.whoCanMessage, following.exists, reverse.exists, 'mutual'))) {
             throw new HttpsError('permission-denied', 'Media messaging is not allowed.');
+          }
           }
         }
       }

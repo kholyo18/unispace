@@ -55,20 +55,22 @@ class ExamNotificationsService {
   Future<void> scheduleExamReminders(
     ExamModel exam, {
     required String Function(int minutes) bodyBuilder,
+    String channelName = 'Exam reminders',
+    String channelDescription = 'Notifications for upcoming exams',
   }) async {
     await initialize();
     if (!_permissionsGranted) return;
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       'exams_channel',
-      'exams_channel',
-      channelDescription: 'Notifications for upcoming exams',
+      channelName,
+      channelDescription: channelDescription,
       importance: Importance.max,
       priority: Priority.high,
     );
-    const notificationDetails = NotificationDetails(
+    final notificationDetails = NotificationDetails(
       android: androidDetails,
-      iOS: DarwinNotificationDetails(),
+      iOS: const DarwinNotificationDetails(),
     );
 
     for (final offset in exam.reminderOffsets) {

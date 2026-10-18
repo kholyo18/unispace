@@ -1,3 +1,4 @@
+import '../../../../l10n/feature_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -86,6 +87,8 @@ class _ExamsCalendarPageState extends State<ExamsCalendarPage> {
     final s = S.of(context);
     await _notifications.scheduleExamReminders(
       exam,
+      channelName: featureText(context, 'Exam reminders'),
+      channelDescription: featureText(context, 'Notifications for upcoming exams'),
       bodyBuilder: (minutes) {
         if (minutes >= 1440) {
           return s.examReminder24h(exam.subject);

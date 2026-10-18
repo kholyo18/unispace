@@ -143,7 +143,7 @@ class ChatPreferencesSnapshot {
     muted = readMuted(data, uid);
     nickname = text(own('nicknames'), '');
     autoTranslate = own('autoTranslate') == true;
-    autoTranslateLang = text(own('autoTranslateLang'), 'ar');
+    autoTranslateLang = text(own('autoTranslateLang'), 'auto');
     wallpaper = text(theme['wallpaper'], 'default');
     wallpaperUrl = text(theme['wallpaperUrl'], '');
     final color = theme['bubbleColor'];

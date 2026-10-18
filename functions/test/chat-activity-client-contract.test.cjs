@@ -11,7 +11,7 @@ test('chat screen uses the production activity writer and nested-merge adapter',
   assert.match(page, /_chatActivity = ChatActivityClient\(/);
   assert.match(page, /sessionKey: \(\) => PublicProfileService\.viewerSession/);
   assert.match(page, /\.set\(data, SetOptions\(merge: true\)\)/);
-  assert.match(page, /await _chatActivity\.markRead\(\)/);
+  assert.match(page, /await _chatActivity\.markRead\(shareReadReceipt: _shareReadReceipt\)/);
   assert.match(page, /await _chatActivity\.setTyping\(active\)/);
 });
 test('legacy literal dotted activity set keys are absent from production screen', () => {
@@ -21,6 +21,6 @@ test('legacy literal dotted activity set keys are absent from production screen'
 });
 test('peer typing has a finite deadline and writer closes with the screen', () => {
   assert.match(page, /_peerTypingExpiry = Timer\(remaining,/);
-  assert.match(page, /_peerTypingExpiry\?\.cancel\(\);\s*_chatActivity\.dispose\(\);/);
+  assert.match(page, /_peerTypingExpiry\?\.cancel\(\);[\s\S]*?_chatActivity\.dispose\(\);/);
   assert.match(page, /if \(text\.trim\(\)\.isEmpty\)/);
 });

@@ -44,7 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 # Generated localization files
-lib/generated/
+lib/generated/*
+!lib/generated/l10n.dart
+!lib/generated/intl/
+lib/generated/intl/*
+!lib/generated/intl/*.dart
 
 # Temporary Firebase production index export used for reconciliation
 firestore.indexes.current.json

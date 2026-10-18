@@ -1,3 +1,4 @@
+import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:UniSpace/services/storage_upload_service.dart';
 import '../../services/media_upload_limits.dart';
 import 'dart:async';
@@ -141,7 +142,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
 
   void _snack(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authSettingsText(context, m))));
 
   Future<void> _go(int i) async {
     setState(() => _index = i.clamp(0, _pages.length - 1));
@@ -173,7 +174,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
         break;
       case _SignUpPage.identity:
         if (_first.text.trim().isEmpty) {
-          _snack('الاسم مطلوب');
+          _snack(authSettingsText(context, 'الاسم مطلوب'));
           return;
         }
         break;
@@ -232,7 +233,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
   bool _validateUsername() {
     if (!_usernameKey.currentState!.validate()) return false;
     if (_usernameAvailable != true) {
-      _snack('يرجى اختيار اسم مستخدم متاح.');
+      _snack(authSettingsText(context, 'يرجى اختيار اسم مستخدم متاح.'));
       return false;
     }
     return true;
@@ -256,7 +257,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     if (!_usernameRegex.hasMatch(trimmed)) {
       setState(() {
         _usernameAvailable = false;
-        _usernameStatus = 'الاسم يجب أن يكون 3-20 أحرف (a-z, 0-9, _)';
+        _usernameStatus = authSettingsText(context, 'الاسم يجب أن يكون 3-20 أحرف (a-z, 0-9, _)');
       });
       return;
     }
@@ -269,7 +270,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
         setState(() {
           _usernameAvailable = result.available;
           _usernameStatus =
-          result.available ? 'متاح وقت الفحص (غير محجوز)' : result.reason ?? 'مستعمل';
+          result.available ? authSettingsText(context, 'متاح وقت الفحص (غير محجوز)') : result.reason ?? authSettingsText(context, 'مستعمل');
         });
       } on SignupServiceException catch (e) {
         if (!current()) return;
@@ -332,7 +333,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     final emailUri = Uri(scheme: 'mailto');
     if (!await launchUrl(emailUri, mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
-      _snack('تعذر فتح تطبيق البريد.');
+      _snack(authSettingsText(context, 'تعذر فتح تطبيق البريد.'));
     }
   }
 
@@ -342,10 +343,10 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     final ref = FirebaseStorage.instance.ref('users/$uid/$name');
     final image = File(file.path);
     validateMediaUploadSize(await image.length(), video: false);
-    if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
+    if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError(authSettingsText(context, 'تغيّر الحساب'));
     await StorageUploadService.putFile(ref, image, SettableMetadata(contentType: 'image/jpeg'));
     final url = await ref.getDownloadURL();
-    if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError('تغيّر الحساب');
+    if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError(authSettingsText(context, 'تغيّر الحساب'));
     return url;
   }
 
@@ -364,13 +365,13 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
   Future<void> _finish({required bool skipAcademic}) async {
     if (_first.text.trim().isEmpty) {
       final i = _pages.indexOf(_SignUpPage.identity);
-      _snack('الاسم مطلوب');
+      _snack(authSettingsText(context, 'الاسم مطلوب'));
       await _go(i);
       return;
     }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      _snack('انتهت الجلسة. سجّل الدخول ثم أكمل الملف.');
+      _snack(authSettingsText(context, 'انتهت الجلسة. سجّل الدخول ثم أكمل الملف.'));
       return;
     }
 
@@ -430,8 +431,9 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       Navigator.of(context).popUntil((r) => r.isFirst);
     } catch (e) {
       if (!mounted) return;
-      _snack(e is SignupServiceException && e.code == 'already-exists'
-          ? 'اسم المستخدم حُجز لحساب آخر، اختر اسمًا مختلفًا' : 'تعذر حفظ الملف: $e');
+      final code = e is SignupServiceException ? e.code : e is FirebaseException ? e.code : 'unknown';
+      debugPrint('[Signup] profile save failed: $code');
+      _snack(_mapSignupError(code));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -440,6 +442,17 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
   String _mapSignupError(String code) {
     final l = S.of(context);
     switch (code) {
+      case 'unavailable':
+      case 'deadline-exceeded':
+        return authSettingsText(context, 'تعذر تأكيد حفظ البيانات بسبب الاتصال. بياناتك ما زالت في هذه الشاشة؛ تحقق من الإنترنت ثم أعد الحفظ.');
+      case 'not-found':
+        return authSettingsText(context, 'تعذر الوصول إلى خدمة حفظ الحساب. حاول لاحقًا.');
+      case 'unauthenticated':
+        return authSettingsText(context, 'انتهت الجلسة. سجّل الدخول ثم أكمل الملف.');
+      case 'already-exists':
+        return authSettingsText(context, 'اسم المستخدم حُجز لحساب آخر، اختر اسمًا مختلفًا');
+      case 'resource-exhausted':
+        return l.tooManyRequestsError;
       case 'email-already-in-use':
         return l.emailAlreadyInUseError;
       case 'invalid-email':
@@ -528,7 +541,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
               if (_canSkip)
                 TextButton(
                   onPressed: _busy ? null : _skip,
-                  child: Text('تخطي', style: TextStyle(color: _muted)),
+                  child: Text(authSettingsText(context, 'تخطي'), style: TextStyle(color: _muted)),
                 )
               else
                 const SizedBox(width: 64),
@@ -565,7 +578,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
               )
                   : Text(
-                _lastPage ? 'إنهاء والدخول' : 'متابعة',
+                _lastPage ? authSettingsText(context, 'إنهاء والدخول') : authSettingsText(context, 'متابعة'),
                 style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
               ),
             ),
@@ -623,8 +636,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     }
 
     return _shell(
-      title: 'Welcome to UniSpace. ',
-      subtitle: 'Made by students for students. ',
+      title: authSettingsText(context, 'مرحبًا بك في UniSpace.'),
+      subtitle: authSettingsText(context, 'من الطلاب، للطلاب.'),
       child: ListView(
         children: [
           Center(
@@ -688,18 +701,18 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
           const SizedBox(height: 22),
           feature(
             Icons.groups_2_outlined,
-            'المجتمع',
-            'منشورات وزملاء من كليتك',
+            authSettingsText(context, 'المجتمع'),
+            authSettingsText(context, 'منشورات وزملاء من كليتك'),
           ),
           feature(
             Icons.chat_bubble_outline_rounded,
-            'المحادثات',
-            'تواصل مباشر مع دفعتك',
+            authSettingsText(context, 'المحادثات'),
+            authSettingsText(context, 'تواصل مباشر مع دفعتك'),
           ),
           feature(
             Icons.calculate_outlined,
-            'المعدل',
-            'حاسبة سريعة لموادك',
+            authSettingsText(context, 'المعدل'),
+            authSettingsText(context, 'حاسبة سريعة لموادك'),
           ),
         ],
       ),
@@ -708,8 +721,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
   Widget _pageAccount() {
     return _shell(
-      title: 'حسابك',
-      subtitle: 'البريد وكلمة المرور لإنشاء الحساب.',
+      title: authSettingsText(context, 'حسابك'),
+      subtitle: authSettingsText(context, 'البريد وكلمة المرور لإنشاء الحساب.'),
       child: Form(
         key: _accountKey,
         child: ListView(
@@ -719,11 +732,11 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
               style: TextStyle(color: _ink),
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
-              decoration: _deco(label: 'البريد الإلكتروني', icon: Icons.mail_outline_rounded),
+              decoration: _deco(label: authSettingsText(context, 'البريد الإلكتروني'), icon: Icons.mail_outline_rounded),
               validator: (value) {
-                if (value == null || value.trim().isEmpty) return 'البريد الإلكتروني مطلوب.';
+                if (value == null || value.trim().isEmpty) return authSettingsText(context, 'البريد الإلكتروني مطلوب.');
                 final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                if (!emailRegex.hasMatch(value.trim())) return 'صيغة البريد الإلكتروني غير صحيحة.';
+                if (!emailRegex.hasMatch(value.trim())) return authSettingsText(context, 'صيغة البريد الإلكتروني غير صحيحة.');
                 return null;
               },
             ),
@@ -734,7 +747,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
               obscureText: _obscurePass,
               textInputAction: TextInputAction.next,
               decoration: _deco(
-                label: 'كلمة المرور',
+                label: authSettingsText(context, 'كلمة المرور'),
                 icon: Icons.lock_outline,
                 suffix: IconButton(
                   onPressed: () => setState(() => _obscurePass = !_obscurePass),
@@ -742,8 +755,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
                 ),
               ),
               validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'كلمة المرور مطلوبة.';
-                if (v.trim().length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.';
+                if (v == null || v.trim().isEmpty) return authSettingsText(context, 'كلمة المرور مطلوبة.');
+                if (v.trim().length < 6) return authSettingsText(context, 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
                 return null;
               },
             ),
@@ -753,7 +766,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
               style: TextStyle(color: _ink),
               obscureText: _obscureConfirm,
               decoration: _deco(
-                label: 'تأكيد كلمة المرور',
+                label: authSettingsText(context, 'تأكيد كلمة المرور'),
                 icon: Icons.lock_reset_outlined,
                 suffix: IconButton(
                   onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
@@ -761,8 +774,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
                 ),
               ),
               validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'يرجى تأكيد كلمة المرور.';
-                if (v.trim() != _password.text.trim()) return 'كلمة المرور غير متطابقة.';
+                if (v == null || v.trim().isEmpty) return authSettingsText(context, 'يرجى تأكيد كلمة المرور.');
+                if (v.trim() != _password.text.trim()) return authSettingsText(context, 'كلمة المرور غير متطابقة.');
                 return null;
               },
             ),
@@ -783,7 +796,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
           const SizedBox(height: 20),
           TextButton(
             onPressed: _busy ? null : _openEmailApp,
-            child: Text('فتح البريد', style: TextStyle(color: AppTeal.main, fontWeight: FontWeight.w800)),
+            child: Text(authSettingsText(context, 'فتح البريد'), style: TextStyle(color: AppTeal.main, fontWeight: FontWeight.w800)),
           ),
           const SizedBox(height: 8),
           TextButton(
@@ -802,8 +815,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
   Widget _pageUsername() {
     return _shell(
-      title: 'اسم المستخدم',
-      subtitle: 'سيظهر في ملفك الشخصي.',
+      title: authSettingsText(context, 'اسم المستخدم'),
+      subtitle: authSettingsText(context, 'سيظهر في ملفك الشخصي.'),
       child: Form(
         key: _usernameKey,
         child: ListView(
@@ -813,7 +826,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
               style: TextStyle(color: _ink),
               onChanged: _handleUsernameChange,
               decoration: _deco(
-                label: 'اسم المستخدم',
+                label: authSettingsText(context, 'اسم المستخدم'),
                 icon: Icons.alternate_email,
                 suffix: _checkingUsername
                     ? const Padding(
@@ -824,8 +837,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
               ),
               validator: (value) {
                 final trimmed = value?.trim() ?? '';
-                if (trimmed.isEmpty) return 'اسم المستخدم مطلوب.';
-                if (!_usernameRegex.hasMatch(trimmed)) return 'يسمح فقط بالأحرف والأرقام و _';
+                if (trimmed.isEmpty) return authSettingsText(context, 'اسم المستخدم مطلوب.');
+                if (!_usernameRegex.hasMatch(trimmed)) return authSettingsText(context, 'يسمح فقط بالأحرف والأرقام و _');
                 return null;
               },
             ),
@@ -850,8 +863,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
   Widget _pagePhotos() {
     return _shell(
-      title: 'صورتك',
-      subtitle: 'غلاف وصورة شخصية. يمكنك التخطي.',
+      title: authSettingsText(context, 'صورتك'),
+      subtitle: authSettingsText(context, 'غلاف وصورة شخصية. يمكنك التخطي.'),
       child: ListView(
         children: [
           SizedBox(
@@ -873,7 +886,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
                           : DecorationImage(image: FileImage(File(_cover!.path)), fit: BoxFit.cover),
                     ),
                     alignment: Alignment.center,
-                    child: _cover == null ? Text('إضافة غلاف', style: TextStyle(color: _muted)) : null,
+                    child: _cover == null ? Text(authSettingsText(context, 'إضافة غلاف'), style: TextStyle(color: _muted)) : null,
                   ),
                 ),
                 Positioned(
@@ -906,21 +919,21 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
   Widget _pageIdentity() {
     return _shell(
-      title: 'من أنت؟',
-      subtitle: 'الاسم إلزامي. الباقي اختياري.',
+      title: authSettingsText(context, 'من أنت؟'),
+      subtitle: authSettingsText(context, 'الاسم إلزامي. الباقي اختياري.'),
       child: ListView(
         children: [
           TextField(
             controller: _first,
             style: TextStyle(color: _ink),
             onChanged: (_) => setState(() {}),
-            decoration: _deco(label: 'الاسم *', icon: Icons.person_outline),
+            decoration: _deco(label: authSettingsText(context, 'الاسم *'), icon: Icons.person_outline),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _last,
             style: TextStyle(color: _ink),
-            decoration: _deco(label: 'اللقب', icon: Icons.badge_outlined),
+            decoration: _deco(label: authSettingsText(context, 'اللقب'), icon: Icons.badge_outlined),
           ),
           const SizedBox(height: 12),
           Material(
@@ -942,7 +955,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
                 side: BorderSide(color: _stroke),
               ),
               title: Text(
-                _birth == null ? 'تاريخ الميلاد' : '${_birth!.day}/${_birth!.month}/${_birth!.year}',
+                _birth == null ? authSettingsText(context, 'تاريخ الميلاد') : MaterialLocalizations.of(context).formatMediumDate(_birth!),
                 style: TextStyle(color: _birth == null ? _muted : _ink),
               ),
               trailing: Icon(Icons.calendar_today_outlined, color: _muted, size: 18),
@@ -955,7 +968,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
             children: [
               for (final g in ['ذكر', 'أنثى', 'أفضل عدم القول'])
                 ChoiceChip(
-                  label: Text(g),
+                  label: Text(authSettingsText(context, g)),
                   selected: _gender == g,
                   selectedColor: AppTeal.main.withValues(alpha: 0.22),
                   labelStyle: TextStyle(
@@ -975,17 +988,17 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
   Widget _pageAcademic() {
     return _shell(
-      title: 'دراستك',
-      subtitle: 'الكلية والتخصص والمستوى — يمكن تخطيها.',
+      title: authSettingsText(context, 'دراستك'),
+      subtitle: authSettingsText(context, 'الكلية والتخصص والمستوى — يمكن تخطيها.'),
       child: ListView(
         children: [
-          TextField(controller: _college, style: TextStyle(color: _ink), decoration: _deco(label: 'الكلية / الجامعة')),
+          TextField(controller: _college, style: TextStyle(color: _ink), decoration: _deco(label: authSettingsText(context, 'الكلية / الجامعة'))),
           const SizedBox(height: 12),
-          TextField(controller: _department, style: TextStyle(color: _ink), decoration: _deco(label: 'القسم')),
+          TextField(controller: _department, style: TextStyle(color: _ink), decoration: _deco(label: authSettingsText(context, 'القسم'))),
           const SizedBox(height: 12),
-          TextField(controller: _major, style: TextStyle(color: _ink), decoration: _deco(label: 'التخصص')),
+          TextField(controller: _major, style: TextStyle(color: _ink), decoration: _deco(label: authSettingsText(context, 'التخصص'))),
           const SizedBox(height: 12),
-          TextField(controller: _level, style: TextStyle(color: _ink), decoration: _deco(label: 'المستوى')),
+          TextField(controller: _level, style: TextStyle(color: _ink), decoration: _deco(label: authSettingsText(context, 'المستوى'))),
         ],
       ),
     );

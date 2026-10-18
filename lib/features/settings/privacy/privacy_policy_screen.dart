@@ -1,6 +1,7 @@
+import '../../../l10n/feature_strings.dart';
 import 'package:flutter/material.dart';
 
-/// Read-only Arabic privacy policy for the current UniSpace app.
+/// Read-only localized privacy policy for the current UniSpace app.
 /// Reading this page does not record consent or change login state.
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -8,11 +9,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final sections = featureLegalSections(context, 'privacy',
+      _privacySections.map((s) => (heading: s.heading, body: s.body)).toList());
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: Directionality.of(context),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('سياسة الخصوصية'),
+          title: Text(featureText(context, 'سياسة الخصوصية')),
           centerTitle: true,
           leading: const BackButton(key: ValueKey('privacy-reader-back')),
         ),
@@ -28,28 +31,28 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'سياسة الخصوصية – UniSpace',
+                        featureText(context, 'سياسة الخصوصية – UniSpace'),
                         key: const ValueKey('privacy-reader-title'),
                         style: textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text('الإصدار 1.0 — نافذ من 18 سبتمبر 2026'),
+                      Text(featureText(context, 'الإصدار 1.0 — نافذ من 18 سبتمبر 2026')),
                       const SizedBox(height: 12),
-                      const Text(
-                        'توضح هذه السياسة كيف يعالج UniSpace البيانات في النسخة الحالية '
+                      Text(
+                        featureText(context, 'توضح هذه السياسة كيف يعالج UniSpace البيانات في النسخة الحالية '
                         'من الخدمة، وما الخيارات المتاحة للمستخدم بشأنها. قراءة السياسة '
                         'أو إغلاقها لا تحدد خانة الموافقة على شروط الاستخدام ولا تسجل '
-                        'موافقة مستقلة على معالجة اختيارية.',
+                        'موافقة مستقلة على معالجة اختيارية.'),
                         key: ValueKey('privacy-reader-policy-notice'),
                       ),
                       const SizedBox(height: 24),
-                      for (var i = 0; i < _privacySections.length; i++) ...[
+                      for (var i = 0; i < sections.length; i++) ...[
                         Semantics(
                           header: true,
                           child: Text(
-                            _privacySections[i].heading,
+                            sections[i].heading,
                             key: ValueKey('privacy-heading-${i + 1}'),
                             style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
@@ -59,7 +62,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _privacySections[i].body,
+                          sections[i].body,
                           style: textTheme.bodyMedium?.copyWith(height: 1.7),
                         ),
                         const SizedBox(height: 24),

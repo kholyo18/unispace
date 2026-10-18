@@ -1,4 +1,6 @@
+import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'account_state_service.dart';
+import 'algerian_phone.dart';
 import 'push_preferences_service.dart';
 import '../auth/account_recovery_screen.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -58,10 +60,10 @@ class NotificationsSettingsScreen extends StatelessWidget {
                 valueListenable: PushPreferencesService.instance.status,
                 builder: (context, status, _) => ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('إشعارات هذا الجهاز'),
-                  subtitle: Text(status),
+                  title: Text(authSettingsText(context, 'إشعارات هذا الجهاز')),
+                  subtitle: Text(authSettingsText(context, status)),
                   trailing: IconButton(
-                    tooltip: 'إعادة المزامنة',
+                    tooltip: authSettingsText(context, 'إعادة المزامنة'),
                     icon: const Icon(Icons.sync),
                     onPressed: () => PushPreferencesService.instance.sync(),
                   ),
@@ -150,14 +152,15 @@ class PrivacySettingsScreen extends StatefulWidget {
 
 class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
   bool _saving = false;
-  Future<void> _savePrivacy({ProfileVisibility? visibility, bool? showEmail}) async {
+  Future<void> _savePrivacy(
+      {ProfileVisibility? visibility, bool? showEmail}) async {
     if (_saving) return;
     setState(() => _saving = true);
     try {
       await UserProfileService.instance.updateProfile(profileVisibility: visibility, showEmailInProfile: showEmail);
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر حفظ إعدادات الخصوصية. حاول مجددًا.')));
+        SnackBar(content: Text(authSettingsText(context, 'تعذر حفظ إعدادات الخصوصية. حاول مجددًا.'))));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1003,11 +1006,11 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     return await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('تأكيد إنهاء الجلسات'),
-        content: Text(message),
+        title: Text(authSettingsText(context, 'تأكيد إنهاء الجلسات')),
+        content: Text(authSettingsText(context, message)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('إنهاء')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(authSettingsText(context, 'إلغاء'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(authSettingsText(context, 'إنهاء'))),
         ],
       ),
     ) ?? false;
@@ -1019,7 +1022,8 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     try {
       if (!await _confirmSessionAction(confirmation) || !mounted) return false;
       await action();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
+      if (mounted) ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(success)));
       return true;
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -1035,7 +1039,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     if (sessionId == _localSessionId) return false;
     return _runSessionAction(
       () => SessionService.instance.revokeSession(user: user, sessionId: sessionId),
-      confirmation: 'سيُطلب من هذا الجهاز تسجيل الدخول مجددًا عند اتصاله بالخدمة.',
+      confirmation: authSettingsText(context, 'سيُطلب من هذا الجهاز تسجيل الدخول مجددًا عند اتصاله بالخدمة.'),
       success: S.of(context).sessionSignedOutSuccess,
     );
   }
@@ -1045,7 +1049,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
     if (current == null) return;
     await _runSessionAction(
       () => SessionService.instance.revokeAllOtherSessions(uid: uid, currentSessionId: current),
-      confirmation: 'إنهاء الجلسات الأخرى مع إبقاء هذا الجهاز؟ تُطبّق التغييرات على الأجهزة عند اتصالها بالخدمة.',
+      confirmation: authSettingsText(context, 'إنهاء الجلسات الأخرى مع إبقاء هذا الجهاز؟ تُطبّق التغييرات على الأجهزة عند اتصالها بالخدمة.'),
       success: S.of(context).otherSessionsSignedOutSuccess,
     );
   }
@@ -1084,7 +1088,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           child: Text(
                             session.alias,
                             style: Theme.of(context).textTheme.titleMedium,
-                            textDirection: m.TextDirection.rtl,
+                            textDirection: Directionality.of(context),
                           ),
                         ),
                       ],
@@ -1092,7 +1096,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: aliasController,
-                      textDirection: m.TextDirection.rtl,
+                      textDirection: Directionality.of(context),
                       decoration: InputDecoration(labelText: S.of(context).sessionDeviceNameLabel),
                     ),
                     const SizedBox(height: 8),
@@ -1106,7 +1110,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           if (context.mounted) setSheetState(() => trusted = value);
                         } catch (_) {
                           if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('تعذر حفظ حالة الجهاز')),
+                            SnackBar(content: Text(authSettingsText(context, 'تعذر حفظ حالة الجهاز'))),
                           );
                         }
                       },
@@ -1126,7 +1130,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         final alias = aliasController.text.trim();
                         if (alias.isEmpty || alias.length > 100) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('اسم الجهاز يجب أن يكون بين حرف و100 حرف')),
+                            SnackBar(content: Text(authSettingsText(context, 'اسم الجهاز يجب أن يكون بين حرف و100 حرف'))),
                           );
                           return;
                         }
@@ -1137,7 +1141,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           if (context.mounted) Navigator.of(context).pop();
                         } catch (_) {
                           if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('تعذر حفظ اسم الجهاز')),
+                            SnackBar(content: Text(authSettingsText(context, 'تعذر حفظ اسم الجهاز'))),
                           );
                         }
                       },
@@ -1153,7 +1157,8 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                         child: Text(S.of(context).signOut),
                       ),
                     const SizedBox(height: 12),
-                    Text(S.of(context).dangerZone, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.red)),
+                    Text(S.of(context).dangerZone, style: Theme.of(context)
+                            .textTheme.titleSmall?.copyWith(color: Colors.red)),
                     const SizedBox(height: 8),
                     OutlinedButton(
                       onPressed: () => _logoutAllOther(user.uid),
@@ -1163,7 +1168,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                       onPressed: () async {
                         await _runSessionAction(
                           () async { await SecurityService.instance.logoutAllDevices(); },
-                          confirmation: 'إنهاء جميع الجلسات، بما فيها هذا الجهاز؟',
+                          confirmation: authSettingsText(context, 'إنهاء جميع الجلسات، بما فيها هذا الجهاز؟'),
                           success: S.of(context).sessionSignedOutSuccess,
                         );
                       },
@@ -1195,14 +1200,16 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
               builder: (context, snapshot) {
                 if (snapshot.hasError || _sessionLoadFailed) {
                   return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Text('تعذر تحميل الجلسات. حاول مجددًا.'),
-                    TextButton(onPressed: _loadSessionId, child: const Text('إعادة المحاولة')),
+                    Text(authSettingsText(context, 'تعذر تحميل الجلسات. حاول مجددًا.')),
+                    TextButton(onPressed: _loadSessionId, child: Text(authSettingsText(context, 'إعادة المحاولة'))),
                   ]));
                 }
                 if (snapshot.connectionState == ConnectionState.waiting || _loadingSession) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final sessions = (snapshot.data ?? const <SessionModel>[]).where((s) => !s.isRevoked).toList()
+                final sessions = (snapshot.data ?? const <SessionModel>[])
+                    .where((s) => !s.isRevoked)
+                    .toList()
                   ..sort((a, b) {
                     if (a.isOnline != b.isOnline) return a.isOnline ? -1 : 1;
                     final aTs = a.lastSeenAt ?? a.createdAt;
@@ -1223,7 +1230,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Text(S.of(context).manageDevicesDescription, textDirection: m.TextDirection.rtl),
+                    Text(S.of(context).manageDevicesDescription, textDirection: Directionality.of(context)),
                     const SizedBox(height: 12),
                     Card(
                       child: ListTile(
@@ -1231,12 +1238,12 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                             ? null
                             : () => _showSessionDetails(user: user, session: currentSession, isCurrent: true),
                         leading: Icon(Icons.circle, color: (currentSession?.isOnline ?? false) ? Colors.green : Colors.grey, size: 12),
-                        title: Text(S.of(context).currentDeviceTitle, textDirection: m.TextDirection.rtl),
+                        title: Text(S.of(context).currentDeviceTitle, textDirection: Directionality.of(context)),
                         subtitle: Text(
                           currentSession == null
-                              ? 'لم تتوفر بيانات هذا الجهاز بعد'
+                              ? authSettingsText(context, 'لم تتوفر بيانات هذا الجهاز بعد')
                               : '${currentSession.alias}\n${_relativeSince(currentSession.lastSeenAt, context)}',
-                          textDirection: m.TextDirection.rtl,
+                          textDirection: Directionality.of(context),
                         ),
                         isThreeLine: true,
                       ),
@@ -1248,7 +1255,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           child: Text(
                             S.of(context).activeSessionsTitle,
                             style: Theme.of(context).textTheme.titleMedium,
-                            textDirection: m.TextDirection.rtl,
+                            textDirection: Directionality.of(context),
                           ),
                         ),
                         TextButton(onPressed: () => _logoutAllOther(user.uid), child: Text(S.of(context).logoutAllOtherDevices)),
@@ -1259,7 +1266,7 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                       Card(
                         child: ListTile(
                           leading: const Icon(Icons.devices_other),
-                          title: Text(S.of(context).activeSessionsEmpty, textDirection: m.TextDirection.rtl),
+                          title: Text(S.of(context).activeSessionsEmpty, textDirection: Directionality.of(context)),
                         ),
                       )
                     else
@@ -1268,8 +1275,8 @@ class _ManageDevicesScreenState extends State<ManageDevicesScreen> {
                           child: ListTile(
                             onTap: () => _showSessionDetails(user: user, session: session, isCurrent: false),
                             leading: Icon(Icons.circle, color: session.isOnline ? Colors.green : Colors.grey, size: 10),
-                            title: Text(session.alias, textDirection: m.TextDirection.rtl),
-                            subtitle: Text(_relativeSince(session.lastSeenAt, context), textDirection: m.TextDirection.rtl),
+                            title: Text(session.alias, textDirection: Directionality.of(context)),
+                            subtitle: Text(_relativeSince(session.lastSeenAt, context), textDirection: Directionality.of(context)),
                             trailing: TextButton(
                               onPressed: () => _logoutSession(user, session.id),
                               child: Text(S.of(context).signOut),
@@ -1447,7 +1454,8 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
       final current = FirebaseAuth.instance.currentUser;
       if (current == null || current.uid != user.uid) return;
       final factors = await current.multiFactor.getEnrolledFactors();
-      final profile = await FirebaseFirestore.instance.collection('users').doc(current.uid)
+      final profile = await FirebaseFirestore.instance.collection('users')
+          .doc(current.uid)
           .get(const GetOptions(source: Source.server));
       final security = Map<String, dynamic>.from(profile.data()?['security'] ?? {});
       if (!mounted) return;
@@ -1500,13 +1508,13 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _alerts = !value);
-      _toast('تعذر حفظ التنبيهات');
+      _toast(authSettingsText(context, 'تعذر حفظ التنبيهات'));
     }
   }
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authSettingsText(context, msg))));
   }
 
   Future<void> _open<T>(Widget page) async {
@@ -1520,14 +1528,14 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
   Widget build(BuildContext context) {
     final user = _user;
     if (user == null) {
-      return const Center(child: Text('سجّل الدخول أولًا'));
+      return Center(child: Text(authSettingsText(context, 'سجّل الدخول أولًا')));
     }
 
     if (_loadingSecurity) return const Center(child: CircularProgressIndicator());
     if (_securityLoadFailed) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('تعذر قراءة حالة الأمان. لم تُغيّر إعداداتك.'),
-        TextButton(onPressed: _boot, child: const Text('إعادة المحاولة')),
+        Text(authSettingsText(context, 'تعذر قراءة حالة الأمان. لم تُغيّر إعداداتك.')),
+        TextButton(onPressed: _boot, child: Text(authSettingsText(context, 'إعادة المحاولة'))),
       ]));
     }
 
@@ -1540,25 +1548,25 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
     final missing = <_SecMissingStep>[
       if (!_twoFactorOn)
         _SecMissingStep(
-          'فعّل التأكيد بخطوتين',
+          authSettingsText(context, 'فعّل التأكيد بخطوتين'),
           Icons.verified_user_outlined,
               () => _open(const _TwoFactorPage()),
         ),
       if (email.isNotEmpty && !emailVerified)
         _SecMissingStep(
-          'أكّد بريدك الإلكتروني',
+          authSettingsText(context, 'أكّد بريدك الإلكتروني'),
           Icons.mark_email_unread_outlined,
               () => _open(const _EmailSecurityPage()),
         ),
       if (!hasPhone)
         _SecMissingStep(
-          'أضف رقم هاتف للاستعادة',
+          authSettingsText(context, 'أضف رقم هاتف للاستعادة'),
           Icons.phone_iphone_rounded,
               () => _open(const _PhoneSecurityPage()),
         ),
       if (!_alerts)
         _SecMissingStep(
-          'فعّل تنبيهات الدخول',
+          authSettingsText(context, 'فعّل تنبيهات الدخول'),
           Icons.notifications_active_outlined,
               () => _toggleAlerts(true),
         ),
@@ -1566,7 +1574,8 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
 
     const totalChecks = SecurityChecklist.total;
     final score = SecurityChecklist(hasEmail: email.isNotEmpty, emailVerified: emailVerified,
-      hasPhone: hasPhone, loginAlerts: _alerts, twoFactor: _twoFactorOn).completed;
+      hasPhone: hasPhone, loginAlerts: _alerts, twoFactor: _twoFactorOn)
+        .completed;
 
     return RefreshIndicator(
       color: kSecurityAccent,
@@ -1577,26 +1586,26 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
           _SecScoreCard(score: score, total: totalChecks, missing: missing),
           const SizedBox(height: 22),
           _SecGroup(
-            title: 'تسجيل الدخول',
+            title: authSettingsText(context, 'تسجيل الدخول'),
             children: [
               _SecRowTile(
                 icon: Icons.password_rounded,
-                title: 'كلمة المرور',
+                title: authSettingsText(context, 'كلمة المرور'),
                 subtitle: hasPassword
-                    ? 'تغيير كلمة مرور الحساب'
-                    : 'الحساب مرتبط بطريقة دخول خارجية',
+                    ? authSettingsText(context, 'تغيير كلمة مرور الحساب')
+                    : authSettingsText(context, 'الحساب مرتبط بطريقة دخول خارجية'),
                 onTap: hasPassword
                     ? () => _open(const _ChangePasswordPage())
-                    : () => _toast('لا توجد كلمة مرور محلية لهذا الحساب'),
+                    : () => _toast(authSettingsText(context, 'لا توجد كلمة مرور محلية لهذا الحساب')),
               ),
               const _SecRowDivider(),
               _SecRowTile(
                 icon: Icons.verified_user_outlined,
-                title: 'التأكيد بخطوتين',
+                title: authSettingsText(context, 'التأكيد بخطوتين'),
                 subtitle: _twoFactorOn
-                    ? 'مفعّل عبر تطبيق المصادقة'
-                    : 'يمنع الدخول حتى مع معرفة كلمة المرور',
-                badge: _twoFactorOn ? 'مفعّل' : 'غير مفعّل',
+                    ? authSettingsText(context, 'مفعّل عبر تطبيق المصادقة')
+                    : authSettingsText(context, 'يمنع الدخول حتى مع معرفة كلمة المرور'),
+                badge: _twoFactorOn ? authSettingsText(context, 'مفعّل') : authSettingsText(context, 'غير مفعّل'),
                 badgeTone: _twoFactorOn
                     ? _SecBadgeTone.ok
                     : _SecBadgeTone.warn,
@@ -1615,15 +1624,15 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
           ),
           const SizedBox(height: 18),
           _SecGroup(
-            title: 'البريد والهاتف',
+            title: authSettingsText(context, 'البريد والهاتف'),
             children: [
               _SecRowTile(
                 icon: Icons.mail_outline_rounded,
-                title: 'البريد الإلكتروني',
-                subtitle: email.isEmpty ? 'غير مضاف' : email,
+                title: authSettingsText(context, 'البريد الإلكتروني'),
+                subtitle: email.isEmpty ? authSettingsText(context, 'غير مضاف') : email,
                 badge: email.isEmpty
-                    ? 'ناقص'
-                    : (emailVerified ? 'مؤكَّد' : 'غير مؤكَّد'),
+                    ? authSettingsText(context, 'ناقص')
+                    : (emailVerified ? authSettingsText(context, 'مؤكَّد') : authSettingsText(context, 'غير مؤكَّد')),
                 badgeTone: email.isEmpty
                     ? _SecBadgeTone.danger
                     : (emailVerified ? _SecBadgeTone.ok : _SecBadgeTone.warn),
@@ -1632,9 +1641,9 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
               const _SecRowDivider(),
               _SecRowTile(
                 icon: Icons.phone_outlined,
-                title: 'رقم الهاتف',
-                subtitle: hasPhone ? phone : 'يُستخدم لاستعادة الحساب',
-                badge: hasPhone ? 'مضاف' : 'غير مضاف',
+                title: authSettingsText(context, 'رقم الهاتف'),
+                subtitle: hasPhone ? phone : authSettingsText(context, 'يُستخدم لاستعادة الحساب'),
+                badge: hasPhone ? authSettingsText(context, 'مضاف') : authSettingsText(context, 'غير مضاف'),
                 badgeTone:
                 hasPhone ? _SecBadgeTone.ok : _SecBadgeTone.warn,
                 onTap: () => _open(const _PhoneSecurityPage()),
@@ -1643,7 +1652,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
           ),
           const SizedBox(height: 18),
           _SecGroup(
-            title: 'الأجهزة والجلسات',
+            title: authSettingsText(context, 'الأجهزة والجلسات'),
             children: [
               _SecSessionsPreview(
                 uid: user.uid,
@@ -1653,7 +1662,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
           ),
           const SizedBox(height: 18),
           _SecGroup(
-            title: 'التنبيهات',
+            title: authSettingsText(context, 'التنبيهات'),
             children: [
               SwitchListTile(
                 contentPadding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
@@ -1663,14 +1672,14 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
                       : Icons.notifications_off_outlined,
                   color: kSecurityAccent,
                 ),
-                title: const Text(
-                  'تنبيهات الدخول',
+                title: Text(
+                  authSettingsText(context, 'تنبيهات الدخول'),
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(
                   _alerts
-                      ? 'نُعلمك عند دخول جديد من جهاز غير معروف'
-                      : 'لن يصلك تنبيه عند دخول جديد',
+                      ? authSettingsText(context, 'نُعلمك عند دخول جديد من جهاز غير معروف')
+                      : authSettingsText(context, 'لن يصلك تنبيه عند دخول جديد'),
                 ),
                 value: _loadingAlerts ? true : _alerts,
                 activeColor: kSecurityAccent,
@@ -1681,22 +1690,22 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
 
           const SizedBox(height: 18),
           _SecGroup(
-            title: 'حالات الطوارئ',
+            title: authSettingsText(context, 'حالات الطوارئ'),
             children: [
               _SecRowTile(
                 icon: Icons.gpp_bad_outlined,
-                title: 'تم اختراق حسابي',
-                subtitle: 'إنهاء الأجهزة الأخرى فورًا',
+                title: authSettingsText(context, 'تم اختراق حسابي'),
+                subtitle: authSettingsText(context, 'إنهاء الأجهزة الأخرى فورًا'),
                 onTap: () => _open(const _CompromisedAccountPage()),
               ),
               const _SecRowDivider(),
               _SecRowTile(
                 icon: Icons.pause_circle_outline_rounded,
-                title: 'تجميد الحساب',
+                title: authSettingsText(context, 'تجميد الحساب'),
                 subtitle: _frozen
-                    ? 'ملفك مخفي — اضغط لإلغاء التجميد'
-                    : 'إخفاء الملف ووقف الرسائل مؤقتًا',
-                badge: _frozen ? 'مجمّد' : null,
+                    ? authSettingsText(context, 'ملفك مخفي — اضغط لإلغاء التجميد')
+                    : authSettingsText(context, 'إخفاء الملف ووقف الرسائل مؤقتًا'),
+                badge: _frozen ? authSettingsText(context, 'مجمّد') : null,
                 badgeTone: _frozen ? _SecBadgeTone.warn : null,
                 onTap: () async {
                   await _open(const _FreezeAccountPage());
@@ -1706,15 +1715,15 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
               const _SecRowDivider(),
               _SecRowTile(
                 icon: Icons.delete_outline_rounded,
-                title: 'حذف الحساب',
-                subtitle: 'حذف نهائي لا يمكن التراجع عنه',
+                title: authSettingsText(context, 'حذف الحساب'),
+                subtitle: authSettingsText(context, 'حذف نهائي لا يمكن التراجع عنه'),
                 onTap: () => _open(const _DeleteAccountPage()),
               ),
             ],
           ),
           const SizedBox(height: 18),
           Text(
-            'هذه الإعدادات تحمي دخول حسابك. من يرى منشوراتك ومن يراسلك في تبويب الخصوصية.',
+            authSettingsText(context, 'هذه الإعدادات تحمي دخول حسابك. من يرى منشوراتك ومن يراسلك في تبويب الخصوصية.'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               height: 1.45,
@@ -1756,16 +1765,16 @@ class _SecScoreCard extends StatelessWidget {
     final String sub;
     if (ratio >= 1) {
       tone = const Color(0xFF16A34A);
-      headline = 'حسابك محمي جيدًا';
-      sub = 'كل خطوات الحماية الأساسية مكتملة.';
+      headline = authSettingsText(context, 'حسابك محمي جيدًا');
+      sub = authSettingsText(context, 'كل خطوات الحماية الأساسية مكتملة.');
     } else if (ratio >= 0.5) {
       tone = const Color(0xFFD97706);
-      headline = 'حسابك يحتاج تعزيزًا';
-      sub = 'أكمل ${missing.length} خطوة لحماية أفضل.';
+      headline = authSettingsText(context, 'حسابك يحتاج تعزيزًا');
+      sub = authSettingsText(context, 'أكمل {count} خطوة لحماية أفضل.', {'count': missing.length});
     } else {
       tone = const Color(0xFFDC2626);
-      headline = 'حسابك معرض للخطر';
-      sub = 'فعّل الخطوات الناقصة في أقرب وقت.';
+      headline = authSettingsText(context, 'حسابك معرض للخطر');
+      sub = authSettingsText(context, 'فعّل الخطوات الناقصة في أقرب وقت.');
     }
 
     return Container(
@@ -1881,11 +1890,11 @@ class _SecGroup extends StatelessWidget {
             ),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF16181C) : Colors.white,
+        Material(
+          color: isDark ? const Color(0xFF16181C) : Colors.white,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
+            side: BorderSide(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.08)
                   : Colors.black.withValues(alpha: 0.06),
@@ -2029,15 +2038,15 @@ class _SecSessionsPreview extends StatelessWidget {
       builder: (context, snapshot) {
         final sessions = snapshot.data ?? const <SessionModel>[];
         final subtitle = snapshot.hasError
-            ? 'تعذر تحميل الجلسات — افتح القائمة لإعادة المحاولة'
+            ? authSettingsText(context, 'تعذر تحميل الجلسات — افتح القائمة لإعادة المحاولة')
             : !snapshot.hasData
-                ? 'جاري تحميل الجلسات…'
+                ? authSettingsText(context, 'جاري تحميل الجلسات…')
                 : sessions.isEmpty
-                    ? 'لا توجد جلسات مسجّلة'
-                    : '${sessions.length} جلسات مسجّلة — عرض الأجهزة وآخر نشاط';
+                    ? authSettingsText(context, 'لا توجد جلسات مسجّلة')
+                    : authSettingsText(context, '{count} جلسات مسجّلة — عرض الأجهزة وآخر نشاط', {'count': sessions.length});
         return _SecRowTile(
           icon: Icons.devices_rounded,
-          title: 'الأجهزة والجلسات',
+          title: authSettingsText(context, 'الأجهزة والجلسات'),
           subtitle: subtitle,
           badge: snapshot.hasData && sessions.isNotEmpty ? '${sessions.length}' : null,
           badgeTone: snapshot.hasError ? _SecBadgeTone.warn : null,
@@ -2073,12 +2082,12 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
   }
 
   String? _validate() {
-    if (_current.text.isEmpty) return 'أدخل كلمة المرور الحالية';
-    if (_next.text.length < 8) return 'كلمة المرور الجديدة 8 أحرف على الأقل';
+    if (_current.text.isEmpty) return authSettingsText(context, 'أدخل كلمة المرور الحالية');
+    if (_next.text.length < 8) return authSettingsText(context, 'كلمة المرور الجديدة 8 أحرف على الأقل');
     if (_next.text == _current.text) {
-      return 'اختر كلمة مرور مختلفة عن الحالية';
+      return authSettingsText(context, 'اختر كلمة مرور مختلفة عن الحالية');
     }
-    if (_next.text != _confirm.text) return 'كلمتا المرور غير متطابقتين';
+    if (_next.text != _confirm.text) return authSettingsText(context, 'كلمتا المرور غير متطابقتين');
     return null;
   }
 
@@ -2101,21 +2110,21 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
       final logoutOthers = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('تم تغيير كلمة المرور'),
-          content: const Text(
-            'هل تريد إنهاء الجلسات على الأجهزة الأخرى؟',
+          title: Text(authSettingsText(context, 'تم تغيير كلمة المرور')),
+          content: Text(
+            authSettingsText(context, 'هل تريد إنهاء الجلسات على الأجهزة الأخرى؟'),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('إبقاء الجلسات'),
+              child: Text(authSettingsText(context, 'إبقاء الجلسات')),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: kSecurityAccent,
               ),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('إنهاء الأخرى'),
+              child: Text(authSettingsText(context, 'إنهاء الأخرى')),
             ),
           ],
         ),
@@ -2127,12 +2136,12 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث كلمة المرور')),
+        SnackBar(content: Text(authSettingsText(context, 'تم تحديث كلمة المرور'))),
       );
     } on FirebaseAuthException catch (e) {
       _snack(_secAuthError(e));
     } catch (e) {
-      _snack('تعذر تغيير كلمة المرور');
+      _snack(authSettingsText(context, 'تعذر تغيير كلمة المرور'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2140,38 +2149,38 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
 
   void _snack(String m) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authSettingsText(context, m))));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('كلمة المرور')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'كلمة المرور'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          const Text(
-            'استخدم كلمة مرور طويلة وغير مستخدمة في حسابات أخرى.',
+          Text(
+            authSettingsText(context, 'استخدم كلمة مرور طويلة وغير مستخدمة في حسابات أخرى.'),
             style: TextStyle(height: 1.45),
           ),
           const SizedBox(height: 18),
           _SecPasswordField(
             controller: _current,
-            label: 'كلمة المرور الحالية',
+            label: authSettingsText(context, 'كلمة المرور الحالية'),
             visible: _show1,
             onToggle: () => setState(() => _show1 = !_show1),
           ),
           const SizedBox(height: 12),
           _SecPasswordField(
             controller: _next,
-            label: 'كلمة المرور الجديدة',
+            label: authSettingsText(context, 'كلمة المرور الجديدة'),
             visible: _show2,
             onToggle: () => setState(() => _show2 = !_show2),
           ),
           const SizedBox(height: 12),
           _SecPasswordField(
             controller: _confirm,
-            label: 'تأكيد كلمة المرور',
+            label: authSettingsText(context, 'تأكيد كلمة المرور'),
             visible: _show3,
             onToggle: () => setState(() => _show3 = !_show3),
           ),
@@ -2191,7 +2200,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
                 color: Colors.white,
               ),
             )
-                : const Text('حفظ كلمة المرور'),
+                : Text(authSettingsText(context, 'حفظ كلمة المرور')),
           ),
         ],
       ),
@@ -2271,7 +2280,7 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
     try {
       await user.sendEmailVerification();
       setState(() => _sentVerify = true);
-      _snack('أُرسل رابط التأكيد إلى بريدك');
+      _snack(authSettingsText(context, 'أُرسل رابط التأكيد إلى بريدك'));
     } on FirebaseAuthException catch (e) {
       _snack(_secAuthError(e));
     } finally {
@@ -2285,15 +2294,15 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
     final next = _email.text.trim();
     if (user == null) return;
     if (next.isEmpty || !next.contains('@')) {
-      _snack('أدخل بريدًا صالحًا');
+      _snack(authSettingsText(context, 'أدخل بريدًا صالحًا'));
       return;
     }
     if (next == current) {
-      _snack('هذا هو بريدك الحالي');
+      _snack(authSettingsText(context, 'هذا هو بريدك الحالي'));
       return;
     }
     if (_hasPasswordProvider(user) && _password.text.isEmpty) {
-      _snack('أدخل كلمة المرور لتأكيد التغيير');
+      _snack(authSettingsText(context, 'أدخل كلمة المرور لتأكيد التغيير'));
       return;
     }
     setState(() => _busy = true);
@@ -2302,12 +2311,12 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
       await user.verifyBeforeUpdateEmail(next);
       if (!mounted) return;
       _snack(
-        'أُرسل رابط تأكيد إلى $next. لن يُعتمد البريد الجديد قبل فتح الرابط.',
+        authSettingsText(context, 'أُرسل رابط تأكيد إلى {email}. لن يُعتمد البريد الجديد قبل فتح الرابط.', {'email': next}),
       );
     } on FirebaseAuthException catch (e) {
       _snack(_secAuthError(e));
     } catch (_) {
-      _snack('تعذر تحديث البريد');
+      _snack(authSettingsText(context, 'تعذر تحديث البريد'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2315,7 +2324,7 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
 
   void _snack(String m) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authSettingsText(context, m))));
   }
 
   @override
@@ -2324,7 +2333,7 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
     final verified = user?.emailVerified == true;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('البريد الإلكتروني')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'البريد الإلكتروني'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -2338,30 +2347,30 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
                   ? const Color(0xFF16A34A)
                   : const Color(0xFFD97706),
             ),
-            title: Text(verified ? 'البريد مؤكَّد' : 'البريد غير مؤكَّد'),
+            title: Text(verified ? authSettingsText(context, 'البريد مؤكَّد') : authSettingsText(context, 'البريد غير مؤكَّد')),
             subtitle: Text(user?.email ?? ''),
             trailing: verified
                 ? null
                 : TextButton(
               onPressed: _busy ? null : _sendVerify,
-              child: Text(_sentVerify ? 'أُرسل' : 'إرسال التأكيد'),
+              child: Text(_sentVerify ? authSettingsText(context, 'أُرسل') : authSettingsText(context, 'إرسال التأكيد')),
             ),
           ),
           const SizedBox(height: 18),
-          const Text(
-            'تغيير البريد',
+          Text(
+            authSettingsText(context, 'تغيير البريد'),
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'سنرسل رابطًا إلى العنوان الجديد. لن يتبدل البريد قبل التأكيد.',
+          Text(
+            authSettingsText(context, 'سنرسل رابطًا إلى العنوان الجديد. لن يتبدل البريد قبل التأكيد.'),
           ),
           const SizedBox(height: 14),
           TextField(
             controller: _email,
             keyboardType: TextInputType.emailAddress,
             decoration: InputDecoration(
-              labelText: 'البريد الجديد',
+              labelText: authSettingsText(context, 'البريد الجديد'),
               filled: true,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -2374,7 +2383,7 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
             controller: _password,
             obscureText: true,
             decoration: InputDecoration(
-              labelText: 'كلمة المرور الحالية',
+              labelText: authSettingsText(context, 'كلمة المرور الحالية'),
               filled: true,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -2398,7 +2407,7 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
                 color: Colors.white,
               ),
             )
-                : const Text('إرسال رابط التأكيد'),
+                : Text(authSettingsText(context, 'إرسال رابط التأكيد')),
           ),
         ],
       ),
@@ -2433,12 +2442,13 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
   }
 
   Future<void> _sendCode() async {
-    var phone = _phone.text.trim();
-    if (phone.isEmpty) {
-      _snack('أدخل رقمًا بصيغة دولية مثل +213…');
+    if (_busy) return;
+    final phone = normalizeAlgerianMobile(_phone.text);
+    if (phone == null) {
+      _snack(authSettingsText(context, 'أدخل رقم هاتف جزائري يبدأ بـ 05 أو 06 أو 07'));
       return;
     }
-    if (!phone.startsWith('+')) phone = '+$phone';
+    _phone.text = phone;
     setState(() => _busy = true);
     try {
       await FirebaseAuth.instance.verifyPhoneNumber(
@@ -2459,7 +2469,7 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
             _verificationId = id;
             _busy = false;
           });
-          _snack('أُرسل رمز التحقق');
+          _snack(authSettingsText(context, 'أُرسل رمز التحقق'));
         },
         codeAutoRetrievalTimeout: (id) {
           _verificationId = id;
@@ -2470,18 +2480,18 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
       _snack(_secAuthError(e));
     } catch (_) {
       setState(() => _busy = false);
-      _snack('تعذر إرسال الرمز');
+      _snack(authSettingsText(context, 'تعذر إرسال الرمز'));
     }
   }
 
   Future<void> _confirm() async {
     final id = _verificationId;
     if (id == null) {
-      _snack('أرسل الرمز أولًا');
+      _snack(authSettingsText(context, 'أرسل الرمز أولًا'));
       return;
     }
     if (_otp.text.trim().length < 6) {
-      _snack('أدخل رمز التحقق');
+      _snack(authSettingsText(context, 'أدخل رمز التحقق'));
       return;
     }
     setState(() => _busy = true);
@@ -2511,12 +2521,12 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ رقم الهاتف')),
+        SnackBar(content: Text(authSettingsText(context, 'تم حفظ رقم الهاتف'))),
       );
     } on FirebaseAuthException catch (e) {
       if (e.code == 'provider-already-linked' ||
           e.code == 'credential-already-in-use') {
-        _snack('هذا الرقم مرتبط بحساب آخر');
+        _snack(authSettingsText(context, 'هذا الرقم مرتبط بحساب آخر'));
       } else {
         _snack(_secAuthError(e));
       }
@@ -2525,7 +2535,7 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
 
   void _snack(String m) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authSettingsText(context, m))));
   }
 
   @override
@@ -2533,25 +2543,32 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
     final current = FirebaseAuth.instance.currentUser?.phoneNumber;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('رقم الهاتف')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'رقم الهاتف'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           Text(
             current == null || current.isEmpty
-                ? 'أضف رقمًا لاستعادة الحساب إذا فقدت البريد أو كلمة المرور.'
-                : 'رقمك الحالي: $current',
+                ? authSettingsText(context, 'أضف رقمًا لاستعادة الحساب إذا فقدت البريد أو كلمة المرور.')
+                : authSettingsText(context, 'رقمك الحالي: {phone}', {'phone': current}),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _phone,
             keyboardType: TextInputType.phone,
             inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9+٠-٩۰-۹ \-().]')),
+              LengthLimitingTextInputFormatter(22),
             ],
+            onChanged: (_) {
+              if (_verificationId == null) return;
+              setState(() => _verificationId = null);
+              _otp.clear();
+            },
             decoration: InputDecoration(
-              labelText: 'رقم الهاتف (صيغة دولية)',
-              hintText: '+213555000000',
+              labelText: authSettingsText(context, 'رقم هاتف جزائري'),
+              hintText: '0555000000',
+              helperText: authSettingsText(context, 'يبدأ بـ 05 أو 06 أو 07، وسيُحفظ تلقائيًا بصيغة +213'),
               filled: true,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -2566,7 +2583,7 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
               foregroundColor: kSecurityAccent,
               minimumSize: const Size.fromHeight(48),
             ),
-            child: const Text('إرسال رمز التحقق'),
+            child: Text(authSettingsText(context, 'إرسال رمز التحقق')),
           ),
           if (_verificationId != null) ...[
             const SizedBox(height: 18),
@@ -2574,8 +2591,9 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
               controller: _otp,
               keyboardType: TextInputType.number,
               maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
-                labelText: 'رمز التحقق',
+                labelText: authSettingsText(context, 'رمز التحقق'),
                 filled: true,
                 counterText: '',
                 border: OutlineInputBorder(
@@ -2600,7 +2618,7 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
                   color: Colors.white,
                 ),
               )
-                  : const Text('تأكيد الرقم'),
+                  : Text(authSettingsText(context, 'تأكيد الرقم')),
             ),
           ],
         ],
@@ -2631,7 +2649,7 @@ String _secAuthError(FirebaseAuthException e) {
     case 'weak-password':
       return 'كلمة المرور ضعيفة';
     case 'too-many-requests':
-      return 'محاولات كثيرة، انتظر قليلًا';
+      return 'أوقف Firebase إرسال الرموز مؤقتًا لهذا الجهاز بسبب كثرة المحاولات. انتظر حتى يزول الحظر ثم حاول مرة واحدة.';
     case 'invalid-phone-number':
       return 'رقم الهاتف غير صالح';
     case 'invalid-verification-code':
@@ -2639,7 +2657,7 @@ String _secAuthError(FirebaseAuthException e) {
     case 'session-expired':
       return 'انتهت صلاحية الرمز، أعد الإرسال';
     default:
-      return e.message ?? 'حدث خطأ';
+      return 'حدث خطأ';
   }
 }
 
@@ -2688,7 +2706,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
 
   void _snack(String m) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authSettingsText(context, m))));
   }
 
   Future<void> _startEnroll() async {
@@ -2712,13 +2730,13 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
       if (e.code == 'unsupported' ||
           (e.message ?? '').toLowerCase().contains('second factor')) {
         _snack(
-          'التأكيد بخطوتين غير متاح حاليًا. حاول لاحقًا.',
+          authSettingsText(context, 'التأكيد بخطوتين غير متاح حاليًا. حاول لاحقًا.'),
         );
       } else {
         _snack(_secAuthError(e));
       }
     } catch (e) {
-      _snack('تعذر بدء التفعيل. تحقق من الاتصال وحاول مجددًا.');
+      _snack(authSettingsText(context, 'تعذر بدء التفعيل. تحقق من الاتصال وحاول مجددًا.'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2727,11 +2745,11 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
   Future<void> _generateRecoveryKey() async {
     if (_busy) return;
     final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('إنشاء مفتاح استعادة'),
-      content: const Text('سيُلغى أي مفتاح سابق. سيُعرض المفتاح الجديد مرة واحدة لحفظه خارج هذا الجهاز.'),
+      title: Text(authSettingsText(context, 'إنشاء مفتاح استعادة')),
+      content: Text(authSettingsText(context, 'سيُلغى أي مفتاح سابق. سيُعرض المفتاح الجديد مرة واحدة لحفظه خارج هذا الجهاز.')),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('متابعة')),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(authSettingsText(context, 'إلغاء'))),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(authSettingsText(context, 'متابعة'))),
       ],
     ));
     if (confirmed != true || !mounted || _busy) return;
@@ -2740,7 +2758,8 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
       if (!await _secReauthWithPassword(context) || !mounted) return;
       await FirebaseAuth.instance.currentUser!.getIdToken(true);
       final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
-          .httpsCallable('generateTotpRecoveryKey').call<Map<String, dynamic>>();
+          .httpsCallable('generateTotpRecoveryKey')
+          .call<Map<String, dynamic>>();
       final key = result.data['key'];
       if (key is! String || !RegExp(r'^[0-9A-F]{4}(-[0-9A-F]{4}){7}$').hasMatch(key)) {
         throw StateError('Recovery key not confirmed');
@@ -2759,7 +2778,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
     final code = _code.text.trim();
     if (_busy || secret == null) return;
     if (!RegExp(r'^[0-9]{6}$').hasMatch(code)) {
-      _snack('أدخل رمز 6 أرقام من التطبيق');
+      _snack(authSettingsText(context, 'أدخل رمز 6 أرقام من التطبيق'));
       return;
     }
     setState(() => _busy = true);
@@ -2769,10 +2788,24 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
         secret,
         code,
       );
-      await FirebaseAuth.instance.currentUser!.multiFactor.enroll(
+      final user = FirebaseAuth.instance.currentUser!;
+      await user.multiFactor.enroll(
         assertion,
         displayName: 'Authenticator',
       );
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'security': {'mfaEnabled': true},
+        }, SetOptions(merge: true));
+      } catch (error) {
+        debugPrint('MFA enrollment metadata sync failed: $error');
+      }
+      try {
+        await user.getIdToken(true);
+      } catch (_) {
+        debugPrint(
+            'MFA enrolled; token refresh will retry on the next auth event.');
+      }
       if (!mounted) return;
       setState(() {
         _on = true;
@@ -2780,10 +2813,12 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
         _otpauth = null;
       });
       _code.clear();
+      _snack(
+          authSettingsText(context, 'تم تفعيل التأكيد بخطوتين. سيُطلب رمز تطبيق المصادقة عند تسجيل الدخول التالي.'));
     } on FirebaseAuthException catch (e) {
       _snack(_secAuthError(e));
     } catch (_) {
-      _snack('رمز غير صحيح أو انتهت صلاحيته');
+      _snack(authSettingsText(context, 'رمز غير صحيح أو انتهت صلاحيته'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2800,9 +2835,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
         await user.multiFactor.unenroll(factorUid: f.uid);
       }
       await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set({
+          .collection('users').doc(user.uid).set({
         'security': {
           'mfaEnabled': false,
           'backupCodes': [],
@@ -2812,11 +2845,11 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
       setState(() {
         _on = false;
       });
-      _snack('تم إيقاف التأكيد بخطوتين');
+      _snack(authSettingsText(context, 'تم إيقاف التأكيد بخطوتين'));
     } on FirebaseAuthException catch (e) {
       _snack(_secAuthError(e));
     } catch (_) {
-      _snack('تعذر إكمال تحديث الإعدادات. راجع حالة التأكيد بخطوتين قبل المحاولة مجددًا.');
+      _snack(authSettingsText(context, 'تعذر إكمال تحديث الإعدادات. راجع حالة التأكيد بخطوتين قبل المحاولة مجددًا.'));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -2828,18 +2861,18 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading || _loadFailed) {
-      return Scaffold(appBar: AppBar(title: const Text('التأكيد بخطوتين')),
+      return Scaffold(appBar: AppBar(title: Text(authSettingsText(context, 'التأكيد بخطوتين'))),
         body: Center(child: _loading ? const CircularProgressIndicator() : Column(
           mainAxisSize: MainAxisSize.min, children: [
-            const Text('تعذر قراءة حالة التأكيد بخطوتين.'),
-            TextButton(onPressed: _load, child: const Text('إعادة المحاولة')),
+            Text(authSettingsText(context, 'تعذر قراءة حالة التأكيد بخطوتين.')),
+            TextButton(onPressed: _load, child: Text(authSettingsText(context, 'إعادة المحاولة'))),
           ],
         )),
       );
     }
     final qr = _otpauth;
     return Scaffold(
-      appBar: AppBar(title: const Text('التأكيد بخطوتين')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'التأكيد بخطوتين'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -2849,9 +2882,9 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
               _on ? Icons.verified_user : Icons.gpp_maybe_outlined,
               color: _on ? const Color(0xFF16A34A) : const Color(0xFFD97706),
             ),
-            title: Text(_on ? 'مفعّل' : 'غير مفعّل'),
-            subtitle: const Text(
-              'عند الدخول من جهاز جديد يُطلب رمز من تطبيق مثل Google Authenticator أو Authy.',
+            title: Text(_on ? authSettingsText(context, 'مفعّل') : authSettingsText(context, 'غير مفعّل')),
+            subtitle: Text(
+              authSettingsText(context, 'عند الدخول من جهاز جديد يُطلب رمز من تطبيق مثل Google Authenticator أو Authy.'),
             ),
           ),
           const SizedBox(height: 8),
@@ -2862,11 +2895,11 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
                 backgroundColor: kSecurityAccent,
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: Text(_busy ? 'جاري التحضير…' : 'تفعيل تطبيق المصادقة'),
+              child: Text(_busy ? authSettingsText(context, 'جاري التحضير…') : authSettingsText(context, 'تفعيل تطبيق المصادقة')),
             ),
           if (qr != null) ...[
-            const Text(
-              '1) امسح الرمز من تطبيق المصادقة، أو أدخل المفتاح يدويًا.',
+            Text(
+              authSettingsText(context, '1) امسح الرمز من تطبيق المصادقة، أو أدخل المفتاح يدويًا.'),
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
@@ -2879,7 +2912,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
             ),
             const SizedBox(height: 8),
             SelectableText(
-              'المفتاح: ${_secret?.secretKey ?? ''}',
+              authSettingsText(context, 'المفتاح: {key}', {'key': _secret?.secretKey ?? ''}),
               textAlign: TextAlign.center,
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
@@ -2895,7 +2928,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
                 fontWeight: FontWeight.w900,
               ),
               decoration: InputDecoration(
-                labelText: '2) أدخل الرمز الظاهر في التطبيق',
+                labelText: authSettingsText(context, '2) أدخل الرمز الظاهر في التطبيق'),
                 counterText: '',
                 filled: true,
                 border: OutlineInputBorder(
@@ -2911,16 +2944,16 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
                 backgroundColor: kSecurityAccent,
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: const Text('تأكيد التفعيل'),
+              child: Text(authSettingsText(context, 'تأكيد التفعيل')),
             ),
           ],
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
-            child: Text('احفظ مفتاح استعادة لاستخدامه إذا فقدت تطبيق المصادقة. الرموز المعروضة في النسخ القديمة لا تعمل للاستعادة.'),
+            child: Text(authSettingsText(context, 'احفظ مفتاح استعادة لاستخدامه إذا فقدت تطبيق المصادقة. الرموز المعروضة في النسخ القديمة لا تعمل للاستعادة.')),
           ),
           if (_on) ...[
             OutlinedButton.icon(onPressed: _busy ? null : _generateRecoveryKey,
-              icon: const Icon(Icons.key_outlined), label: const Text('إنشاء مفتاح استعادة')),
+              icon: const Icon(Icons.key_outlined), label: Text(authSettingsText(context, 'إنشاء مفتاح استعادة'))),
             const SizedBox(height: 18),
             OutlinedButton(
               onPressed: _busy ? null : _disable,
@@ -2928,7 +2961,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
                 foregroundColor: const Color(0xFFDC2626),
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: const Text('إيقاف التأكيد بخطوتين'),
+              child: Text(authSettingsText(context, 'إيقاف التأكيد بخطوتين')),
             ),
           ],
         ],
@@ -2968,7 +3001,7 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
       }
     }
     if (hint == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('طريقة التحقق المطلوبة غير مدعومة في هذه الشاشة.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(authSettingsText(context, 'طريقة التحقق المطلوبة غير مدعومة في هذه الشاشة.'))));
       return;
     }
 
@@ -2985,7 +3018,7 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_secAuthError(e))),
+        SnackBar(content: Text(authSettingsText(context, _secAuthError(e)))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2995,12 +3028,12 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('رمز التحقق')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'رمز التحقق'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            const Text('أدخل الرمز من تطبيق المصادقة.'),
+            Text(authSettingsText(context, 'أدخل الرمز من تطبيق المصادقة.')),
             const SizedBox(height: 16),
             TextField(
               controller: _code,
@@ -3013,7 +3046,7 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
                 fontWeight: FontWeight.w900,
               ),
               decoration: InputDecoration(
-                labelText: 'الرمز',
+                labelText: authSettingsText(context, 'الرمز'),
                 counterText: '',
                 filled: true,
                 border: OutlineInputBorder(
@@ -3029,11 +3062,11 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
                 backgroundColor: kSecurityAccent,
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: const Text('تأكيد'),
+              child: Text(authSettingsText(context, 'تأكيد')),
             ),
             TextButton(onPressed: _busy ? null : () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
-              child: const Text('فقدت تطبيق المصادقة؟')),
+              child: Text(authSettingsText(context, 'فقدت تطبيق المصادقة؟'))),
 
           ],
         ),
@@ -3049,17 +3082,22 @@ Future<bool> _secReauthWithPassword(BuildContext context, {String? password}) as
   try {
     if (_hasPasswordProvider(user)) {
       if (password == null) {
-        final controller = TextEditingController();
+        var enteredPassword = '';
         password = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-          title: const Text('أكّد هويتك'),
-          content: TextField(controller: controller, obscureText: true,
-            decoration: const InputDecoration(labelText: 'كلمة المرور الحالية')),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('متابعة')),
-          ],
-        ));
-        controller.dispose();
+          title: Text(authSettingsText(context, 'أكّد هويتك')),
+          content: TextField(
+              obscureText: true,
+              autofocus: true,
+              onChanged: (value) => enteredPassword = value,
+              decoration: InputDecoration(labelText: authSettingsText(context, 'كلمة المرور الحالية')),
+            ),
+            actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(authSettingsText(context, 'إلغاء'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, enteredPassword), child: Text(authSettingsText(context, 'متابعة')),
+              ),
+            ],
+          ),
+        );
       }
       if (password == null || password.isEmpty) return false;
       await user.reauthenticateWithCredential(EmailAuthProvider.credential(email: user.email!, password: password));
@@ -3076,7 +3114,7 @@ Future<bool> _secReauthWithPassword(BuildContext context, {String? password}) as
       }
     } else {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('طريقة الدخول هذه تحتاج إعادة تحقق غير متاحة بعد.')),
+        SnackBar(content: Text(authSettingsText(context, 'طريقة الدخول هذه تحتاج إعادة تحقق غير متاحة بعد.'))),
       );
       return false;
     }
@@ -3088,11 +3126,12 @@ Future<bool> _secReauthWithPassword(BuildContext context, {String? password}) as
     ));
     return ok == true && FirebaseAuth.instance.currentUser?.uid == uid;
   } on FirebaseAuthException catch (error) {
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_secAuthError(error))));
+    if (context.mounted) ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(authSettingsText(context, _secAuthError(error)))));
     return false;
   } catch (_) {
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تعذر تأكيد هويتك. حاول مجددًا.')),
+      SnackBar(content: Text(authSettingsText(context, 'تعذر تأكيد هويتك. حاول مجددًا.'))),
     );
     return false;
   }
@@ -3113,21 +3152,21 @@ class _CompromisedAccountPageState extends State<_CompromisedAccountPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('تأمين الحساب؟'),
-        content: const Text(
-          'سننهي كل الجلسات على الأجهزة الأخرى. نوصي بتغيير كلمة المرور مباشرة بعد ذلك.',
+        title: Text(authSettingsText(context, 'تأمين الحساب؟')),
+        content: Text(
+          authSettingsText(context, 'سننهي كل الجلسات على الأجهزة الأخرى. نوصي بتغيير كلمة المرور مباشرة بعد ذلك.'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
+            child: Text(authSettingsText(context, 'إلغاء')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('تأمين الآن'),
+            child: Text(authSettingsText(context, 'تأمين الآن')),
           ),
         ],
       ),
@@ -3154,12 +3193,12 @@ class _CompromisedAccountPageState extends State<_CompromisedAccountPage> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إنهاء الجلسات الأخرى')),
+        SnackBar(content: Text(authSettingsText(context, 'تم إنهاء الجلسات الأخرى'))),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر تأمين الحساب')),
+        SnackBar(content: Text(authSettingsText(context, 'تعذر تأمين الحساب'))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -3169,17 +3208,17 @@ class _CompromisedAccountPageState extends State<_CompromisedAccountPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('تم اختراق حسابي')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'تم اختراق حسابي'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          const Text(
-            'استخدم هذا إن دخل أحد إلى حسابك أو رأيت جهازًا لا تعرفه.',
+          Text(
+            authSettingsText(context, 'استخدم هذا إن دخل أحد إلى حسابك أو رأيت جهازًا لا تعرفه.'),
             style: TextStyle(height: 1.45),
           ),
           const SizedBox(height: 16),
-          const Text('• إنهاء كل الأجهزة ما عدا هذا الجهاز'),
-          const Text('• ثم تغيير كلمة المرور'),
+          Text(authSettingsText(context, '• إنهاء كل الأجهزة ما عدا هذا الجهاز')),
+          Text(authSettingsText(context, '• ثم تغيير كلمة المرور')),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _busy ? null : _run,
@@ -3187,7 +3226,7 @@ class _CompromisedAccountPageState extends State<_CompromisedAccountPage> {
               backgroundColor: const Color(0xFFDC2626),
               minimumSize: const Size.fromHeight(48),
             ),
-            child: Text(_busy ? 'جاري التأمين…' : 'تأمين الحساب'),
+            child: Text(_busy ? authSettingsText(context, 'جاري التأمين…') : authSettingsText(context, 'تأمين الحساب')),
           ),
         ],
       ),
@@ -3238,13 +3277,13 @@ class _FreezeAccountPageState extends State<_FreezeAccountPage> {
       setState(() => _frozen = next);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(next ? 'تم تجميد الحساب' : 'تم إلغاء التجميد'),
+          content: Text(next ? authSettingsText(context, 'تم تجميد الحساب') : authSettingsText(context, 'تم إلغاء التجميد')),
         ),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر تحديث حالة الحساب')),
+        SnackBar(content: Text(authSettingsText(context, 'تعذر تحديث حالة الحساب'))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -3254,14 +3293,14 @@ class _FreezeAccountPageState extends State<_FreezeAccountPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('تجميد الحساب')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'تجميد الحساب'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           Text(
             _frozen
-                ? 'الحساب مجمّد. ملفك مخفي ولن تصلك رسائل جديدة حتى إلغاء التجميد.'
-                : 'التجميد يخفي ملفك ويوقف الرسائل دون حذف المنشورات أو المحادثات.',
+                ? authSettingsText(context, 'الحساب مجمّد. ملفك مخفي ولن تصلك رسائل جديدة حتى إلغاء التجميد.')
+                : authSettingsText(context, 'التجميد يخفي ملفك ويوقف الرسائل دون حذف المنشورات أو المحادثات.'),
             style: const TextStyle(height: 1.45),
           ),
           const SizedBox(height: 24),
@@ -3272,7 +3311,7 @@ class _FreezeAccountPageState extends State<_FreezeAccountPage> {
               _frozen ? kSecurityAccent : const Color(0xFFD97706),
               minimumSize: const Size.fromHeight(48),
             ),
-            child: Text(_frozen ? 'إلغاء التجميد' : 'تجميد الحساب'),
+            child: Text(_frozen ? authSettingsText(context, 'إلغاء التجميد') : authSettingsText(context, 'تجميد الحساب')),
           ),
         ],
       ),
@@ -3300,9 +3339,9 @@ class _DeleteAccountPageState extends State<_DeleteAccountPage> {
   Future<void> _delete() async {
     final expectedUid = FirebaseAuth.instance.currentUser?.uid;
     if (expectedUid == null) return;
-    if (_confirm.text.trim() != 'حذف') {
+    if (_confirm.text.trim() != authSettingsText(context, 'حذف')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اكتب حذف للتأكيد')),
+        SnackBar(content: Text(authSettingsText(context, 'اكتب حذف للتأكيد'))),
       );
       return;
     }
@@ -3319,12 +3358,12 @@ class _DeleteAccountPageState extends State<_DeleteAccountPage> {
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_secAuthError(e))),
+        SnackBar(content: Text(authSettingsText(context, _secAuthError(e)))),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر حذف الحساب')),
+        SnackBar(content: Text(authSettingsText(context, 'تعذر حذف الحساب'))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -3334,19 +3373,19 @@ class _DeleteAccountPageState extends State<_DeleteAccountPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('حذف الحساب')),
+      appBar: AppBar(title: Text(authSettingsText(context, 'حذف الحساب'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          const Text(
-            'سيُحذف حساب الدخول نهائيًا. لن تستطيع استخدام نفس البريد للدخول بعد ذلك.',
+          Text(
+            authSettingsText(context, 'سيُحذف حساب الدخول نهائيًا. لن تستطيع استخدام نفس البريد للدخول بعد ذلك.'),
             style: TextStyle(height: 1.45),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _confirm,
             decoration: InputDecoration(
-              labelText: 'اكتب حذف للتأكيد',
+              labelText: authSettingsText(context, 'اكتب حذف للتأكيد'),
               filled: true,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -3361,7 +3400,7 @@ class _DeleteAccountPageState extends State<_DeleteAccountPage> {
               backgroundColor: const Color(0xFFDC2626),
               minimumSize: const Size.fromHeight(48),
             ),
-            child: Text(_busy ? 'جاري الحذف…' : 'حذف الحساب نهائيًا'),
+            child: Text(_busy ? authSettingsText(context, 'جاري الحذف…') : authSettingsText(context, 'حذف الحساب نهائيًا')),
           ),
         ],
       ),
@@ -3383,7 +3422,7 @@ class FrozenAccountScreen extends StatelessWidget {
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر إلغاء التجميد')),
+        SnackBar(content: Text(authSettingsText(context, 'تعذر إلغاء التجميد'))),
       );
     }
   }
@@ -3399,25 +3438,25 @@ class FrozenAccountScreen extends StatelessWidget {
             children: [
               const Icon(Icons.pause_circle_outline_rounded, size: 64),
               const SizedBox(height: 16),
-              const Text(
-                'الحساب مجمّد',
+              Text(
+                authSettingsText(context, 'الحساب مجمّد'),
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'ملفك مخفي ولن تظهر في البحث حتى إلغاء التجميد.',
+              Text(
+                authSettingsText(context, 'ملفك مخفي ولن تظهر في البحث حتى إلغاء التجميد.'),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: () => _unfreeze(context),
-                child: const Text('إلغاء التجميد'),
+                child: Text(authSettingsText(context, 'إلغاء التجميد')),
               ),
               TextButton(
                 onPressed: () async {
                   await AuthSessionService.signOutFully();
                 },
-                child: const Text('تسجيل الخروج'),
+                child: Text(authSettingsText(context, 'تسجيل الخروج')),
               ),
             ],
           ),
@@ -3428,7 +3467,8 @@ class FrozenAccountScreen extends StatelessWidget {
 }
 
 class LoginAlertWatcher extends StatefulWidget {
-  const LoginAlertWatcher({super.key, required this.child, required this.navigatorKey});
+  const LoginAlertWatcher(
+      {super.key, required this.child, required this.navigatorKey});
   final Widget child;
   final GlobalKey<NavigatorState> navigatorKey;
 
@@ -3501,25 +3541,25 @@ class _LoginAlertWatcherState extends State<LoginAlertWatcher> {
     await prefs.setString(_seenKey, seenKey);
     if (!mounted) return;
     _dialogOpen = true;
-    final device = (alert['deviceName'] ?? 'جهاز غير معروف').toString();
+    final device = (alert['deviceName'] ?? authSettingsText(context, 'جهاز غير معروف')).toString();
     final platform = (alert['platform'] ?? '').toString();
     await showDialog<void>(
       context: overlay.context,
       builder: (ctx) => AlertDialog(
-        title: const Text('دخول جديد على حسابك'),
+        title: Text(authSettingsText(context, 'دخول جديد على حسابك')),
         content: Text(
           [
-            'تم فتح الجلسة من:',
+            authSettingsText(context, 'تم فتح الجلسة من:'),
             device,
             if (platform.isNotEmpty) '($platform)',
             '',
-            'إذا لم تكن أنت، أمِّن الحساب فورًا.',
+            authSettingsText(context, 'إذا لم تكن أنت، أمِّن الحساب فورًا.'),
           ].join('\n'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('كنتُ أنا'),
+            child: Text(authSettingsText(context, 'كنتُ أنا')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -3533,7 +3573,7 @@ class _LoginAlertWatcherState extends State<LoginAlertWatcher> {
                 ),
               );
             },
-            child: const Text('لم أكن أنا'),
+            child: Text(authSettingsText(context, 'لم أكن أنا')),
           ),
         ],
       ),

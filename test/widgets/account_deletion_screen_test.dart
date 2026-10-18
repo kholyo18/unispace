@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:UniSpace/features/settings/privacy/account_deletion_screen.dart';
@@ -8,6 +9,10 @@ Finder deletionControl(String name) =>
 Future<void> showDeletion(WidgetTester tester) async {
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
       theme: ThemeData.light(),
       home: const AccountDeletionScreen(),
     ),
@@ -75,6 +80,10 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: const TextScaler.linear(2.0),

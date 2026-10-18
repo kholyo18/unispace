@@ -105,10 +105,10 @@ class S {
     return Intl.message('Post', name: 'posted', desc: '', args: []);
   }
 
-  /// `Search inside Note-pade…`
+  /// `Search inside Notepad…`
   String get searchClipboard {
     return Intl.message(
-      'Search inside Note-pade…',
+      'Search inside Notepad…',
       name: 'searchClipboard',
       desc: '',
       args: [],
@@ -170,9 +170,9 @@ class S {
     return Intl.message('Faculties', name: 'faculties', desc: '', args: []);
   }
 
-  /// `Note-pade`
+  /// `Notepad`
   String get clipboard {
-    return Intl.message('Note-pade', name: 'clipboard', desc: '', args: []);
+    return Intl.message('Notepad', name: 'clipboard', desc: '', args: []);
   }
 
   /// `Change Theme`
@@ -380,10 +380,10 @@ class S {
     );
   }
 
-  /// `The reset link was sent to your email.`
+  /// `If the email belongs to an account, a reset link will arrive. Check your spam folder too.`
   String get resetLinkSentSuccess {
     return Intl.message(
-      'The reset link was sent to your email.',
+      'If the email belongs to an account, a reset link will arrive. Check your spam folder too.',
       name: 'resetLinkSentSuccess',
       desc: '',
       args: [],
@@ -520,10 +520,10 @@ class S {
     return Intl.message('Report', name: 'report', desc: '', args: []);
   }
 
-  /// `تعليقات ({count})`
+  /// `Comments ({count})`
   String commentsCount(Object count) {
     return Intl.message(
-      'تعليقات ($count)',
+      'Comments ($count)',
       name: 'commentsCount',
       desc: '',
       args: [count],
@@ -3645,20 +3645,20 @@ class S {
     );
   }
 
-  /// `OTP sent. Check your email.`
+  /// `Verification link sent. Check your email.`
   String get otpSentSuccess {
     return Intl.message(
-      'OTP sent. Check your email.',
+      'Verification link sent. Check your email.',
       name: 'otpSentSuccess',
       desc: '',
       args: [],
     );
   }
 
-  /// `Unable to send OTP right now.`
+  /// `Unable to send the verification link right now.`
   String get otpSentFailed {
     return Intl.message(
-      'Unable to send OTP right now.',
+      'Unable to send the verification link right now.',
       name: 'otpSentFailed',
       desc: '',
       args: [],
