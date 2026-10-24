@@ -1,3 +1,4 @@
+const { publishedUploadMatches } = require('./published-upload');
 const { HttpsError } = require('firebase-functions/v2/https');
 const { createHash } = require('crypto');
 const { createNewPostNotifications } = require('./new-post-notifications');
@@ -64,7 +65,7 @@ function createPostHandler({ auth, db, FieldValue, bucket }, publish = false) {
           let metadata;
           try { [metadata] = await storage.file(objectPath).getMetadata(); }
           catch (_) { throw new HttpsError('failed-precondition','Uploaded media is unavailable.'); }
-          if (Number(metadata.size) <= 0 || !String(metadata.metadata?.firebaseStorageDownloadTokens || '').split(',').includes(url.searchParams.get('token'))) {
+          if (!publishedUploadMatches(metadata, url, uid)) {
             throw new HttpsError('invalid-argument','Invalid media token.');
           }
         }

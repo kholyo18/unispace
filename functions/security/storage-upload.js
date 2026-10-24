@@ -1,3 +1,4 @@
+const {assertActiveSession}=require('./device-sessions');
 const {requestAccepted,validChatMembers}=require('./chat-service');
 const { HttpsError } = require('firebase-functions/v2/https');
 const { readState, validCutoff } = require('./account-state-policy');
@@ -12,7 +13,7 @@ function usable(profile, controls, deleting) {
   if (state.selfDisabled || state.selfFrozen || state.adminSuspended) throw new HttpsError('permission-denied', 'Account unavailable.');
 }
 function createStorageUploadHandler({ auth, db, FieldValue, Timestamp, bucketName, now = Date.now }) {
-  return async request => {
+  const run = async (request, issueGrant) => {
     const uid = request.auth?.uid, header = request.rawRequest?.headers?.authorization;
     if (!validId(uid) || typeof header !== 'string' || !header.startsWith('Bearer ')) throw new HttpsError('unauthenticated', 'Sign in first.');
     let token;
@@ -39,11 +40,17 @@ function createStorageUploadHandler({ auth, db, FieldValue, Timestamp, bucketNam
         throw new HttpsError('unavailable', 'Account status could not be checked.');
       }
     }
-    const grantRef = db.collection('storageUploadGrants').doc();
+    const grantRef = issueGrant ? db.collection('storageUploadGrants').doc() : null;
     return db.runTransaction(async tx => {
+      await assertActiveSession({db, token, reader:tx});
       const cutoffRef = db.doc(`authRevocations/${uid}`);
       const [cutoff, profile, control, deletion] = await tx.getAll(cutoffRef, db.doc(`users/${uid}`),
         db.doc(`accountStateControls/${uid}`), db.doc(`account_deletion_requests/${uid}`));
+      let revokedSessions = cutoff.data()?.storageRevokedSessions || {};
+      if (cutoff.data()?.storageSessionSchema !== 1) {
+        const revoked = await tx.get(db.collection(`users/${uid}/sessions`).where('isRevoked', '==', true));
+        revokedSessions = {...revokedSessions, ...Object.fromEntries(revoked.docs.map(d => [d.id, true]))};
+      }
       if (!validCutoff(cutoff, token.auth_time)) throw new HttpsError('unauthenticated', 'Session revoked.');
       if (!profile.exists) {
         // Signup uploads precede completeSignupProfile. No social uploads are granted.
@@ -91,6 +98,10 @@ function createStorageUploadHandler({ auth, db, FieldValue, Timestamp, bucketNam
           }
         }
       }
+      // Finalization rechecks the same ACL without issuing a second grant or
+      // renewing Storage access. This mode is available only to server code.
+      if (!issueGrant) return { uid, path: policy.path, bucket,
+        contentType: policy.contentType, size: policy.size };
       const previous = cutoff.data() || {};
       const start = previous.storageGrantWindowStart, count = previous.storageGrantCount;
       const inWindow = Number.isSafeInteger(start) && start <= nowMs && nowMs < start + 60000;
@@ -98,17 +109,20 @@ function createStorageUploadHandler({ auth, db, FieldValue, Timestamp, bucketNam
         throw new HttpsError('resource-exhausted', 'Wait before uploading again.');
       }
       const expiresAt = Timestamp.fromMillis(nowMs + GRANT_TTL_MS);
-      tx.create(grantRef, { schemaVersion: 1, uid, path: policy.path, bucket, authTime: token.auth_time,
+      tx.create(grantRef, { schemaVersion: 1, uid, sessionId: token.sid, path: policy.path, bucket, authTime: token.auth_time,
         contentType: policy.contentType, size: policy.size, overwrite: policy.overwrite,
         createdAt: FieldValue.serverTimestamp(), expiresAt });
       // One server-owned document combines revocation and temporary Storage access,
       // leaving the second cross-service read for an exact grant or chat/post record.
-      tx.set(cutoffRef, { revokedBefore: previous.revokedBefore ?? 0, storageSchema: 1, storageAllowed: true,
+      tx.set(cutoffRef, { revokedBefore: previous.revokedBefore ?? 0, storageSessionSchema: 1, storageRevokedSessions: revokedSessions, storageSchema: 1, storageAllowed: true,
         storageUntil: Timestamp.fromMillis(nowMs + ACCESS_TTL_MS), storageGrantWindowStart: inWindow ? start : nowMs,
         storageGrantCount: inWindow ? count + 1 : 1 }, { merge: true });
       return { grantId: grantRef.id, uid, path: policy.path, bucket, contentType: policy.contentType,
         size: policy.size, expiresAt: expiresAt.toMillis() };
     });
   };
+  const handler = request => run(request, true);
+  handler.authorize = request => run(request, false);
+  return handler;
 }
 module.exports = { createStorageUploadHandler };

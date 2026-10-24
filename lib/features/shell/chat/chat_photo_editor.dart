@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:path_provider/path_provider.dart';
 import 'photo_edit_model.dart';
+import 'chat_photo_tools.dart';
 export 'photo_edit_model.dart' show prepareChatPhoto;
 
 class ChatPhotoEditorPage extends StatefulWidget {
@@ -45,10 +46,18 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
 
   bool _busy = true, _gif = false, _draw = false;
   Color _color = Colors.white;
-  double _width = 0.012, _textSize = 0.075;
+  double _width = 0.012;
+  bool _filters = false, _zoom = false;
+  int _brush = 0;
+  final _transform = TransformationController();
+  PhotoEdit? _gestureBase;
+  PhotoText? _gestureText;
+  Offset? _gestureOrigin;
   int? _selected;
   int _generation = 0;
   String? _error;
+  bool _allowExit = false;
+  bool get _changed => _edit.hasOverlays || _edit.path != widget.file.path;
   PhotoEdit get _edit => _draft ?? _history.current;
   String t(String ar, String en, String fr) {
     final code = Localizations.localeOf(context).languageCode;
@@ -71,6 +80,7 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
     _disposed = true;
     _generation++;
     _image?.dispose();
+    _transform.dispose();
     for (final path in _ownedFiles.toList()) {
       unawaited(_removeOwned(path));
     }
@@ -177,7 +187,9 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
       if (_edit.hasOverlays) await _removeOwned(raw.path);
       if (mounted) {
         _returnedPath = result.path;
-        Navigator.pop(context, result);
+        setState(() => _allowExit = true);
+        await WidgetsBinding.instance.endOfFrame;
+        if (mounted) Navigator.pop(context, result);
       } else {
         await _removeOwned(result.path);
       }
@@ -248,105 +260,190 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
   }
 
   Future<void> _text() async {
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t('نص أو إيموجي', 'Text or emoji', 'Texte ou emoji')),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 240,
-          maxLines: 3,
-          style: const TextStyle(fontFamilyFallback: ['NotoColorEmoji']),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(t('إلغاء', 'Cancel', 'Annuler')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: Text(t('إضافة', 'Add', 'Ajouter')),
-          ),
-        ],
-      ),
-    );
-    // The dialog route keeps the controller while its closing transition runs.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    controller.dispose();
-    if (!mounted || text == null || text.isEmpty) return;
-    _push(
-      _edit.copy(
-        texts: [
-          ..._edit.texts,
-          PhotoText(text, const Offset(.5, .5), _color, _textSize),
-        ],
-      ),
-    );
+    final index = _selected;
+    final initial =
+        index == null || _edit.texts[index].emoji ? null : _edit.texts[index];
+    final result =
+        await showPhotoTextEditor(context, initial: initial, color: _color);
+    if (!mounted || result == null) return;
+    final texts = [..._edit.texts];
+    if (initial == null) {
+      texts.add(result);
+    } else {
+      texts[index!] = result;
+    }
+    _push(_edit.copy(texts: texts));
     setState(() {
-      _selected = _edit.texts.length - 1;
+      _selected = initial == null ? texts.length - 1 : index;
       _draw = false;
+      _zoom = false;
+      _filters = false;
+      _transform.value = Matrix4.identity();
     });
   }
 
-  Offset _point(Offset p, Size size) {
-    return photoSourcePoint(
-      Offset((p.dx / size.width).clamp(0, 1), (p.dy / size.height).clamp(0, 1)),
-      _edit.turns,
-    );
+  Future<void> _sticker() async {
+    final emoji = await showPhotoStickerPicker(context);
+    if (!mounted || emoji == null) return;
+    _push(_edit.copy(texts: [
+      ..._edit.texts,
+      PhotoText(emoji, const Offset(.5, .5), Colors.white, .16, emoji: true)
+    ]));
+    setState(() {
+      _selected = _edit.texts.length - 1;
+      _draw = false;
+      _zoom = false;
+      _filters = false;
+      _transform.value = Matrix4.identity();
+    });
   }
 
+  Offset _point(Offset p, Size size) => photoSourcePoint(
+      Offset((p.dx / size.width).clamp(0, 1), (p.dy / size.height).clamp(0, 1)),
+      _edit.turns,
+      mirrored: _edit.mirrored);
+
   void _start(Offset p, Size size) {
-    if (_busy || _gif) return;
+    if (_busy || _gif || _zoom) return;
     final point = _point(p, size);
+    _gestureBase = _history.current;
+    _gestureOrigin = point;
+    _gestureText = null;
     if (_draw) {
-      setState(
-        () => _draft = _history.current.copy(
-          strokes: [
+      setState(() => _draft = _history.current.copy(strokes: [
             ..._history.current.strokes,
-            PhotoStroke([point], _color, _width),
-          ],
-        ),
-      );
-    } else if (_edit.texts.isNotEmpty) {
-      var index = 0;
-      var distance = double.infinity;
-      for (var i = 0; i < _edit.texts.length; i++) {
-        final d = (_edit.texts[i].position - point).distance;
-        if (d < distance) {
-          index = i;
-          distance = d;
+            PhotoStroke([point], _color, _width,
+                erase: _brush == 2, opacity: _brush == 1 ? .35 : 1),
+          ]));
+    } else {
+      int? selected;
+      for (var i = _edit.texts.length - 1; i >= 0; i--) {
+        if (hitTestPhotoText(_edit.texts[i], point,
+            Size(_image!.width.toDouble(), _image!.height.toDouble()),
+            direction: Directionality.of(context), padding: 12)) {
+          selected = i;
+          break;
         }
       }
-      setState(() => _selected = distance < .25 ? index : null);
+      setState(() => _selected = selected);
+      if (selected != null) _gestureText = _edit.texts[selected];
     }
   }
 
-  void _move(Offset p, Size size) {
-    if (_busy || _gif) return;
-    final point = _point(p, size);
+  void _move(ScaleUpdateDetails d, Size size) {
+    if (_busy || _gif || _zoom) return;
+    final point = _point(d.localFocalPoint, size);
     if (_draw && _draft != null) {
+      if (d.pointerCount > 1) return;
       final strokes = [..._draft!.strokes];
       final previous = strokes.removeLast();
-      strokes.add(
-        PhotoStroke(
-          [...previous.points, point],
-          previous.color,
-          previous.width,
-        ),
-      );
+      strokes.add(PhotoStroke(
+          [...previous.points, point], previous.color, previous.width,
+          erase: previous.erase, opacity: previous.opacity));
       setState(() => _draft = _draft!.copy(strokes: strokes));
-    } else if (!_draw && _selected != null) {
-      final texts = [..._edit.texts];
-      texts[_selected!] = texts[_selected!].copy(position: point);
-      setState(() => _draft = _edit.copy(texts: texts));
+    } else if (_selected != null && _gestureText != null) {
+      final base = _gestureText!;
+      final position = base.position + point - _gestureOrigin!;
+      final texts = [..._gestureBase!.texts];
+      texts[_selected!] = base.copy(
+          position: Offset(position.dx.clamp(0, 1), position.dy.clamp(0, 1)),
+          size: (base.size * d.scale).clamp(.025, .45),
+          angle: base.angle + d.rotation * (_edit.mirrored ? -1 : 1));
+      setState(() => _draft = _gestureBase!.copy(texts: texts));
     }
   }
 
   void _end() {
     if (_draft != null) _push(_draft!);
+    _gestureBase = null;
+    _gestureText = null;
+    _gestureOrigin = null;
   }
+
+  void _colorChange(Color color) {
+    setState(() => _color = color);
+    if (!_draw && _selected != null && !_edit.texts[_selected!].emoji) {
+      final texts = [..._edit.texts];
+      texts[_selected!] = texts[_selected!].copy(color: color);
+      _push(_edit.copy(texts: texts));
+    }
+  }
+
+  Widget _filterStrip() {
+    final names = [
+      t('أصلي', 'Original', 'Original'),
+      t('أبيض وأسود', 'Mono', 'Mono'),
+      t('دافئ', 'Warm', 'Chaud'),
+      t('بارد', 'Cool', 'Froid'),
+      t('بني', 'Sepia', 'Sépia'),
+      t('زاهٍ', 'Vivid', 'Vif')
+    ];
+    return SizedBox(
+        height: 82,
+        child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: photoFilters.length,
+            itemBuilder: (_, index) => Padding(
+                padding: const EdgeInsets.all(4),
+                child: Semantics(
+                    selected: _edit.filter == index,
+                    button: true,
+                    child: InkWell(
+                        onTap: _busy
+                            ? null
+                            : () => _push(_edit.copy(filter: index)),
+                        child: Column(children: [
+                          Container(
+                              width: 64,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: _edit.filter == index
+                                          ? Colors.greenAccent
+                                          : Colors.white24,
+                                      width: 2)),
+                              child: ClipRect(
+                                  child: CustomPaint(
+                                      painter: _PhotoPainter(
+                                          _image!,
+                                          _edit.copy(filter: index),
+                                          Directionality.of(context))))),
+                          Text(names[index],
+                              style: const TextStyle(fontSize: 11)),
+                        ]))))));
+  }
+
+  Future<void> _leave() async {
+    if (_busy) return;
+    final discard = !_changed ||
+        await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                        title: Text(t('تجاهل التعديلات؟', 'Discard edits?',
+                            'Abandonner les modifications ?')),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: Text(t('متابعة التعديل', 'Keep editing',
+                                  'Continuer'))),
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: Text(t('تجاهل', 'Discard', 'Abandonner')))
+                        ])) ==
+            true;
+    if (!mounted || !discard) return;
+    setState(() => _allowExit = true);
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.pop(context);
+  }
+
+  Widget _view(Widget child) => !_zoom
+      ? child
+      : InteractiveViewer(
+          transformationController: _transform,
+          minScale: 1,
+          maxScale: 5,
+          child: child);
 
   Widget _button(
     IconData icon,
@@ -363,12 +460,17 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_busy,
+      canPop: _allowExit || (!_busy && !_changed),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_busy) _leave();
+      },
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
+          leading: IconButton(
+              onPressed: _busy ? null : _leave, icon: const Icon(Icons.close)),
           title: Text(t('تعديل الصورة', 'Edit photo', 'Modifier la photo')),
           actions: [
             TextButton(
@@ -427,22 +529,31 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
                         height: size.height,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onPanStart: (d) => _start(d.localPosition, size),
-                          onPanUpdate: (d) => _move(d.localPosition, size),
-                          onPanEnd: (_) => _end(),
-                          onPanCancel: () => setState(() => _draft = null),
+                          onScaleStart: _zoom
+                              ? null
+                              : (d) => _start(d.localFocalPoint, size),
+                          onScaleUpdate: _zoom ? null : (d) => _move(d, size),
+                          onScaleEnd: _zoom ? null : (_) => _end(),
+                          onDoubleTap: _zoom || _draw
+                              ? null
+                              : () {
+                                  if (_selected != null &&
+                                      !_edit.texts[_selected!].emoji) _text();
+                                },
                           onTapUp: (d) {
                             _start(d.localPosition, size);
                             if (_draw) _end();
                           },
-                          child: ClipRect(
-                            child: CustomPaint(
+                          child: _view(
+                            ClipRect(
+                                child: CustomPaint(
                               painter: _PhotoPainter(
                                 _image!,
                                 _edit,
                                 Directionality.of(context),
+                                selected: _draw || _zoom ? null : _selected,
                               ),
-                            ),
+                            )),
                           ),
                         ),
                       ),
@@ -473,30 +584,61 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
                               ),
                             ),
                             _button(
+                                Icons.flip,
+                                t('عكس', 'Mirror', 'Miroir'),
+                                () => _push(
+                                    _edit.copy(mirrored: !_edit.mirrored))),
+                            _button(
+                                Icons.emoji_emotions_outlined,
+                                t('ملصقات وإيموجي', 'Stickers and emoji',
+                                    'Autocollants et emojis'),
+                                _sticker),
+                            _button(
+                                Icons.zoom_in,
+                                t('تكبير الصورة', 'Zoom photo', 'Zoom photo'),
+                                () => setState(() {
+                                      _zoom = !_zoom;
+                                      _draw = false;
+                                      _transform.value = Matrix4.identity();
+                                    }),
+                                active: _zoom),
+                            _button(
                               Icons.draw,
                               t('رسم', 'Draw', 'Dessiner'),
-                              () => setState(() => _draw = !_draw),
+                              () => setState(() {
+                                _draw = !_draw;
+                                _zoom = false;
+                                _filters = false;
+                                _selected = null;
+                                _transform.value = Matrix4.identity();
+                              }),
                               active: _draw,
                             ),
                             _button(
                               Icons.text_fields,
                               t(
-                                'نص أو إيموجي',
-                                'Text or emoji',
-                                'Texte ou emoji',
+                                'نص',
+                                'Text',
+                                'Texte',
                               ),
                               _text,
                             ),
                             _button(
-                              Icons.filter_b_and_w,
+                              Icons.auto_awesome,
                               t('فلتر', 'Filter', 'Filtre'),
-                              () => _push(
-                                _edit.copy(
-                                  filter:
-                                      (_edit.filter + 1) % photoFilters.length,
-                                ),
-                              ),
+                              () => setState(() {
+                                _filters = !_filters;
+                                _draw = false;
+                              }),
+                              active: _filters,
                             ),
+                            _button(Icons.restart_alt,
+                                t('إعادة ضبط', 'Reset', 'Réinitialiser'), () {
+                              _selected = null;
+                              _transform.value = Matrix4.identity();
+                              _push(PhotoEdit(path: widget.file.path));
+                              if (_loadedPath != widget.file.path) _load();
+                            }, enabled: _changed),
                             _button(
                               Icons.undo,
                               t('تراجع', 'Undo', 'Annuler'),
@@ -527,50 +669,70 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
                           ],
                         ),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (final color in [
-                            Colors.white,
-                            Colors.black,
-                            Colors.red,
-                            Colors.yellow,
-                            Colors.green,
-                            Colors.blue,
-                          ])
-                            Padding(
-                              padding: const EdgeInsets.all(5),
-                              child: Semantics(
-                                label: t(
-                                  'لون الرسم والنص',
-                                  'Drawing and text color',
-                                  'Couleur du dessin et du texte',
-                                ),
-                                button: true,
-                                selected: _color == color,
-                                child: InkWell(
-                                  onTap: _busy
-                                      ? null
-                                      : () => setState(() => _color = color),
-                                  child: Container(
-                                    width: 30,
-                                    height: 30,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: color,
-                                      border: Border.all(
-                                        color: _color == color
-                                            ? Colors.greenAccent
-                                            : Colors.white38,
-                                        width: 2,
+                      if (_filters && _image != null) _filterStrip(),
+                      if (_draw)
+                        Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _button(Icons.edit, t('قلم', 'Pen', 'Stylo'),
+                                  () => setState(() => _brush = 0),
+                                  active: _brush == 0),
+                              _button(
+                                  Icons.brush,
+                                  t('تمييز', 'Highlighter', 'Surligneur'),
+                                  () => setState(() => _brush = 1),
+                                  active: _brush == 1),
+                              _button(
+                                  Icons.auto_fix_normal,
+                                  t('ممحاة', 'Eraser', 'Gomme'),
+                                  () => setState(() => _brush = 2),
+                                  active: _brush == 2),
+                            ]),
+                      if (_draw || _selected != null)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (final color in [
+                              Colors.white,
+                              Colors.black,
+                              Colors.red,
+                              Colors.yellow,
+                              Colors.green,
+                              Colors.blue,
+                            ])
+                              Padding(
+                                padding: const EdgeInsets.all(5),
+                                child: Semantics(
+                                  label: t(
+                                    'لون الرسم والنص',
+                                    'Drawing and text color',
+                                    'Couleur du dessin et du texte',
+                                  ),
+                                  button: true,
+                                  selected: _color == color,
+                                  child: InkWell(
+                                    onTap: _busy
+                                        ? null
+                                        : () => _colorChange(color),
+                                    child: Container(
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: color,
+                                        border: Border.all(
+                                          color: _color == color
+                                              ? Colors.greenAccent
+                                              : Colors.white38,
+                                          width: 2,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
+                          ],
+                        ),
                       if (_draw)
                         Slider(
                           value: _width,
@@ -607,9 +769,9 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
                                   'Dessinez avec le doigt ; annuler efface le dernier trait',
                                 )
                               : t(
-                                  'اسحب النص لتحريكه؛ حدده لتغيير حجمه أو حذفه',
-                                  'Drag text to move it; select it to resize or delete',
-                                  'Glissez le texte ; sélectionnez-le pour le redimensionner ou supprimer',
+                                  'اسحب العنصر، وكبّره ودوّره بإصبعين؛ انقر مرتين لتعديل النص',
+                                  'Drag to move; pinch and rotate with two fingers; double-tap to edit text',
+                                  'Glissez, pincez et pivotez à deux doigts ; double-touchez pour modifier le texte',
                                 ),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
@@ -630,14 +792,51 @@ class _ChatPhotoEditorPageState extends State<ChatPhotoEditorPage> {
 }
 
 class _PhotoPainter extends CustomPainter {
-  _PhotoPainter(this.image, this.edit, this.direction);
+  _PhotoPainter(this.image, this.edit, this.direction, {this.selected});
+  final int? selected;
   final ui.Image image;
   final PhotoEdit edit;
   final TextDirection direction;
   @override
-  void paint(Canvas canvas, Size size) =>
-      paintPhoto(canvas, size, image, edit, direction: direction);
+  void paint(Canvas canvas, Size size) {
+    paintPhoto(canvas, size, image, edit, direction: direction);
+    if (selected == null || selected! >= edit.texts.length) return;
+    final text = edit.texts[selected!];
+    final sourceSize = Size(image.width.toDouble(), image.height.toDouble());
+    final bounds =
+        photoTextBounds(text, sourceSize, direction: direction).inflate(6);
+    Offset project(Offset p) {
+      final delta = p - bounds.center;
+      final rotated = bounds.center +
+          Offset(
+              delta.dx * math.cos(text.angle) - delta.dy * math.sin(text.angle),
+              delta.dx * math.sin(text.angle) +
+                  delta.dy * math.cos(text.angle));
+      final normalized = photoDisplayPoint(
+          Offset(rotated.dx / sourceSize.width, rotated.dy / sourceSize.height),
+          edit.turns,
+          mirrored: edit.mirrored);
+      return Offset(normalized.dx * size.width, normalized.dy * size.height);
+    }
+
+    final points = [
+      bounds.topLeft,
+      bounds.topRight,
+      bounds.bottomRight,
+      bounds.bottomLeft
+    ].map(project).toList();
+    canvas.drawPath(
+        Path()..addPolygon(points, true),
+        Paint()
+          ..color = Colors.white70
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1);
+  }
+
   @override
   bool shouldRepaint(covariant _PhotoPainter old) =>
-      old.image != image || old.edit != edit || old.direction != direction;
+      old.image != image ||
+      old.edit != edit ||
+      old.direction != direction ||
+      old.selected != selected;
 }

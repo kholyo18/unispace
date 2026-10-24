@@ -2,7 +2,7 @@ name: UniSpace
 description: UniSpace - حساب المعدل الجامعي + شات طلابي متصل
 publish_to: "none"
 
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -96,7 +96,11 @@ flutter_launcher_icons:
   android: true
   ios: true
 
-  image_path: "assets/app_icon/icon.png"
+  image_path: "assets/brand/university-mark.png"
+  adaptive_icon_background: "#F6F0DF"
+  adaptive_icon_foreground: "assets/brand/university-mark.png"
+  remove_alpha_ios: true
+  background_color_ios: "#F6F0DF"
   min_sdk_android: 21
 
 

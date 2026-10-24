@@ -132,37 +132,49 @@ function createChatViewOnceHandlers({ db, auth, FieldValue, Timestamp, bucket, p
   }
   async function cleanup() {
     const cutoff = Timestamp.now();
-    const expired = await db.collection('chatViewOnceAssets').where('expiresAt', '<=', cutoff).limit(100).get();
-    const result = { scanned: expired.size, removed: 0, failed: 0 };
-    for (const doc of expired.docs) {
-      const asset = doc.data();
-      try {
-        if (!validMedia(doc.id) || !validId(asset.chatId) || asset.path !== `chat_view_once/${asset.chatId}/${doc.id}` ||
-            !['prepared', 'bound'].includes(asset.state)) throw Error('Invalid expired asset.');
-        let generation = asset.generation;
-        if (asset.state === 'bound' && !/^\d+$/.test(String(generation))) throw Error('Invalid pinned generation.');
+    const deadline = Date.now() + 90000;
+    const query = db.collection('chatViewOnceAssets').where('expiresAt', '<=', cutoff).orderBy('expiresAt');
+    const result = { scanned: 0, removed: 0, failed: 0 };
+    let cursor;
+    // Bound scheduled work, but advance past failed tickets so a failed first
+    // page does not prevent later expired photos from being removed.
+    for (let page = 0; page < 10 && Date.now() < deadline; page++) {
+      const expired = await (cursor ? query.startAfter(cursor) : query).limit(100).get();
+      if (expired.empty) break;
+      for (const doc of expired.docs) {
+        if (Date.now() >= deadline) return result;
+        result.scanned++;
+        const asset = doc.data();
         try {
-          // Abandoned uploads have no pinned generation. Resolve it once, then
-          // delete only that generation; never delete a replacement object.
-          if (asset.state === 'prepared') {
-            const [metadata] = await bucket().file(asset.path).getMetadata();
-            generation = metadata.generation;
-            if (!/^\d+$/.test(String(generation))) throw Error('Invalid generation.');
-          }
-          await bucket().file(asset.path, { generation: String(generation) }).delete({ ifGenerationMatch: String(generation) });
-        } catch (error) { if (Number(error.code) !== 404) throw error; }
-        const removed = await db.runTransaction(async tx => {
-          const fresh = await tx.get(doc.ref);
-          // Expiry never renews in application code. This extra guard prevents
-          // deleting metadata changed by a concurrent maintenance operation.
-          if (!fresh.exists || !fresh.updateTime.isEqual(doc.updateTime)) return false;
-          tx.delete(doc.ref); return true;
-        });
-        if (removed) result.removed++;
-      } catch (_) {
-        // Preserve the ticket for retry on storage/IAM/database failure.
-        result.failed++;
+          if (!validMedia(doc.id) || !validId(asset.chatId) || asset.path !== `chat_view_once/${asset.chatId}/${doc.id}` ||
+              !['prepared', 'bound'].includes(asset.state)) throw Error('Invalid expired asset.');
+          let generation = asset.generation;
+          if (asset.state === 'bound' && !/^\d+$/.test(String(generation))) throw Error('Invalid pinned generation.');
+          try {
+            // Abandoned uploads have no pinned generation. Resolve it once, then
+            // delete only that generation; never delete a replacement object.
+            if (asset.state === 'prepared') {
+              const [metadata] = await bucket().file(asset.path).getMetadata();
+              generation = metadata.generation;
+              if (!/^\d+$/.test(String(generation))) throw Error('Invalid generation.');
+            }
+            await bucket().file(asset.path, { generation: String(generation) }).delete({ ifGenerationMatch: String(generation) });
+          } catch (error) { if (Number(error.code) !== 404) throw error; }
+          const removed = await db.runTransaction(async tx => {
+            const fresh = await tx.get(doc.ref);
+            // Expiry never renews in application code. This extra guard prevents
+            // deleting metadata changed by a concurrent maintenance operation.
+            if (!fresh.exists || !fresh.updateTime.isEqual(doc.updateTime)) return false;
+            tx.delete(doc.ref); return true;
+          });
+          if (removed) result.removed++;
+        } catch (_) {
+          // Preserve the ticket for retry on storage/IAM/database failure.
+          result.failed++;
+        }
       }
+      cursor = expired.docs[expired.docs.length - 1];
+      if (expired.size < 100) break;
     }
     return result;
   }

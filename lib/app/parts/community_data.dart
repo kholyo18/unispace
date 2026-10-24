@@ -158,7 +158,7 @@ class _DownloadMediaSheetState extends State<_DownloadMediaSheet> {
                           Uri.tryParse(item.path)?.host == 'firebasestorage.googleapis.com'
                               ? _AuthorizedImageView(postId: widget.postId, path: item.path, preview: true)
                               : item.path.startsWith('http')
-                              ? CachedNetworkImage(imageUrl: item.path, fit: BoxFit.cover)
+                              ? ProtectedCachedNetworkImage(imageUrl: item.path, fit: BoxFit.cover)
                               : Image.file(File(item.path), fit: BoxFit.cover),
                         if (isVideo)
                           const Positioned(
@@ -192,7 +192,7 @@ class _DownloadMediaSheetState extends State<_DownloadMediaSheet> {
                       .map((i) => widget.items[i]).toList();
                   Navigator.pop(context, _DownloadPickResult(picked));
                 },
-                style: FilledButton.styleFrom(backgroundColor: AppTeal.main),
+                style: FilledButton.styleFrom(foregroundColor: Colors.white, backgroundColor: AppTeal.main),
                 child: Text(mainText(context, "تحميل ({0})", <Object?>[_selected.length])),
               ),
             ),

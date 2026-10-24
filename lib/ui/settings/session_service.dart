@@ -1,3 +1,4 @@
+import 'session_revocation_client.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -179,14 +180,21 @@ class SessionService with WidgetsBindingObserver {
         .map((snapshot) => _dedupeSessions(snapshot.docs.map(SessionModel.fromFirestore).toList()));
   }
 
-  Future<void> revokeSession({required User user, required String sessionId}) {
-    return _firestore.collection('users').doc(user.uid).collection('sessions').doc(sessionId).update({
-      'isRevoked': true,
-      'revokedAt': FieldValue.serverTimestamp(),
-      'revokeReason': 'manual',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
+  SessionRevocationClient _revocationClient(String uid) => SessionRevocationClient(
+    uid: uid,
+    currentUid: () => FirebaseAuth.instance.currentUser?.uid,
+    readSignedSession: () async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.uid != uid) return null;
+      return signedSessionId((await user.getIdTokenResult()).claims);
+    },
+    call: (name, data) async => (await FirebaseFunctions.instanceFor(region: 'europe-west1')
+      .httpsCallable(name, options: HttpsCallableOptions(timeout: const Duration(seconds: 120)))
+      .call(data)).data,
+  );
+
+  Future<void> revokeSession({required User user, required String sessionId}) =>
+      _revocationClient(user.uid).revoke(sessionId: sessionId);
 
   Future<void> updateSessionAlias({required String uid, required String sessionId, required String alias}) {
     return _firestore.collection('users').doc(uid).collection('sessions').doc(sessionId).set({
@@ -240,31 +248,10 @@ class SessionService with WidgetsBindingObserver {
 
   Future<void> revokeAllOtherSessions({required String uid, required String currentSessionId}) {
     if (currentSessionId.isEmpty) throw StateError('Current session is unavailable');
-    return _revokeSessions(uid, except: currentSessionId, reason: 'logout_all_other');
+    return _revocationClient(uid).revoke(keepSessionId: currentSessionId);
   }
 
-  Future<void> revokeAllSessions(String uid) => _revokeSessions(uid, reason: 'logout_all');
-
-  Future<void> _revokeSessions(String uid, {String? except, required String reason}) async {
-    final snapshot = await _firestore.collection('users').doc(uid).collection('sessions').get();
-    var batch = _firestore.batch();
-    var count = 0;
-    for (final doc in snapshot.docs) {
-      if (doc.id == except || doc.data()['isRevoked'] == true) continue;
-      batch.update(doc.reference, {
-        'isRevoked': true,
-        'revokedAt': FieldValue.serverTimestamp(),
-        'revokeReason': reason,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      if (++count == 400) {
-        await batch.commit();
-        batch = _firestore.batch();
-        count = 0;
-      }
-    }
-    if (count > 0) await batch.commit();
-  }
+  Future<void> revokeAllSessions(String uid) => _revocationClient(uid).revoke(all: true);
 
   Future<void> revokeCurrentSession(String uid) async {
     final sessionId = await getCurrentSessionId(uid);
@@ -272,6 +259,9 @@ class SessionService with WidgetsBindingObserver {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.uid != uid) return;
     await revokeSession(user: user, sessionId: sessionId);
+    // A timed-out logout can finish after a subsequent login. Do not clear it.
+    if (FirebaseAuth.instance.currentUser?.uid != uid ||
+        await getCurrentSessionId(uid) != sessionId) return;
     await clearCurrentSessionId(uid);
     _stopHeartbeat();
     await _sessionSubscription?.cancel();

@@ -576,6 +576,8 @@ async function purgeAccount({ auth, db, bucket, FieldValue, Timestamp, uid, tomb
   await deleteUsernameReservations(db, uid);
   await deleteReceiptRows(db, uid);
   await deleteExpired(db.collection('storageUploadGrants').where('uid', '==', uid), db);
+  await deleteExpired(db.collection('protectedUploadTickets').where('uid', '==', uid), db);
+  await deleteFilesWithPrefix(bucket, 'private_upload_staging/' + uid + '/');
   await deleteKnownEphemeralDocs(db, uid);
   await deleteFilesWithPrefix(bucket, 'users/' + uid + '/');
 

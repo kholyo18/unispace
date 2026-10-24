@@ -923,12 +923,12 @@ class _PollBuilderScreenState extends State<PollBuilderScreen>
         height: 40,
       decoration: BoxDecoration(
       color: _canSave
-        ? Colors.blue.shade700          // أزرق غامق لما فيه محتوى
+        ? Theme.of(context).colorScheme.primary          // أزرق غامق لما فيه محتوى
             : Colors.white,                 // أبيض لما فاضي
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _canSave
-              ? Colors.blue.shade700
+              ? Theme.of(context).colorScheme.primary
               : Colors.grey.shade300,
         ),
       ),

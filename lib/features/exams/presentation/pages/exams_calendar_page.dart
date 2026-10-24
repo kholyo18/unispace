@@ -26,6 +26,7 @@ class _ExamsCalendarPageState extends State<ExamsCalendarPage> {
   DateTime _focusedMonth = DateTime.now();
   DateTime _selectedDate = DateTime.now();
   bool _loading = true;
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -34,14 +35,26 @@ class _ExamsCalendarPageState extends State<ExamsCalendarPage> {
   }
 
   Future<void> _loadExams() async {
-    final exams = await _storage.loadExams();
-    exams.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-    if (!mounted) return;
-    setState(() {
-      _exams = exams;
-      _loading = false;
-    });
-    await _notifications.initialize();
+    setState(() { _loading = true; _loadFailed = false; });
+    try {
+      final exams = await _storage.loadExams();
+      exams.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      if (!mounted) return;
+      setState(() => _exams = exams);
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+    if (!mounted || _loadFailed) return;
+    try { await _notifications.initialize(); } catch (_) {
+      debugPrint('[Exams] Notification initialization failed');
+    }
+  }
+
+  String _loadText(BuildContext context, String ar, String en, String fr) {
+    final language = Localizations.localeOf(context).languageCode;
+    return language == 'ar' ? ar : language == 'fr' ? fr : en;
   }
 
   List<ExamModel> _examsForDay(DateTime day) {
@@ -193,14 +206,20 @@ class _ExamsCalendarPageState extends State<ExamsCalendarPage> {
         actions: [
           IconButton(
             tooltip: s.addExam,
-            onPressed: () => _openForm(),
+            onPressed: _loading || _loadFailed ? null : () => _openForm(),
             icon: const Icon(Icons.add),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
+          : _loadFailed
+              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(
+                  mainAxisSize: MainAxisSize.min, children: [
+                    Text(_loadText(context, 'تعذر تحميل الامتحانات المحفوظة. لم تُحذف بياناتك.', 'Saved exams could not be loaded. Your data has not been deleted.', 'Impossible de charger les examens. Vos données ont été conservées.'), textAlign: TextAlign.center),
+                    TextButton(onPressed: _loadExams, child: Text(_loadText(context, 'إعادة المحاولة', 'Retry', 'Réessayer'))),
+                  ])))
+              : SafeArea(
               child: Column(
                 children: [
                   Padding(

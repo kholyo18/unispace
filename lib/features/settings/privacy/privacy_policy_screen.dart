@@ -1,3 +1,4 @@
+import '../../../services/chat_translation_consent.dart';
 import '../../../l10n/feature_strings.dart';
 import 'package:flutter/material.dart';
 
@@ -9,8 +10,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final sections = featureLegalSections(context, 'privacy',
-      _privacySections.map((s) => (heading: s.heading, body: s.body)).toList());
+    final language = Localizations.localeOf(context).languageCode;
+    final sections = [
+      ...featureLegalSections(context, 'privacy',
+        _privacySections.map((s) => (heading: s.heading, body: s.body)).toList()),
+      (heading: chatTranslationDisclosureTitle(language),
+       body: chatTranslationDisclosure(language)),
+    ];
     return Directionality(
       textDirection: Directionality.of(context),
       child: Scaffold(

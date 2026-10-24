@@ -159,14 +159,14 @@ class _NotificationActorEntry extends ValueNotifier<Map<String, dynamic>?> {
     final generation = ++_generation;
     final uid = FirebaseAuth.instance.currentUser?.uid;
     _loading = true;
-    value = null;
+    if (invalidate) value = null;
     try {
       if (uid == null || userId.isEmpty) return;
       final profile = await PublicProfileService.load(userId);
       if (users > 0 && generation == _generation && FirebaseAuth.instance.currentUser?.uid == uid) {
         value = profile;
       }
-    } catch (_) { /* Failed authorization keeps every subscriber neutral. */ }
+    } catch (_) { if (generation == _generation) value = null; }
     finally { if (generation == _generation) _loading = false; }
   }
 
@@ -1287,7 +1287,7 @@ class _OverlayTile extends StatelessWidget {
                             width: 8,
                             height: 8,
                             decoration: BoxDecoration(
-                              color: AppTeal.main,
+                              color: AppTeal.foreground(context),
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -1428,7 +1428,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               onPressed: () => _markAllNotificationsRead(uid, limit: _limit),
               child: Text(
                 mainText(context, "قراءة أحدث {0}", <Object?>[_limit]),
-                style: TextStyle(color: AppTeal.main, fontWeight: FontWeight.w800),
+                style: TextStyle(color: AppTeal.foreground(context), fontWeight: FontWeight.w800),
               ),
             ),
         ],

@@ -450,7 +450,7 @@ class _CommunityReportsInboxScreenState
                 _StatChip(
                   label: mainText(context, "معلّق"),
                   count: _counts['pending'] ?? 0,
-                  color: AppTeal.main,
+                  color: AppTeal.foreground(context),
                   icon: Icons.hourglass_top_rounded,
                 ),
                 const SizedBox(width: 8),
@@ -483,7 +483,7 @@ class _CommunityReportsInboxScreenState
                     value: 'pending',
                     selected: _filter == 'pending',
                     count: _counts['pending'] ?? 0,
-                    color: AppTeal.main,
+                    color: AppTeal.foreground(context),
                     onTap: () => _selectFilter('pending'),
                   ),
                   const SizedBox(width: 8),
@@ -781,7 +781,7 @@ class _EmptyModerationState extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: AppTeal.main.withValues(alpha: 0.08),
               ),
-              child: Icon(icon, size: 32, color: AppTeal.main),
+              child: Icon(icon, size: 32, color: AppTeal.foreground(context)),
             ),
             const SizedBox(height: 16),
             Text(
@@ -1029,7 +1029,7 @@ class _ModerationReportCardState extends State<_ModerationReportCard> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child:  Text(mainText(ctx, "إلغاء"))),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+              style: FilledButton.styleFrom(foregroundColor: Colors.white, backgroundColor: const Color(0xFFDC2626)),
               onPressed: () => Navigator.pop(ctx, true),
               child:  Text(mainText(ctx, "إخفاء")),
             ),

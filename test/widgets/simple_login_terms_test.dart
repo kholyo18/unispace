@@ -3,10 +3,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:UniSpace/generated/l10n.dart';
 import 'package:UniSpace/main.dart' show SignInScreen;
+import 'package:UniSpace/ui/auth/account_recovery_screen.dart';
 
 Finder control(String name) => find.byKey(ValueKey('login-$name'));
 
-Future<void> showLogin(WidgetTester tester, {ThemeMode mode = ThemeMode.light}) async {
+Future<void> showLogin(WidgetTester tester,
+    {ThemeMode mode = ThemeMode.light}) async {
   await tester.pumpWidget(MaterialApp(
     locale: const Locale('ar'),
     supportedLocales: const [Locale('ar')],
@@ -31,12 +33,16 @@ Future<void> toggleTerms(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+// The legal links are now inline; retain this shared helper for reader tests.
 Future<void> openLegalDetails(WidgetTester tester) async {
-  if (control('read-terms').evaluate().isNotEmpty) return;
+  expect(control('legal-details'), findsOneWidget);
   await tester.ensureVisible(control('legal-details'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('الشروط والخصوصية'));
-  await tester.pumpAndSettle();
+  for (final name in ['terms', 'privacy', 'community']) {
+    final link = control('read-$name');
+    expect(link, findsOneWidget);
+    expect(tester.widget<TextButton>(link).onPressed, isNotNull);
+  }
 }
 
 void expectLoginEnabled(WidgetTester tester, bool enabled) {
@@ -47,21 +53,56 @@ void expectLoginEnabled(WidgetTester tester, bool enabled) {
 }
 
 void main() {
-  testWidgets('both login methods start disabled until explicit agreement', (tester) async {
+  testWidgets('authenticator recovery opens before terms agreement',
+      (tester) async {
     await showLogin(tester);
-    expect(tester.widget<CheckboxListTile>(control('terms-consent')).value, false);
+    final link = control('authenticator-recovery');
+    await tester.ensureVisible(link);
+    await tester.tap(link);
+    await tester.pumpAndSettle();
+    expect(find.byType(AccountRecoveryScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expectLoginEnabled(tester, false);
+  });
+  for (final name in ['terms', 'privacy', 'community']) {
+    testWidgets('legal $name opens before agreement and returns unchecked',
+        (tester) async {
+      await showLogin(tester);
+      final link = control('read-$name');
+      expect(tester.widget<TextButton>(link).onPressed, isNotNull);
+      await tester.ensureVisible(link);
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(find.byType(SignInScreen).hitTestable(), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(control('terms-consent')).value,
+          false);
+      expectLoginEnabled(tester, false);
+      expect(tester.takeException(), isNull);
+    });
+  }
+  testWidgets('both login methods start disabled until explicit agreement',
+      (tester) async {
+    await showLogin(tester);
+    expect(
+        tester.widget<CheckboxListTile>(control('terms-consent')).value, false);
     expect(find.text('أوافق على شروط الاستخدام'), findsOneWidget);
-    expect(find.text('الشروط والخصوصية'), findsOneWidget);
-    expect(control('read-terms'), findsNothing);
-    expect(control('read-privacy'), findsNothing);
-    expect(control('read-community'), findsNothing);
+    expect(control('legal-details'), findsOneWidget);
+    expect(control('read-terms'), findsOneWidget);
+    expect(control('read-privacy'), findsOneWidget);
+    expect(control('read-community'), findsOneWidget);
     expectLoginEnabled(tester, false);
     await toggleTerms(tester);
-    expect(tester.widget<CheckboxListTile>(control('terms-consent')).value, true);
+    expect(
+        tester.widget<CheckboxListTile>(control('terms-consent')).value, true);
     expectLoginEnabled(tester, true);
   });
 
-  testWidgets('unchecking agreement disables email and Google again', (tester) async {
+  testWidgets('unchecking agreement disables email and Google again',
+      (tester) async {
     await showLogin(tester);
     await toggleTerms(tester);
     expectLoginEnabled(tester, true);
@@ -69,14 +110,18 @@ void main() {
     expectLoginEnabled(tester, false);
   });
 
-  testWidgets('captured callbacks refuse to start authentication after agreement is removed', (tester) async {
+  testWidgets(
+      'captured callbacks refuse to start authentication after agreement is removed',
+      (tester) async {
     await showLogin(tester);
     final fields = find.byType(TextField);
     await tester.enterText(fields.at(0), 'reader@example.test');
     await tester.enterText(fields.at(1), 'not-a-real-password');
     await toggleTerms(tester);
-    final email = tester.widget<FilledButton>(control('email-submit')).onPressed!;
-    final google = tester.widget<OutlinedButton>(control('google-submit')).onPressed!;
+    final email =
+        tester.widget<FilledButton>(control('email-submit')).onPressed!;
+    final google =
+        tester.widget<OutlinedButton>(control('google-submit')).onPressed!;
     await toggleTerms(tester);
     // The real handlers return before touching either authentication provider.
     email();
@@ -88,16 +133,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a newly created login screen starts unchecked again', (tester) async {
+  testWidgets('a newly created login screen starts unchecked again',
+      (tester) async {
     await showLogin(tester);
     await toggleTerms(tester);
     await tester.pumpWidget(const SizedBox.shrink());
     await showLogin(tester);
-    expect(tester.widget<CheckboxListTile>(control('terms-consent')).value, false);
+    expect(
+        tester.widget<CheckboxListTile>(control('terms-consent')).value, false);
     expectLoginEnabled(tester, false);
   });
 
-  testWidgets('existing recovery controls are not gated by agreement', (tester) async {
+  testWidgets('existing recovery controls are not gated by agreement',
+      (tester) async {
     await showLogin(tester);
     final recovery = find.widgetWithText(TextButton, 'فقدت تطبيق المصادقة؟');
     expect(tester.widget<TextButton>(recovery).onPressed, isNotNull);
@@ -106,7 +154,8 @@ void main() {
     expectLoginEnabled(tester, false);
   });
 
-  testWidgets('agreement remains usable with the existing dark login theme', (tester) async {
+  testWidgets('agreement remains usable with the existing dark login theme',
+      (tester) async {
     await showLogin(tester, mode: ThemeMode.dark);
     expectLoginEnabled(tester, false);
     await toggleTerms(tester);

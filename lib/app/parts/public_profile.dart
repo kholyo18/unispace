@@ -126,12 +126,8 @@ class _LiveAuthorPhotoState extends State<LiveAuthorPhoto> {
       valueListenable: AuthorProfiles.revision,
       builder: (context, _, __) {
         final live = AuthorProfiles.photoOf(widget.userId)?.trim() ?? '';
-        final fallback = widget.fallbackUrl?.trim() ?? '';
-        final url = live.startsWith('http')
-            ? live
-            : fallback.startsWith('http')
-            ? fallback
-            : '';
+        // Stored URLs must not bypass a denied or pending profile projection.
+        final url = live.startsWith('http') ? live : '';
         final r = widget.radius ?? widget.size / 2;
         return Container(
           width: widget.size,
@@ -142,7 +138,7 @@ class _LiveAuthorPhotoState extends State<LiveAuthorPhoto> {
             color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.10),
           ),
           child: url.isNotEmpty
-              ? CachedNetworkImage(
+              ? ProtectedCachedNetworkImage(
             imageUrl: url,
             fit: BoxFit.cover,
             memCacheWidth: 160,
@@ -227,7 +223,7 @@ class _ProfileMediaPane extends StatelessWidget {
             children: [
               if (!item.isVideo)
                 isNet
-                    ? Image.network(
+                    ? ProtectedImage.network(
                   item.path,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => ColoredBox(
@@ -1758,7 +1754,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 right: 0,
                 height: coverH,
                 child: _coverUrl != null && _coverUrl!.trim().isNotEmpty
-                    ? Image.network(
+                    ? ProtectedImage.network(
                   _coverUrl!,
                   fit: BoxFit.cover,
                   width: double.infinity,
@@ -2189,7 +2185,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           end: Alignment.bottomRight,
           colors: [
             AppTeal.main.withValues(alpha: 0.85),
-            const Color(0xFF1565C0),
+            UniSpaceColors.forest,
           ],
         ),
       ),
@@ -2219,8 +2215,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
       isScrollControlled: true,
       builder: (ctx) {
-        final sheetBg = t.isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
-        final groupBg = t.isDark ? const Color(0xFF2C2C2E) : Colors.white;
+        final sheetBg = t.isDark ? UniSpaceColors.darkSurface : UniSpaceColors.ivory;
+        final groupBg = t.isDark ? UniSpaceColors.darkContainer : UniSpaceColors.lightSurface;
         final danger = t.isDark ? const Color(0xFFFF453A) : const Color(0xFFD70015);
         final divider = t.isDark
             ? Colors.white.withValues(alpha: 0.10)
@@ -2667,7 +2663,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       if (_github.isNotEmpty)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.code, color: AppTeal.main),
+                          leading: Icon(Icons.code, color: AppTeal.foreground(context)),
                           title: const Text('GitHub'),
                           trailing: const Icon(Icons.open_in_new, size: 16),
                           onTap: () => _openLink(_github),
@@ -2676,7 +2672,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading:
-                          Icon(Icons.work_outline, color: AppTeal.main),
+                          Icon(Icons.work_outline, color: AppTeal.foreground(context)),
                           title: const Text('LinkedIn'),
                           trailing: const Icon(Icons.open_in_new, size: 16),
                           onTap: () => _openLink(_linkedin),
@@ -2684,7 +2680,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       if (_portfolio.isNotEmpty)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.language, color: AppTeal.main),
+                          leading: Icon(Icons.language, color: AppTeal.foreground(context)),
                           title:  Text(mainText(context, "Portfolio")),
                           trailing: const Icon(Icons.open_in_new, size: 16),
                           onTap: () => _openLink(_portfolio),
@@ -3197,7 +3193,7 @@ class _ProfileSearchSheetState extends State<_ProfileSearchSheet> {
                           child: Text(
                             mainText(context, "إلغاء"),
                             style: TextStyle(
-                              color: AppTeal.main,
+                              color: AppTeal.foreground(context),
                               fontWeight: FontWeight.w700,
                             ),
                           ),

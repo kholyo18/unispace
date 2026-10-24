@@ -2,7 +2,7 @@
 // assertions use client REST with real tokens issued by the local Auth emulator.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, randomBytes } = require('node:crypto');
 const host = process.env.FIRESTORE_EMULATOR_HOST;
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const local = /^(127\.0\.0\.1|localhost):\d+$/;
@@ -16,7 +16,8 @@ const { createPublicProfileHandler } = require('../security/public-profile');
 const project = 'demo-unispace-security';
 const app = initializeApp({ projectId: project }, `profile-read-${randomUUID()}`);
 const db = getFirestore(app), auth = getAuth(app);
-const handler = createPublicProfileHandler({ db, auth });
+const { createSessionGuard } = require('../security/device-sessions');
+const handler = createSessionGuard({ db })(createPublicProfileHandler({ db, auth }));
 const base = `http://${host}/v1/projects/${project}/databases/(default)/documents`;
 let owner, viewer;
 async function makeUser() {
@@ -27,8 +28,18 @@ async function makeUser() {
   });
   assert.equal(response.status, 200);
   const data = await response.json();
-  const claims = JSON.parse(Buffer.from(data.idToken.split('.')[1], 'base64url'));
-  return { uid: data.localId, token: data.idToken, authTime: claims.auth_time };
+  const sid = randomBytes(32).toString('hex');
+  await auth.setCustomUserClaims(data.localId, { sid });
+  const login = await fetch('http://' + authHost + '/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: data.email, password: 'Local-only-fixture-49!', returnSecureToken: true }),
+    signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(login.status, 200);
+  const signed = await login.json();
+  const claims = JSON.parse(Buffer.from(signed.idToken.split('.')[1], 'base64url'));
+  assert.equal(claims.sid, sid);
+  return { uid: data.localId, token: signed.idToken, authTime: claims.auth_time, sid, claims };
 }
 before(async () => { [owner, viewer] = await Promise.all([makeUser(), makeUser()]); });
 after(async () => { await db.terminate(); await deleteApp(app); });
@@ -48,7 +59,12 @@ async function fixture(privateAccount = false) {
   // Each test gets fresh documents and no residual relationship or cutoff.
   await db.recursiveDelete(db.doc(`users/${owner.uid}`));
   await db.recursiveDelete(db.doc(`users/${viewer.uid}`));
-  for (const user of [owner, viewer]) await db.doc(`authRevocations/${user.uid}`).delete();
+  for (const user of [owner, viewer]) {
+    await db.doc('authRevocations/' + user.uid).set({ revokedBefore: 0 });
+    await db.doc('users/' + user.uid + '/sessions/' + user.sid).set({
+      sessionId: user.sid, authSessionVersion: 1, isRevoked: false,
+    });
+  }
   await db.doc(`users/${owner.uid}`).set({ displayName: 'Profile owner', email: 'private@example.test',
     phone: 'private phone', birthDate: 'private date', security: { internal: 'private' },
     coverImageUrl: 'cover', profileImageUrl: 'avatar',
@@ -56,7 +72,7 @@ async function fixture(privateAccount = false) {
   await db.doc(`users/${viewer.uid}`).set({ displayName: 'Viewer' });
 }
 function call(actor = viewer) {
-  return handler({ auth: { uid: actor.uid }, data: { userId: owner.uid },
+  return handler({ auth: { uid: actor.uid, token: actor.claims }, data: { userId: owner.uid },
     rawRequest: { headers: { authorization: `Bearer ${actor.token}` } } });
 }
 function userQuery(where) {
@@ -168,4 +184,11 @@ test('disabling the target Auth account makes the projected profile unavailable'
   await fixture(); await auth.updateUser(owner.uid, { disabled: true });
   try { await assert.rejects(call(), { code: 'not-found' }); }
   finally { await auth.updateUser(owner.uid, { disabled: false }); }
+});
+
+test('selectively revoked owners cannot read raw or projected profiles', async () => {
+  await fixture();
+  await db.doc('users/' + owner.uid + '/sessions/' + owner.sid).update({ isRevoked: true });
+  denied(await request('/users/' + owner.uid, owner));
+  await assert.rejects(call(owner), { code: 'unauthenticated' });
 });

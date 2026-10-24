@@ -2,7 +2,7 @@ const { HttpsError } = require('firebase-functions/v2/https');
 const { createContentSearchPageHandler } = require('./content-search-page');
 const { pickPlaybackFile } = require('./playback-variant');
 function createMediaDownloadHandler({auth, db, bucket}, batch = false, comment = false, {verifyOnly = false} = {}) {
-  if (verifyOnly && (!comment || batch)) throw new Error('Access-only mode requires a single comment.');
+  if (verifyOnly && batch) throw new Error('Access-only mode requires a single media source.');
   const readPost = createContentSearchPageHandler({auth, db}, true);
   return async request => {
     const i = request.data;
@@ -80,8 +80,8 @@ function createMediaDownloadHandler({auth, db, bucket}, batch = false, comment =
       } catch (_) { throw new HttpsError('invalid-argument', 'Unsupported media source.'); }
       // Access to already downloaded bytes: preserve membership/path validation,
       // but do not read Storage metadata or issue a new bearer URL.
-      if (verifyOnly) return {authorized:true, postId:i.postId, commentId:i.commentId,
-        source, mediaType:visibleComment(visible.data).mediaType};
+      if (verifyOnly) return {authorized:true, postId:i.postId, source,
+        ...(comment ? {commentId:i.commentId, mediaType:visibleComment(visible.data).mediaType} : {})};
       let metadata;
       try { [metadata] = await storage.file(objectPath).getMetadata(); }
       catch (e) { if (e.code === 404) throw new HttpsError('not-found', 'Media unavailable.'); throw new HttpsError('unavailable', 'Try again later.'); }

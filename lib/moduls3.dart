@@ -4523,7 +4523,7 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                 unit: [
                   ProgramUnit(label: S.of(context).basicUnit, modules: [
                     ProgramModule(
-                      name: 'نظم المعلومات الإدارية',
+                      name: 'اساسيات الادارة الحديثة 2',
                       coef: 3,
                       credits: 6,
                       components: [
@@ -4533,17 +4533,8 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                     ),
                     ProgramModule(
                       name: 'اقتصاد كلي 2',
-                      coef: 2,
-                      credits: 4,
-                      components: [
-                        ProgramComponent('TD', 40),
-                        ProgramComponent('EXAM', 60),
-                      ],
-                    ),
-                    ProgramModule(
-                      name: 'تسيير المؤسسة',
-                      coef: 2,
-                      credits: 4,
+                      coef: 3,
+                      credits: 6,
                       components: [
                         ProgramComponent('TD', 40),
                         ProgramComponent('EXAM', 60),
@@ -4551,8 +4542,8 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                     ),
                     ProgramModule(
                       name: 'التسويق',
-                      coef: 2,
-                      credits: 4,
+                      coef: 3,
+                      credits: 6,
                       components: [
                         ProgramComponent('TD', 40),
                         ProgramComponent('EXAM', 60),
@@ -4562,8 +4553,8 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                   ProgramUnit(label: S.of(context).methodologicalUnit, modules: [
                     ProgramModule(
                       name: 'احصاء4',
-                      coef: 3,
-                      credits: 5,
+                      coef: 2,
+                      credits: 4,
                       components: [
                         ProgramComponent('TD', 40),
                         ProgramComponent('EXAM', 60),
@@ -4578,17 +4569,6 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                         ProgramComponent('EXAM', 60),
                       ],
                     ),
-                  ]),
-                  ProgramUnit(label: S.of(context).exploratoryUnit, modules: [
-                    ProgramModule(
-                      name: 'ريادة الأعمال',
-                      coef: 1,
-                      credits: 1,
-                      components: [
-                        ProgramComponent('TD', 100),
-                        ProgramComponent('EXAM', 0),
-                      ],
-                    ),
                     ProgramModule(
                       name: 'أخلاقيات الأعمال',
                       coef: 1,
@@ -4599,14 +4579,34 @@ List<ProgramFaculty> getDemoFaculties(BuildContext context) {
                       ],
                     ),
                   ]),
-                  ProgramUnit(label: S.of(context).horizontalUnit, modules: [
+                  ProgramUnit(label: S.of(context).exploratoryUnit, modules: [
                     ProgramModule(
-                      name: 'لغة أجنبية 3',
+                      name: 'ريادة الأعمال',
                       coef: 1,
                       credits: 1,
                       components: [
-                        ProgramComponent('TD', 0),
-                        ProgramComponent('EXAM', 100),
+                        ProgramComponent('TD', 40),
+                        ProgramComponent('EXAM', 60),
+                      ],
+                    ),
+                    ProgramModule(
+                      name: 'اساسيات الدكاء الاصطناعي',
+                      coef: 1,
+                      credits: 1,
+                      components: [
+                        ProgramComponent('TD', 40),
+                        ProgramComponent('EXAM', 60),
+                      ],
+                    ),
+                  ]),
+                  ProgramUnit(label: S.of(context).horizontalUnit, modules: [
+                    ProgramModule(
+                      name: 'انجليزية التسيير',
+                      coef: 1,
+                      credits: 1,
+                      components: [
+                        ProgramComponent('TD', 40),
+                        ProgramComponent('EXAM', 60),
                       ],
                     ),
                   ])

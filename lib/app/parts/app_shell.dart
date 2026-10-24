@@ -26,7 +26,7 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
 
   Color get primaryColor => _primaryColor;
 
-  static const Color _defaultPrimary = Color(0xFF30475E);
+  static const Color _defaultPrimary = UniSpaceColors.forest;
 
   Future<void> resetAccentColors() async {
     _tealColor = kDefaultTeal;
@@ -140,7 +140,7 @@ class _UniSpaceAppState extends State<UniSpaceApp> {
                 data: MediaQuery.of(context).copyWith(
                   textScaler: TextScaler.linear(settings.fontScale.scale),
                 ),
-                child: child ?? const SizedBox.shrink(),
+                child: RequiredUpdateGate(child: child ?? const SizedBox.shrink()),
               );
             },
           ),
@@ -177,7 +177,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCurrentSession();
+
     setUserPresence(online: true);
     _home = CommunityScreen(onOpenDrawer: _openEndDrawer);
     _initDeepLinks();
@@ -236,11 +236,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('Open post failed: $e');
     }
-  }
-  Future<void> _initializeCurrentSession() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    await SessionService.instance.initSession(user.uid);
   }
 
   Future<void> _touchCurrentSession() async {

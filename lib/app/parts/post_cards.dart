@@ -301,7 +301,6 @@ class _PostCardState extends State<_PostCard> {
   final Map<int, dynamic> _pollAnswers = {};
 
   bool _isNavigating = false;
-  Timer? _updateTimer;
   int _currentPollPage = 0;
   final Map<String, VideoPlayerController> _pollVideoControllers = {};
 
@@ -573,7 +572,7 @@ class _PostCardState extends State<_PostCard> {
     for (final p in widget.post.imagePaths) {
       final u = p.trim();
       if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
-        precacheImage(CachedNetworkImageProvider(u), context);
+        precacheImage(ProtectedCachedNetworkImageProvider(u), context);
       }
     }
 
@@ -583,7 +582,7 @@ class _PostCardState extends State<_PostCard> {
       if (type == 'image') {
         final u = (s['url'] ?? s['mediaPath'] ?? '').toString().trim();
         if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
-          precacheImage(CachedNetworkImageProvider(u), context);
+          precacheImage(ProtectedCachedNetworkImageProvider(u), context);
         }
       }
       if (s['type']?.toString() == 'video') {
@@ -597,9 +596,6 @@ class _PostCardState extends State<_PostCard> {
   @override
   void initState() {
     super.initState();
-    _updateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
-    });
     _loadSavedState();
 
     // بعد أول إطار (لأن context جاهز لـ precacheImage)
@@ -752,7 +748,6 @@ class _PostCardState extends State<_PostCard> {
   }
   @override
   void dispose() {
-    _updateTimer?.cancel();
     for (final c in _pollVideoControllers.values) {
       c.dispose();
     }
@@ -847,7 +842,7 @@ class _PostCardState extends State<_PostCard> {
 
   Widget _mediaErrorWidget(String message) {
     return Container(
-      color: const Color(0xFFEAF7F8),
+      color: UniSpaceColors.ivory,
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -855,13 +850,13 @@ class _PostCardState extends State<_PostCard> {
           const Icon(
             Icons.broken_image_rounded,
             size: 38,
-            color: Color(0xFF64748B),
+            color: UniSpaceColors.lightMuted,
           ),
           const SizedBox(height: 6),
           Text(
             message,
             style: const TextStyle(
-              color: Color(0xFF64748B),
+              color: UniSpaceColors.lightMuted,
               fontSize: 12,
             ),
           ),
@@ -1326,7 +1321,7 @@ class _PostCardState extends State<_PostCard> {
             children: [
               Row(
                 children: [
-                   Icon(Icons.device_hub_rounded, color: AppTeal.main),
+                   Icon(Icons.device_hub_rounded, color: AppTeal.foreground(context)),
                   const SizedBox(width: 8),
                   Text(
                     mainText(context, "الوسوم على هذا المنشور"),
@@ -1539,7 +1534,7 @@ class _PostCardState extends State<_PostCard> {
       }
       if (imageUrl.isNotEmpty) {
         Object? imageError;
-        await precacheImage(NetworkImage(imageUrl), context, onError: (error, _) => imageError = error);
+        await precacheImage(ProtectedNetworkImage(imageUrl), context, onError: (error, _) => imageError = error);
         if (imageError != null) throw StateError('Share image unavailable');
         if (!current()) return;
       }
@@ -2085,9 +2080,9 @@ class _PostCardState extends State<_PostCard> {
             .child('images')
             .child('edit_${editUploadId}_$i.jpg');
         validateMediaUploadSize(newImages[i].length, video: false);
-        await ref.putData(
+        await StorageUploadService.putData(ref,
             newImages[i], SettableMetadata(contentType: 'image/jpeg'));
-        imageUrls.add(await ref.getDownloadURL());
+        imageUrls.add(StorageUploadService.locator(ref));
       }
 
       final videoUrls = [...keepVideoUrls];
@@ -2098,11 +2093,11 @@ class _PostCardState extends State<_PostCard> {
         final ext = newVideos[i].split('.').last.toLowerCase();
         final ref = FirebaseStorage.instance
             .ref().child('community_posts/$postId/videos/edit_${editUploadId}_$i.$ext');
-        await ref.putFile(
+        await StorageUploadService.putFile(ref,
           file,
           SettableMetadata(contentType: postVideoContentType(ext)),
         );
-        videoUrls.add(await ref.getDownloadURL());
+        videoUrls.add(StorageUploadService.locator(ref));
       }
 
       final resolvedSlides = <Map<String, dynamic>>[];
@@ -2124,11 +2119,11 @@ class _PostCardState extends State<_PostCard> {
               'community_posts/$postId/images/poll_edit_${editUploadId}_${pollImg++}.jpg',
             );
             validateMediaUploadSize((s['imageBytes'] as Uint8List).length, video: false);
-            await ref.putData(
+            await StorageUploadService.putData(ref,
               s['imageBytes'] as Uint8List,
               SettableMetadata(contentType: 'image/jpeg'),
             );
-            resolvedSlides.add({'type': 'image', 'url': await ref.getDownloadURL()});
+            resolvedSlides.add({'type': 'image', 'url': StorageUploadService.locator(ref)});
           }
         } else if (type == 'video') {
           final existing = s['url']?.toString() ?? '';
@@ -2145,9 +2140,9 @@ class _PostCardState extends State<_PostCard> {
                 final ref = FirebaseStorage.instance.ref(
                   'community_posts/$postId/videos/poll_edit_${editUploadId}_${pollVid++}.$videoExtension',
                 );
-                await ref.putFile(
+                await StorageUploadService.putFile(ref,
                     file, SettableMetadata(contentType: videoMime));
-                resolvedSlides.add({'type': 'video', 'url': await ref.getDownloadURL()});
+                resolvedSlides.add({'type': 'video', 'url': StorageUploadService.locator(ref)});
               }
             }
           }
@@ -2220,7 +2215,7 @@ class _PostCardState extends State<_PostCard> {
     required String label,
     Color? color,
   }) {
-    final itemColor = color ?? const Color(0xFF475569);
+    final itemColor = color ?? UniSpaceColors.lightMuted;
     return PopupMenuItem<_PostMenuAction>(
       value: value,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -2255,7 +2250,7 @@ class _PostCardState extends State<_PostCard> {
           height: 34,
           child: Icon(
             Icons.more_vert_rounded,
-            color: AppTeal.main,
+            color: AppTeal.foreground(context),
             size: 20,
           ),
         ),
@@ -2439,7 +2434,7 @@ class _PostCardState extends State<_PostCard> {
       child: PopupMenuButton<_PostMenuAction>(
         tooltip: mainText(context, "خيارات المنشور"),
         padding: EdgeInsets.zero,
-        color: const Color(0xFF1A1A1B),
+        color: UniSpaceColors.darkSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
@@ -2595,13 +2590,13 @@ class _PostCardState extends State<_PostCard> {
     final isDark = theme.brightness == Brightness.dark;
 
     final titleColor =
-    isDark ? theme.colorScheme.onSurface : const Color(0xFF1F2937);
+    isDark ? theme.colorScheme.onSurface : UniSpaceColors.forest;
     final bodyColor = isDark
         ? theme.colorScheme.onSurfaceVariant
-        : const Color(0xFF475569);
+        : UniSpaceColors.lightMuted;
     final metaColor = isDark
         ? theme.colorScheme.onSurfaceVariant
-        : const Color(0xFF64748B);
+        : UniSpaceColors.lightMuted;
 
     final slides = _mediaSlides(post);
 
@@ -2679,10 +2674,8 @@ class _PostCardState extends State<_PostCard> {
                                     ),
                                   ),
                                   Flexible(
-                                    child: Text(
-                                      '${post.timeAgo}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: _PostTimeLabel(
+                                      label: () => post.timeAgo,
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w500,
@@ -2733,7 +2726,7 @@ class _PostCardState extends State<_PostCard> {
                                   onPressed: _togglePinPost,
                                   icon: Icon(
                                     Icons.push_pin_rounded,
-                                    color: AppTeal.main,
+                                    color: AppTeal.foreground(context),
                                     size: 18,
                                   ),
                                 ),
@@ -2749,7 +2742,7 @@ class _PostCardState extends State<_PostCard> {
                                   onPressed: _toggleSavePost,
                                   icon: Icon(
                                     Icons.bookmark_rounded,
-                                    color: AppTeal.main,
+                                    color: AppTeal.foreground(context),
                                     size: 20,
                                   ),
                                 ),
@@ -2910,7 +2903,7 @@ class _PostShareCard extends StatelessWidget {
     return Container(
       width: width,
       decoration: BoxDecoration(
-        color: const Color(0xFF0B1220),
+        color: UniSpaceColors.darkBackground,
         borderRadius: BorderRadius.circular(18),
       ),
       clipBehavior: Clip.antiAlias,
@@ -2921,11 +2914,11 @@ class _PostShareCard extends StatelessWidget {
           if (hasImage)
             SizedBox(
               height: 200,
-              child: Image.network(
+              child: ProtectedImage.network(
                 imageUrl,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
-                  color: const Color(0xFF1E293B),
+                  color: UniSpaceColors.darkContainer,
                   alignment: Alignment.center,
                   child: const Icon(Icons.image_outlined,
                       color: Colors.white38, size: 40),
@@ -2945,11 +2938,11 @@ class _PostShareCard extends StatelessWidget {
                       clipBehavior: Clip.antiAlias,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Color(0xFF164E63),
+                        color: UniSpaceColors.darkContainer,
                       ),
                       child: (authorPhotoUrl != null &&
                           authorPhotoUrl!.trim().isNotEmpty)
-                          ? Image.network(
+                          ? ProtectedImage.network(
                         authorPhotoUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => const Icon(
@@ -3113,7 +3106,7 @@ class _RepostComposePageState extends State<_RepostComposePage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade700,
+                      color: Theme.of(context).colorScheme.primary,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child:  Text(
@@ -3141,7 +3134,7 @@ class _RepostComposePageState extends State<_RepostComposePage> {
                 fontWeight: FontWeight.w700,
                 color: Theme.of(context).colorScheme.onSurface,
               ),
-              cursorColor: Colors.blueAccent,
+              cursorColor: Theme.of(context).colorScheme.primary,
               cursorWidth: 2.5,
               decoration: InputDecoration(
                 hintText: mainText(context, "Title"),
@@ -3172,7 +3165,7 @@ class _RepostComposePageState extends State<_RepostComposePage> {
                 height: 1.45,
                 color: Theme.of(context).colorScheme.onSurface,
               ),
-              cursorColor: Colors.blueAccent,
+              cursorColor: Theme.of(context).colorScheme.primary,
               decoration: InputDecoration(
                 hintText: widget.comment != null
                     ? mainText(context, "Body ...what you think about this comment?")
@@ -3370,16 +3363,16 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
                     commentId: _isCommentRepost ? (widget.data['commentId']?.toString().trim() ?? '') : null,
                     path: image, preview: true,
                   )
-                : Image.network(
+                : ProtectedImage.network(
               image,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => ColoredBox(
-                color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
+                color: isDark ? Colors.white10 : UniSpaceColors.lightBorder,
               ),
             )
           else
             ColoredBox(
-              color: isDark ? const Color(0xFF111827) : const Color(0xFFE5E7EB),
+              color: isDark ? UniSpaceColors.darkField : UniSpaceColors.lightBorder,
             ),
           if (hasVideo)
             Center(
@@ -3454,10 +3447,10 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
     required String author,
     String? authorId,
   }) {
-    final textColor = isDark ? Colors.white : const Color(0xFF102A2C);
+    final textColor = isDark ? Colors.white : UniSpaceColors.forest;
     final mutedColor = isDark
         ? Colors.white.withValues(alpha: 0.65)
-        : const Color(0xFF527174);
+        : UniSpaceColors.lightMuted;
 
     return Directionality(
       textDirection: TextDirection.ltr,
@@ -3470,8 +3463,8 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
             end: Alignment.bottomRight,
             colors: isDark
                 ? [
-              Color.lerp(AppTeal.main, const Color(0xFF0B1418), 0.72)!,
-              Color.lerp(AppTeal.main, const Color(0xFF12181C), 0.88)!,
+              Color.lerp(AppTeal.main, UniSpaceColors.darkBackground, 0.72)!,
+              Color.lerp(AppTeal.main, UniSpaceColors.darkSurface, 0.88)!,
             ]
                 : [
               Color.lerp(AppTeal.main, Colors.white, 0.88)!,
@@ -3490,14 +3483,14 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
               children: [
                 Icon(
                   Icons.poll_outlined,
-                  color: AppTeal.main,
+                  color: AppTeal.foreground(context),
                   size: 19,
                 ),
                 const SizedBox(width: 7),
                 Text(
                   mainText(context, "Poll"),
                   style: TextStyle(
-                    color: AppTeal.main,
+                    color: AppTeal.foreground(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                   ),
@@ -3536,7 +3529,7 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
                           child: Text(
                             '${i + 1}',
                             style: TextStyle(
-                              color: AppTeal.main,
+                              color: AppTeal.foreground(context),
                               fontSize: 11,
                               fontWeight: FontWeight.w900,
                             ),
@@ -3576,7 +3569,7 @@ class _RepostEmbedCardState extends State<_RepostEmbedCard> {
     final accent = AppTeal.main;
     final border = isDark
         ? Colors.white.withValues(alpha: 0.12)
-        : const Color(0xFFE5E7EB);
+        : UniSpaceColors.lightBorder;
     final fill = isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white;
 
     if (_loading) {
@@ -3833,20 +3826,20 @@ class _CommentRepostPreview extends StatelessWidget {
     final hasMedia = hasImage || hasVideo;
 
     final background = isDark
-        ? const Color(0xFF151A21)
+        ? UniSpaceColors.darkSurface
         : Colors.white;
 
     final secondaryBackground = isDark
-        ? const Color(0xFF202832)
-        : const Color(0xFFF5F7F8);
+        ? UniSpaceColors.darkField
+        : UniSpaceColors.lightField;
 
     final primaryText = isDark
         ? Colors.white
-        : const Color(0xFF17212B);
+        : UniSpaceColors.forest;
 
     final mutedText = isDark
         ? Colors.white.withValues(alpha: 0.55)
-        : const Color(0xFF78838F);
+        : UniSpaceColors.lightMuted;
 
     return Directionality(
       textDirection: Directionality.of(context),
@@ -3858,7 +3851,7 @@ class _CommentRepostPreview extends StatelessWidget {
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.09)
-                : const Color(0xFFE4E9ED),
+                : UniSpaceColors.lightBorder,
           ),
           boxShadow: [
             BoxShadow(
@@ -4049,7 +4042,7 @@ class _CommentRepostPreview extends StatelessWidget {
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: isDark
-                ? const Color(0xFF151A21)
+                ? UniSpaceColors.darkSurface
                 : Colors.white,
             shape: BoxShape.circle,
             boxShadow: [
@@ -4128,7 +4121,7 @@ class _CommentRepostPreview extends StatelessWidget {
           decoration: BoxDecoration(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.07)
-                : const Color(0xFFF1F4F6),
+                : UniSpaceColors.lightField,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -4156,7 +4149,7 @@ class _CommentRepostPreview extends StatelessWidget {
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.06)
-              : const Color(0xFFE8EDF0),
+              : UniSpaceColors.lightField,
         ),
       ),
       child: Stack(
@@ -4224,7 +4217,7 @@ class _CommentRepostPreview extends StatelessWidget {
             if (hasImage)
               Uri.tryParse(url)?.host == 'firebasestorage.googleapis.com'
                   ? _AuthorizedImageView(postId: postId, commentId: commentId, path: url, preview: true)
-                  : Image.network(
+                  : ProtectedImage.network(
                 url,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) {
@@ -4337,14 +4330,14 @@ class _CommentRepostPreview extends StatelessWidget {
   }) {
     return Container(
       color: isDark
-          ? const Color(0xFF27313B)
-          : const Color(0xFFE9EEF1),
+          ? UniSpaceColors.darkContainer
+          : UniSpaceColors.lightField,
       alignment: Alignment.center,
       child: Icon(
         icon,
         color: isDark
             ? Colors.white.withValues(alpha: 0.45)
-            : const Color(0xFF75808A),
+            : UniSpaceColors.lightMuted,
         size: 42,
       ),
     );
@@ -4404,3 +4397,28 @@ class _CommentRepostPreview extends StatelessWidget {
 
 
 
+
+/// Only the relative date rebuilds each minute, never the media/post subtree.
+class _PostTimeLabel extends StatefulWidget {
+  const _PostTimeLabel({required this.label, required this.style});
+  final String Function() label;
+  final TextStyle style;
+  @override
+  State<_PostTimeLabel> createState() => _PostTimeLabelState();
+}
+class _PostTimeLabelState extends State<_PostTimeLabel> {
+  Timer? _timer;
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted && TickerMode.of(context) &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) setState(() {});
+    });
+  }
+  @override
+  void dispose() { _timer?.cancel(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => Text(widget.label(), maxLines: 1,
+      overflow: TextOverflow.ellipsis, style: widget.style);
+}

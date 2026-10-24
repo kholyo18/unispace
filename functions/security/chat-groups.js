@@ -23,7 +23,8 @@ async function groupPair({
   tx,
   sender,
   receiver,
-  invitation = false
+  invitation = false,
+  directAdd = false
 }) {
   const refs = [db.doc(`users/${sender}`), db.doc(`users/${receiver}`), db.doc(`users/${receiver}/followers/${sender}`), db.doc(`users/${sender}/followers/${receiver}`)];
   for (const [a, b] of [[sender, receiver], [receiver, sender]]) for (const key of ['blocked_accounts', 'blocked_users', 'blocked_by']) refs.push(db.doc(`users/${a}/${key}/${b}`));
@@ -34,6 +35,7 @@ async function groupPair({
   const p = other.data().privacy || {},
     who = p.whoCanMessage || 'mutual';
   const direct = who === 'everyone' || who === 'followers' && follows.exists || who === 'mutual' && follows.exists && reverse.exists;
+  if (directAdd && !direct) fail('permission-denied', 'Recipient privacy does not allow direct group membership.');
   if (who === 'none' || invitation && !direct && p.messageRequests === false) fail('permission-denied', 'Recipient does not accept group invitations.');
   return {
     own: own.data(),
@@ -66,7 +68,8 @@ async function assertGroupMessage({
 function createGroupHandlers({
   db,
   auth,
-  FieldValue
+  FieldValue,
+  bucket
 }) {
   async function identity(request) {
     const uid = request.auth?.uid,
@@ -116,14 +119,6 @@ function createGroupHandlers({
       }
     };
   }
-  const inviteData = (chatId, uid, receiver, groupName) => ({
-    chatId,
-    senderId: uid,
-    receiverId: receiver,
-    groupName,
-    status: 'pending',
-    createdAt: FieldValue.serverTimestamp()
-  });
   const create = async request => {
     const {
         uid,
@@ -161,9 +156,15 @@ function createGroupHandlers({
           tx,
           sender: uid,
           receiver,
-          invitation: true
+          invitation: true,
+          directAdd: true
         });
         pendingMembers[receiver] = brief(checked.other);
+      }
+      for (let a = 0; a < invited.length; a++) {
+        for (let b = a + 1; b < invited.length; b++) {
+          await groupPair({db, tx, sender: invited[a], receiver: invited[b]});
+        }
       }
       const limit = await budget(tx, uid, Math.max(1, invited.length));
       tx.set(limit.ref, limit.data);
@@ -172,20 +173,16 @@ function createGroupHandlers({
         name: groupName,
         creatorId: uid,
         creationFingerprint: fingerprint,
-        memberIds: [uid],
+        memberIds: [uid, ...invited],
         adminIds: [uid],
-        pendingMemberIds: invited,
-        pendingMembers,
-        members: {
-          [uid]: brief(self.data())
-        },
-        unread: {
-          [uid]: 0
-        },
+        pendingMemberIds: [],
+        pendingMembers: {},
+        members: { [uid]: brief(self.data()), ...pendingMembers },
+        unread: Object.fromEntries([uid, ...invited].map(id => [id, 0])),
         createdAt: FieldValue.serverTimestamp(),
         lastMessageAt: FieldValue.serverTimestamp()
       });
-      for (const receiver of invited) tx.create(db.doc(`groupInvites/${chatId}_${receiver}`), inviteData(chatId, uid, receiver, groupName));
+
       return {
         chatId,
         status: 'open'
@@ -200,10 +197,23 @@ function createGroupHandlers({
       i = request.data || {},
       chatId = groupId(i.chatId),
       action = i.action;
-    if (!['invite', 'rename', 'promote', 'demote', 'remove', 'leave'].includes(action)) fail('invalid-argument', 'Invalid group action.');
+    if (!['invite', 'rename', 'photo', 'promote', 'demote', 'remove', 'leave'].includes(action)) fail('invalid-argument', 'Invalid group action.');
     const target = action === 'leave' ? uid : i.memberId;
-    if (action !== 'rename' && !validId(target)) fail('invalid-argument', 'Member required.');
+    if (!['rename', 'photo'].includes(action) && !validId(target)) fail('invalid-argument', 'Member required.');
     if (action === 'invite') await available(target);
+    if (action === 'photo') {
+      if (!bucket) fail('unavailable', 'Storage unavailable.');
+      const storage = bucket();
+      const {parseProtectedMediaSource} = require('./protected-media');
+      const {path, parts} = parseProtectedMediaSource(i.photoUrl, storage.name);
+      if (parts.length !== 4 || parts[0] !== 'chats' || parts[1] !== chatId || parts[2] !== 'images') fail('invalid-argument', 'Choose an uploaded group image.');
+      let metadata;
+      try { [metadata] = await storage.file(path).getMetadata(); }
+      catch (_) { fail('not-found', 'Upload the image first.'); }
+      const {publishedUploadMatches} = require('./published-upload');
+      if (!publishedUploadMatches(metadata, new URL(i.photoUrl), uid) ||
+          metadata.metadata?.uploadedBy !== uid || !['image/jpeg', 'image/png', 'image/webp'].includes(metadata.contentType)) fail('permission-denied', 'Image upload does not belong to this account.');
+    }
     return db.runTransaction(async tx => {
       await assertActiveSession({
         db,
@@ -217,6 +227,10 @@ function createGroupHandlers({
       if (action !== 'leave') {
         const self = await tx.get(db.doc(`users/${uid}`));
         await assertChatAccount({db,tx,uid:uid,profile:self.data()});
+      }
+      if (action === 'photo') {
+        tx.update(ref, {photoUrl: i.photoUrl});
+        return {chatId, status: 'open'};
       }
       if (action === 'rename') {
         const nextName = name(i.name);
@@ -235,7 +249,7 @@ function createGroupHandlers({
         admins = [...c.adminIds],
         pending = [...(c.pendingMemberIds || [])];
       if (action === 'invite') {
-        if (members.includes(target) || pending.includes(target)) return {
+        if (members.includes(target)) return {
           chatId,
           status: 'open'
         };
@@ -245,17 +259,24 @@ function createGroupHandlers({
           tx,
           sender: uid,
           receiver: target,
-          invitation: true
+          invitation: true,
+          directAdd: true
         });
         const inviteRef = db.doc(`groupInvites/${chatId}_${target}`),
           old = await tx.get(inviteRef);
         if (old.data()?.status === 'rejected') fail('permission-denied', 'This invitation was declined.');
+        for (const peer of members.filter(id => id !== uid)) {
+          await groupPair({db, tx, sender: target, receiver: peer});
+        }
         const limit = await budget(tx, uid, 1);
         tx.set(limit.ref, limit.data);
-        tx.set(inviteRef, inviteData(chatId, uid, target, c.name));
+        if (old.exists) tx.update(inviteRef, {status: 'accepted', updatedAt: FieldValue.serverTimestamp()});
         tx.update(ref, {
-          pendingMemberIds: [...pending, target],
-          [`pendingMembers.${target}`]: brief(checked.other)
+          memberIds: [...members, target],
+          pendingMemberIds: pending.filter(id => id !== target),
+          [`pendingMembers.${target}`]: FieldValue.delete(),
+          [`members.${target}`]: brief(checked.other),
+          [`unread.${target}`]: 0
         });
         return {
           chatId,

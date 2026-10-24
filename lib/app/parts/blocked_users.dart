@@ -322,7 +322,7 @@ class _BlockedUserRow extends StatelessWidget {
           vertical: 6,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
+          color: UniSpaceColors.darkSurface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: t.cardBorder.withOpacity(.75),
@@ -387,7 +387,7 @@ class _BlockedUserRow extends StatelessWidget {
           width: 15,
           height: 15,
           decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
+            color: UniSpaceColors.darkSurface,
             shape: BoxShape.circle,
           ),
           padding: const EdgeInsets.all(2),

@@ -169,3 +169,16 @@ test('disabled and frozen accounts cannot use profile completion or availability
     assert.deepEqual(await f.profile(), state);
   }
 });
+
+test('new signup is public with visible content without publishing contact details',async()=>{
+ const f=setup();await f.complete(f.request(f.input()));const p=await f.profile();
+ assert.equal(p.profileVisibility,'public');assert.equal(p.privacy.privateAccount,false);
+ for(const field of ['followersVisibility','followingVisibility','whoCanMessage','whoCanComment','whoCanRepost','whoCanMention']) assert.equal(p.privacy[field],'everyone');
+ assert.equal(p.privacy.showAcademicInfo,true);assert.equal(p.privacy.showSocialLinks,true);
+ assert.equal(p.privacy.showEmailOnProfile,false);assert.equal(p.privacy.findByPhone,false);
+});
+test('legacy private visibility remains private during first profile completion',async()=>{
+ const f=setup();await db.doc('users/'+f.uid).set({profileVisibility:'private'});
+ await f.complete(f.request(f.input()));const p=await f.profile();
+ assert.equal(p.profileVisibility,'private');assert.equal(p.privacy.privateAccount,true);
+});

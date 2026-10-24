@@ -85,6 +85,7 @@ function createRevokeDeviceSessionsHandler({ auth, db, FieldValue }) {
         const snapshot = await tx.get(target);
         if (!snapshot.exists) throw new HttpsError('not-found', 'Device session not found.');
         if (snapshot.data().isRevoked !== true) tx.update(target, changes);
+        tx.set(db.doc(`authRevocations/${uid}`), {storageRevokedSessions: {[input.sessionId]: true}}, {merge:true});
       });
     } else {
       let cursor;
@@ -95,7 +96,10 @@ function createRevokeDeviceSessionsHandler({ auth, db, FieldValue }) {
           if (cursor) query = query.startAfter(cursor);
           const page = await tx.get(query);
           for (const doc of page.docs) {
-            if (doc.id !== token.sid && doc.data().isRevoked !== true) tx.update(doc.ref, changes);
+            if (doc.id !== token.sid) {
+              if (doc.data().isRevoked !== true) tx.update(doc.ref, changes);
+              tx.set(db.doc(`authRevocations/${uid}`), {storageRevokedSessions: {[doc.id]: true}}, {merge:true});
+            }
           }
           return page.size === 200 ? page.docs[page.docs.length - 1] : null;
         });

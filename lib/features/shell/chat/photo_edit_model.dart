@@ -8,50 +8,90 @@ import 'package:image/image.dart' as im;
 import 'package:path_provider/path_provider.dart';
 
 class PhotoStroke {
-  PhotoStroke(this.points, this.color, this.width);
+  PhotoStroke(List<Offset> points, this.color, this.width,
+      {this.erase = false, this.opacity = 1})
+      : points = List.unmodifiable(points);
   final List<Offset> points;
   final Color color;
   final double width;
+  final bool erase;
+  final double opacity;
 }
 
 class PhotoText {
-  const PhotoText(this.text, this.position, this.color, this.size);
+  const PhotoText(
+    this.text,
+    this.position,
+    this.color,
+    this.size, {
+    this.angle = 0,
+    this.background,
+    this.fontStyle = 0,
+    this.align = TextAlign.center,
+    this.emoji = false,
+  });
   final String text;
   final Offset position;
   final Color color;
-  final double size;
-  PhotoText copy({Offset? position, double? size}) =>
-      PhotoText(text, position ?? this.position, color, size ?? this.size);
+  final double size, angle;
+  final Color? background;
+  final int fontStyle;
+  final TextAlign align;
+  final bool emoji;
+  PhotoText copy(
+          {String? text,
+          Offset? position,
+          Color? color,
+          double? size,
+          double? angle,
+          Color? background,
+          bool clearBackground = false,
+          int? fontStyle,
+          TextAlign? align,
+          bool? emoji}) =>
+      PhotoText(text ?? this.text, position ?? this.position,
+          color ?? this.color, size ?? this.size,
+          angle: angle ?? this.angle,
+          background: clearBackground ? null : background ?? this.background,
+          fontStyle: fontStyle ?? this.fontStyle,
+          align: align ?? this.align,
+          emoji: emoji ?? this.emoji);
 }
 
 class PhotoEdit {
-  PhotoEdit({
-    required this.path,
-    this.turns = 0,
-    this.filter = 0,
-    List<PhotoStroke>? strokes,
-    List<PhotoText>? texts,
-  })  : strokes = strokes ?? [],
-        texts = texts ?? [];
+  PhotoEdit(
+      {required this.path,
+      this.turns = 0,
+      this.filter = 0,
+      this.mirrored = false,
+      List<PhotoStroke>? strokes,
+      List<PhotoText>? texts})
+      : strokes = List.unmodifiable(strokes ?? const []),
+        texts = List.unmodifiable(texts ?? const []);
   final String path;
   final int turns, filter;
+  final bool mirrored;
   final List<PhotoStroke> strokes;
   final List<PhotoText> texts;
-  PhotoEdit copy({
-    int? turns,
-    int? filter,
-    List<PhotoStroke>? strokes,
-    List<PhotoText>? texts,
-  }) =>
+  PhotoEdit copy(
+          {int? turns,
+          int? filter,
+          bool? mirrored,
+          List<PhotoStroke>? strokes,
+          List<PhotoText>? texts}) =>
       PhotoEdit(
-        path: path,
-        turns: turns ?? this.turns,
-        filter: filter ?? this.filter,
-        strokes: strokes ?? this.strokes,
-        texts: texts ?? this.texts,
-      );
+          path: path,
+          turns: turns ?? this.turns,
+          filter: filter ?? this.filter,
+          mirrored: mirrored ?? this.mirrored,
+          strokes: strokes ?? this.strokes,
+          texts: texts ?? this.texts);
   bool get hasOverlays =>
-      turns != 0 || filter != 0 || strokes.isNotEmpty || texts.isNotEmpty;
+      turns % 4 != 0 ||
+      mirrored ||
+      filter != 0 ||
+      strokes.isNotEmpty ||
+      texts.isNotEmpty;
 }
 
 class PhotoHistory {
@@ -121,17 +161,80 @@ Future<ui.Image> decodePhoto(File file, {int maxEdge = 2560}) async {
 Size photoSize(ui.Image image, PhotoEdit edit) => edit.turns.isOdd
     ? Size(image.height.toDouble(), image.width.toDouble())
     : Size(image.width.toDouble(), image.height.toDouble());
-Offset photoSourcePoint(Offset display, int turns) {
-  switch (turns % 4) {
-    case 1:
-      return Offset(display.dy, 1 - display.dx);
-    case 2:
-      return Offset(1 - display.dx, 1 - display.dy);
-    case 3:
-      return Offset(1 - display.dy, display.dx);
-    default:
-      return display;
+Offset photoSourcePoint(Offset display, int turns, {bool mirrored = false}) {
+  final point = switch (turns % 4) {
+    1 => Offset(display.dy, 1 - display.dx),
+    2 => Offset(1 - display.dx, 1 - display.dy),
+    3 => Offset(1 - display.dy, display.dx),
+    _ => display,
+  };
+  return mirrored ? Offset(1 - point.dx, point.dy) : point;
+}
+
+Offset photoDisplayPoint(Offset source, int turns, {bool mirrored = false}) {
+  final point = mirrored ? Offset(1 - source.dx, source.dy) : source;
+  return switch (turns % 4) {
+    1 => Offset(1 - point.dy, point.dx),
+    2 => Offset(1 - point.dx, 1 - point.dy),
+    3 => Offset(point.dy, 1 - point.dx),
+    _ => point,
+  };
+}
+
+TextPainter _photoTextPainter(
+    PhotoText text, Size imageSize, TextDirection direction) {
+  final edge = math.min(imageSize.width, imageSize.height);
+  return TextPainter(
+    text: TextSpan(
+        text: text.text,
+        style: TextStyle(
+          color: text.color,
+          fontSize: text.size * edge,
+          fontWeight: text.fontStyle == 1 ? FontWeight.w400 : FontWeight.w700,
+          fontFamily: text.fontStyle == 1
+              ? 'serif'
+              : text.fontStyle == 2
+                  ? 'monospace'
+                  : null,
+          fontFamilyFallback: const ['NotoColorEmoji'],
+          shadows: text.emoji || text.background != null
+              ? null
+              : const [Shadow(color: Colors.black87, blurRadius: 3)],
+        )),
+    textDirection: direction,
+    textAlign: text.align,
+  )..layout(maxWidth: imageSize.width * .95);
+}
+
+Rect _textBounds(PhotoText text, Size imageSize, TextPainter painter) =>
+    Rect.fromCenter(
+        center: Offset(text.position.dx * imageSize.width,
+            text.position.dy * imageSize.height),
+        width: painter.width,
+        height: painter.height);
+
+/// Unrotated source-pixel bounds; rotate around the center for selection UI.
+Rect photoTextBounds(PhotoText text, Size imageSize,
+    {TextDirection direction = TextDirection.ltr}) {
+  final painter = _photoTextPainter(text, imageSize, direction);
+  try {
+    return _textBounds(text, imageSize, painter);
+  } finally {
+    painter.dispose();
   }
+}
+
+bool hitTestPhotoText(PhotoText text, Offset source, Size imageSize,
+    {TextDirection direction = TextDirection.ltr, double padding = 0}) {
+  final bounds = photoTextBounds(text, imageSize, direction: direction);
+  final delta =
+      Offset(source.dx * imageSize.width, source.dy * imageSize.height) -
+          bounds.center;
+  final c = math.cos(text.angle), s = math.sin(text.angle);
+  final point =
+      Offset(delta.dx * c + delta.dy * s, -delta.dx * s + delta.dy * c) +
+          bounds.center;
+  return bounds.inflate(padding).contains(point);
 }
 
 const photoFilters = <List<double>?>[
@@ -159,6 +262,51 @@ const photoFilters = <List<double>?>[
     0,
   ],
   [1.1, 0, 0, 0, 0, 0, 1.02, 0, 0, 0, 0, 0, 0.9, 0, 0, 0, 0, 0, 1, 0],
+  [.9, 0, 0, 0, 0, 0, 1.02, 0, 0, 0, 0, 0, 1.1, 0, 0, 0, 0, 0, 1, 0],
+  [
+    .393,
+    .769,
+    .189,
+    0,
+    0,
+    .349,
+    .686,
+    .168,
+    0,
+    0,
+    .272,
+    .534,
+    .131,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0
+  ],
+  [
+    1.15748,
+    -.14304,
+    -.01444,
+    0,
+    0,
+    -.04252,
+    1.05696,
+    -.01444,
+    0,
+    0,
+    -.04252,
+    -.14304,
+    1.18556,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0
+  ],
 ];
 void paintPhoto(
   Canvas canvas,
@@ -188,15 +336,23 @@ void paintPhoto(
       canvas.rotate(-math.pi / 2);
       break;
   }
+  if (edit.mirrored) {
+    canvas.translate(w, 0);
+    canvas.scale(-1, 1);
+  }
+  canvas.clipRect(Rect.fromLTWH(0, 0, w, h));
   final paint = Paint()..filterQuality = FilterQuality.high;
-  final matrix = photoFilters[edit.filter];
+  final matrix = photoFilters[edit.filter.clamp(0, photoFilters.length - 1)];
   if (matrix != null) paint.colorFilter = ColorFilter.matrix(matrix);
   canvas.drawImage(image, Offset.zero, paint);
   final edge = math.min(w, h);
+  canvas.saveLayer(Rect.fromLTWH(0, 0, w, h), Paint());
   for (final stroke in edit.strokes) {
     if (stroke.points.isEmpty) continue;
     final p = Paint()
       ..color = stroke.color
+          .withValues(alpha: stroke.color.a * stroke.opacity.clamp(0, 1))
+      ..blendMode = stroke.erase ? BlendMode.clear : BlendMode.srcOver
       ..strokeWidth = stroke.width * edge
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -209,7 +365,7 @@ void paintPhoto(
       canvas.drawCircle(
         first,
         p.strokeWidth / 2,
-        Paint()..color = stroke.color,
+        p..style = PaintingStyle.fill,
       );
       continue;
     }
@@ -219,34 +375,24 @@ void paintPhoto(
     }
     canvas.drawPath(path, p);
   }
+  canvas.restore(); // Eraser affects only the isolated stroke layer.
+  final imageSize = Size(w, h);
   for (final text in edit.texts) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text.text,
-        style: TextStyle(
-          color: text.color,
-          fontSize: text.size * edge,
-          fontWeight: FontWeight.w700,
-          fontFamilyFallback: const ['NotoColorEmoji'],
-          shadows: const [Shadow(color: Colors.black87, blurRadius: 3)],
-        ),
-      ),
-      textDirection: direction,
-      textAlign: TextAlign.center,
-    )..layout(maxWidth: w * 0.95);
-    tp.paint(
-      canvas,
-      Offset(
-        (text.position.dx * w - tp.width / 2).clamp(
-          0,
-          math.max(0, w - tp.width),
-        ),
-        (text.position.dy * h - tp.height / 2).clamp(
-          0,
-          math.max(0, h - tp.height),
-        ),
-      ),
-    );
+    final tp = _photoTextPainter(text, imageSize, direction);
+    final bounds = _textBounds(text, imageSize, tp);
+    canvas.save();
+    canvas.translate(bounds.center.dx, bounds.center.dy);
+    canvas.rotate(text.angle);
+    final local = Rect.fromCenter(
+        center: Offset.zero, width: bounds.width, height: bounds.height);
+    if (text.background != null) {
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(
+              local.inflate(edge * .012), Radius.circular(edge * .015)),
+          Paint()..color = text.background!);
+    }
+    tp.paint(canvas, local.topLeft);
+    canvas.restore();
     tp.dispose();
   }
   canvas.restore();

@@ -1,11 +1,36 @@
 const {test,after}=require('node:test');const assert=require('node:assert/strict');
 const {initializeApp,deleteApp}=require('firebase-admin/app');const {getFirestore,FieldValue}=require('firebase-admin/firestore');
 const {createFollowHandler}=require('../security/follow-relationships');
+const {getAuth}=require('firebase-admin/auth');
+const {randomBytes}=require('node:crypto');
 const {createPublicProfileHandler}=require('../security/public-profile');
 const host=process.env.FIRESTORE_EMULATOR_HOST;
 if(!host||!/^(127\.0\.0\.1|localhost):\d+$/.test(host))throw Error('Local emulator required');
 const project='demo-unispace-security',app=initializeApp({projectId:project},'follow-tests'),db=getFirestore(app);
 after(async()=>{await db.terminate();await deleteApp(app);});let index=0;
+// Rules tests must enter through Auth with a real SID claim and matching
+// server-owned session record, rather than being rejected at the session gate.
+const identities = new Map();
+async function rulesIdentity(uid) {
+ if (identities.has(uid)) return identities.get(uid);
+ const authHost=process.env.FIREBASE_AUTH_EMULATOR_HOST;
+ if(!authHost||!/^(127\.0\.0\.1|localhost):\d+$/.test(authHost))throw Error('Local Auth emulator required');
+ const auth=getAuth(app),sid=randomBytes(32).toString('hex');
+ await auth.createUser({uid});
+ await auth.setCustomUserClaims(uid,{sid});
+ const response=await fetch('http://'+authHost+'/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=demo',{
+  method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({token:await auth.createCustomToken(uid),returnSecureToken:true}),signal:AbortSignal.timeout(15000)});
+ assert.equal(response.status,200);
+ const {idToken}=await response.json();
+ const claims=await auth.verifyIdToken(idToken);
+ assert.equal(claims.uid,uid);assert.equal(claims.sid,sid);
+ await db.doc('users/'+uid+'/sessions/'+sid).set({sessionId:sid,authSessionVersion:1,isRevoked:false});
+ await db.doc('authRevocations/'+uid).set({revokedBefore:0});
+ const identity={token:idToken,authTime:claims.auth_time};
+ identities.set(uid,identity);return identity;
+}
+
 async function setup(privateAccount=true){
  const owner=`follow-${Date.now()}-${index++}`,from=owner+'-from',stranger=owner+'-stranger';
  for(const uid of [owner,from,stranger])await db.doc(`users/${uid}`).set({displayName:uid,privacy:{privateAccount}});
@@ -72,9 +97,8 @@ test('forged identity, extra parameters, self-follow and revoked sessions are re
 });
 test('rules allow participants to inspect status but forbid direct grants and deletes',async()=>{
  const f=await setup();await f.call(f.from,'follow',f.owner);
- const enc=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
  async function rest(uid,path,method='GET'){
-  const now=Math.floor(Date.now()/1000),token=`${enc({alg:'none',typ:'JWT'})}.${enc({iss:`https://securetoken.google.com/${project}`,aud:project,sub:uid,iat:now,exp:now+3600,auth_time:100})}.`;
+  const {token}=await rulesIdentity(uid);
   return fetch(`http://${host}/v1/projects/${project}/databases/(default)/documents/${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(method==='PATCH'?{body:JSON.stringify({fields:{uid:{stringValue:f.from}}})}:{})});
  }
  for(const uid of [f.from,f.owner])assert.equal((await rest(uid,`users/${f.owner}/follow_requests/${f.from}`)).status,200);
@@ -114,10 +138,8 @@ test('block rules allow owner legacy listing and participant status but deny dir
  const f=await setup(false);
  await f.call(f.owner,'block',f.from);
  await db.doc(`users/${f.owner}/blocked_users/${f.from}`).set({identifier:f.from});
- const enc=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
  async function rest(uid,path,method='GET') {
-  const now=Math.floor(Date.now()/1000);
-  const token=`${enc({alg:'none',typ:'JWT'})}.${enc({iss:`https://securetoken.google.com/${project}`,aud:project,sub:uid,iat:now,exp:now+3600,auth_time:100})}.`;
+  const {token}=await rulesIdentity(uid);
   return fetch(`http://${host}/v1/projects/${project}/databases/(default)/documents/${path}`,{method,
    headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
    ...(method==='PATCH'?{body:JSON.stringify({fields:{forged:{booleanValue:true}}})}:{})});
@@ -134,6 +156,6 @@ test('block rules allow owner legacy listing and participant status but deny dir
  for (const path of [current,reverse,legacy]) for (const uid of [f.owner,f.from]) {
   for (const method of ['PATCH','DELETE']) assert.equal((await rest(uid,path,method)).status,403);
  }
- await db.doc(`authRevocations/${f.owner}`).set({revokedBefore:100});
+ await db.doc(`authRevocations/${f.owner}`).set({revokedBefore:(await rulesIdentity(f.owner)).authTime});
  for (const path of [current,reverse,legacy]) assert.equal((await rest(f.owner,path)).status,403);
 });

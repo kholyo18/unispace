@@ -224,4 +224,26 @@ void main() {
     await iterator.cancel();
     expect(calls, 1);
   });
+  test('hidden profile skips polling but resumes fresh authorization when visible', () async {
+    var visible = false;
+    var calls = 0;
+    final first = Completer<void>();
+    final next = Completer<void>();
+    final reader = PublicProfileReader(sessionKey: () => 'alice:1', fetchProfile: (_) async {
+      calls++;
+      return projected();
+    });
+    final sub = reader.watch('bob', interval: const Duration(milliseconds: 5),
+      shouldRefresh: () => visible).listen((_) {
+        if (!first.isCompleted) first.complete(); else if (!next.isCompleted) next.complete();
+      });
+    await first.future;
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+    expect(calls, 1);
+    visible = true;
+    await next.future.timeout(const Duration(seconds: 1));
+    await sub.cancel();
+    expect(calls, 2);
+  });
+
 }

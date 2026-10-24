@@ -1,3 +1,4 @@
+import '../../../services/protected_network_image.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../../services/chat_media_policy.dart';
@@ -96,7 +97,7 @@ class _ChatPolicyImageState extends State<ChatPolicyImage> {
           height: widget.height,
           child: GestureDetector(
               onTap: widget.onTap,
-              child: Image.network(
+              child: ProtectedImage.network(
                 widget.source,
                 fit: widget.fit,
                 cacheWidth: 720,

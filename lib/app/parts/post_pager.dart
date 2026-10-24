@@ -658,7 +658,7 @@ class _PostPagerPageState extends State<_PostPagerPage>
             policyRevision: widget.policyRevision,
             grant: widget.mediaGrant)
         : isNetwork
-            ? CachedNetworkImage(imageUrl: path, fit: BoxFit.contain)
+            ? ProtectedCachedNetworkImage(imageUrl: path, fit: BoxFit.contain)
             : Image.file(File(path), fit: BoxFit.contain);
 
     final zoomed = ((_currentScale[index] ?? 1.0) - 1.0).abs() > 0.05;
@@ -752,7 +752,7 @@ class _PostPagerPageState extends State<_PostPagerPage>
           widget.prepare &&
           _foreground &&
           Uri.tryParse(p)?.host != 'firebasestorage.googleapis.com') {
-        precacheImage(CachedNetworkImageProvider(p), context);
+        precacheImage(ProtectedCachedNetworkImageProvider(p), context);
       }
     }
   }

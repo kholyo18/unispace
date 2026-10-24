@@ -1,58 +1,68 @@
-// Session-gated deployed Storage baseline; existing media policies are preserved.
-// Bearer download URLs issued previously are not invalidated by these rules.
+// Release rules: grant-bound uploads and signed-session revocation projection.
+// These rules do not revoke bearer download URLs. Token delivery migration remains required.
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function activeSession() {
-      return request.auth != null
-        && request.auth.token.get('sid', '') is string
+    function active() {
+      let c = firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data;
+      return request.auth.token.get('sid', '') is string
         && request.auth.token.get('sid', '').matches('^[a-f0-9]{64}$')
+        && c.storageSessionSchema == 1
+        && c.get('storageRevokedSessions', {}).get(request.auth.token.sid, false) == false
         && request.auth.token.get('firebase', {}).get('tenant', null) == null
         && request.auth.token.auth_time is int && request.auth.token.auth_time > 0
-        && activeRecords();
+        && c.revokedBefore is int && c.revokedBefore >= 0 && request.auth.token.auth_time > c.revokedBefore
+        && c.storageSchema == 1 && c.storageAllowed == true && c.storageUntil is timestamp && request.time < c.storageUntil;
     }
-    function activeRecords() {
-      let s = firestore.get(/databases/(default)/documents/users/$(request.auth.uid)/sessions/$(request.auth.token.sid)).data;
-      let c = firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data;
-      return s.authSessionVersion == 1 && s.sessionId == request.auth.token.sid && s.isRevoked == false
-        && c.revokedBefore is int && request.auth.token.auth_time > c.revokedBefore;
+    function session() { return request.auth != null && active(); }
+    // Storage create authorizes file-content writes, including overwrites.
+    // update only covers metadata. Existing bytes need an explicit guard.
+    function grant(overwrite) {
+      let grantId = request.resource.metadata.get('uploadGrantId', '');
+      let g = firestore.get(/databases/(default)/documents/storageUploadGrants/$(grantId)).data;
+      return grantId.matches('^[A-Za-z0-9_-]{20}$') && g.schemaVersion == 1
+        && g.uid == request.auth.uid && g.path == request.resource.name && g.bucket == bucket
+        && g.sessionId == request.auth.token.sid
+        && g.authTime == request.auth.token.auth_time && g.expiresAt is timestamp && request.time < g.expiresAt
+        && request.resource.size > 0 && request.resource.size == g.size
+        && request.resource.contentType == g.contentType
+        && request.resource.metadata.get('uploadedBy', '') == request.auth.uid
+        && (!overwrite || g.overwrite == true);
     }
-    match /users/{userId}/{fileName} {
-      allow read: if activeSession();
-      allow write: if activeSession() && request.auth.uid == userId;
+    function ownsPost(postId) {
+      return firestore.get(/databases/(default)/documents/community_posts/$(postId)).data.authorId == request.auth.uid;
     }
-    match /community_posts/{postId}/{allPaths=**} {
-      allow read: if activeSession();
-      allow write: if activeSession();
+    function chatMember(chatId) {
+      return request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.memberIds;
+    }
+    match /users/{uid}/{fileName} {
+      allow get: if session() && request.auth.uid == uid;
+      allow create: if session() && request.auth.uid == uid && grant(resource != null);
+      allow update: if session() && request.auth.uid == uid && grant(true);
+      allow delete: if session() && request.auth.uid == uid;
+    }
+    match /community_posts/{postId}/{folder}/{fileName} {
+      allow get: if session() && folder in ['images', 'videos'] && ownsPost(postId);
+      allow create: if session() && resource == null
+        && folder in ['images', 'videos'] && grant(false);
+      allow update: if false;
+      allow delete: if session() && folder in ['images', 'videos'] && ownsPost(postId);
+    }
+    match /community_posts/{postId}/comments/{uid}/{commentId}/{fileName} {
+      allow get: if session() && request.auth.uid == uid;
+      allow create: if session() && resource == null && request.auth.uid == uid && grant(false);
+      allow update: if false;
+      allow delete: if session() && request.auth.uid == uid;
     }
     match /chats/{chatId}/{folder}/{fileName} {
-      allow read: if activeSession() && folder != 'files';
-      allow write: if activeSession()
-        && request.resource.size < 40 * 1024 * 1024
-        && folder in ['images', 'videos', 'audio']
-        && request.resource.contentType.matches('image/.*|video/.*|audio/.*');
+      allow get: if session() && folder in ['images', 'videos', 'audio', 'files', 'wallpaper'] && chatMember(chatId);
+      allow create: if session() && folder in ['images', 'videos', 'audio', 'files', 'wallpaper']
+        && (resource == null || (folder == 'wallpaper' && fileName == request.auth.uid + '.jpg'))
+        && grant(resource != null);
+      allow update: if session() && folder == 'wallpaper' && fileName == request.auth.uid + '.jpg' && grant(true);
+      // Older objects lack trustworthy uploader metadata. Keep their deletion server-only.
+      allow delete: if session() && chatMember(chatId) && resource.metadata.get('uploadedBy', '') == request.auth.uid;
     }
-    match /chats/{chatId}/wallpaper/{fileName} {
-      function validWallpaperGrant() {
-        let id = request.resource.metadata.uploadGrantId;
-        let g = firestore.get(/databases/(default)/documents/storageUploadGrants/$(id)).data;
-        let c = firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data;
-        return id.matches('^[A-Za-z0-9_-]{20}$')
-          && request.resource.metadata.uploadedBy == request.auth.uid
-          && g.schemaVersion == 1 && g.uid == request.auth.uid
-          && g.path == 'chats/' + chatId + '/wallpaper/' + fileName
-          && g.bucket == bucket && g.authTime == request.auth.token.auth_time
-          && g.size == request.resource.size && g.contentType == request.resource.contentType
-          && g.overwrite == true && g.expiresAt > request.time
-          && c.storageSchema == 1 && c.storageAllowed == true && c.storageUntil > request.time
-          && c.revokedBefore is int && request.auth.token.auth_time > c.revokedBefore;
-      }
-      allow write: if request.auth != null && request.resource != null
-        && fileName == request.auth.uid + '.jpg'
-        && request.resource.size > 0 && request.resource.size <= 20 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*')
-        && validWallpaperGrant();
-    }
-
+    // No prefix listing or broad recursive fallback is permitted.
   }
 }

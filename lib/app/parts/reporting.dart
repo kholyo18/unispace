@@ -415,7 +415,7 @@ class _ReportPostSheetState extends State<_ReportPostSheet> {
             const SizedBox(height: 10),
             FilledButton(
               onPressed: _canSubmit ? _submit : null,
-              style: FilledButton.styleFrom(
+              style: FilledButton.styleFrom(foregroundColor: Colors.white,
                 backgroundColor: AppTeal.main,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -668,7 +668,7 @@ class _ReportSubmittedSheetState extends State<_ReportSubmittedSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_rounded, color: AppTeal.main, size: 48),
+            Icon(Icons.check_circle_rounded, color: AppTeal.foreground(context), size: 48),
             const SizedBox(height: 12),
             Text(
               widget.alreadyReported ? mainText(context, "سبق أن بلّغت") : mainText(context, "تم إرسال التبليغ"),
@@ -731,7 +731,7 @@ class _ReportSubmittedSheetState extends State<_ReportSubmittedSheet> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: () => Navigator.pop(context),
-                style: FilledButton.styleFrom(
+                style: FilledButton.styleFrom(foregroundColor: Colors.white,
                   backgroundColor: AppTeal.main,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(

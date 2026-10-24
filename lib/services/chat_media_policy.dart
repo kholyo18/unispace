@@ -1,3 +1,4 @@
+import 'protected_media_service.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -210,21 +211,31 @@ class ChatImageMemoryCache extends ChangeNotifier {
   }
 
   static Future<Uint8List> _fetch(Uri uri, int limit) async {
+    final service = ProtectedMediaService.instance;
+    final grant = await service.resolve(uri.toString());
+    void guard() {
+      if (grant.scope != service.scope) throw StateError('Media session changed');
+    }
+    guard();
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
     final timer =
         Timer(const Duration(seconds: 25), () => client.close(force: true));
     try {
-      final request = await client.getUrl(uri);
+      final request = await client.getUrl(Uri.parse(grant.url));
+      guard();
       request.followRedirects = false;
       final response = await request.close();
+      guard();
       if (response.statusCode != 200 || response.contentLength > limit)
         throw StateError('media unavailable');
       final bytes = BytesBuilder(copy: false);
       await for (final chunk in response) {
+        guard();
         if (bytes.length + chunk.length > limit)
           throw StateError('media too large');
         bytes.add(chunk);
       }
+      guard();
       return bytes.takeBytes();
     } finally {
       timer.cancel();

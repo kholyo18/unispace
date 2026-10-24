@@ -149,7 +149,7 @@ class ChatPreferencesSnapshot {
     final color = theme['bubbleColor'];
     bubbleColor = color is int && ChatPreferencesClient._validColor(color)
         ? color
-        : 0xFF0D9488;
+        : 0xFF00483F;
     final gradient = theme['bubbleGradient'];
     bubbleGradient =
         gradient is List &&

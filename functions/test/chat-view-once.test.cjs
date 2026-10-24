@@ -143,11 +143,11 @@ test('cleanup retains ticket after failed delete and removes missing-object tick
   const missingBound = await cleanupFixture({ deleteError: 404 }); await missingBound.asset('bound');
   assert.deepEqual(await missingBound.h.cleanup(), { scanned: 1, removed: 1, failed: 0 });
 });
-test('cleanup processes at most100 expired assets per run', async () => {
+test('cleanup advances through more than two expired pages per run', async () => {
   const f = await cleanupFixture({ missing: true });
-  await Promise.all(Array.from({ length: 101 }, () => f.asset('prepared')));
-  assert.deepEqual(await f.h.cleanup(), { scanned: 100, removed: 100, failed: 0 });
-  assert.deepEqual(await f.h.cleanup(), { scanned: 1, removed: 1, failed: 0 });
+  await Promise.all(Array.from({ length: 201 }, () => f.asset('prepared')));
+  assert.deepEqual(await f.h.cleanup(), { scanned: 201, removed: 201, failed: 0 });
+  assert.deepEqual(await f.h.cleanup(), { scanned: 0, removed: 0, failed: 0 });
 });
 
 test('send integration binds private asset, consumes once and retries after opened/expiry without object fetch', async () => {

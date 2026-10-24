@@ -1,3 +1,5 @@
+import '../../../services/protected_media_service.dart';
+import '../../../services/protected_network_image.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import '../../../services/chat_media_policy.dart';
@@ -45,7 +47,7 @@ class ChatVideoThumbnail extends StatelessWidget {
                         width: 200,
                         height: 240)
                   else
-                    Image.network(thumbnailUrl!,
+                    ProtectedImage.network(thumbnailUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => const SizedBox.shrink()),
                 const Center(
@@ -68,6 +70,9 @@ class ChatVideoViewer extends StatefulWidget {
 class _ChatVideoViewerState extends State<ChatVideoViewer>
     with WidgetsBindingObserver {
   VideoPlayerController? _controller;
+  String? _playbackScope;
+  bool get _samePlaybackSession => _playbackScope == null ||
+      _playbackScope == ProtectedMediaService.instance.scope;
   bool _failed = false, _foreground = true;
   int _attempt = 0;
   @override
@@ -93,18 +98,25 @@ class _ChatVideoViewerState extends State<ChatVideoViewer>
   }
 
   bool _current(VideoPlayerController c, int attempt) =>
-      mounted && identical(_controller, c) && attempt == _attempt;
+      mounted && identical(_controller, c) && attempt == _attempt && _samePlaybackSession;
   Future<void> _load() async {
     final attempt = ++_attempt;
     _release();
     setState(() => _failed = false);
     try {
-      final c = (widget.controllerFactory ??
-          ((url) =>
-              VideoPlayerController.networkUrl(Uri.parse(url))))(widget.url);
+      final factory = widget.controllerFactory;
+      final grant = factory == null
+          ? await ProtectedMediaService.instance.resolve(widget.url) : null;
+      if (!(mounted && attempt == _attempt)) return;
+      _playbackScope = grant?.scope;
+      final c = factory != null ? factory(widget.url)
+          : VideoPlayerController.networkUrl(Uri.parse(grant!.url));
       _controller = c;
       c.addListener(_tick);
       await initializeVideoPlayback(c);
+      if (grant != null && grant.scope != ProtectedMediaService.instance.scope) {
+        throw StateError('Media session changed');
+      }
       if (!_current(c, attempt)) return;
       await c.setVolume(1);
       if (!_current(c, attempt)) return;
@@ -134,7 +146,7 @@ class _ChatVideoViewerState extends State<ChatVideoViewer>
       } else {
         if (c.value.position >= c.value.duration) await c.seekTo(Duration.zero);
         await startVisibleVideo(
-            c, () => mounted && identical(_controller, c) && _foreground);
+            c, () => mounted && identical(_controller, c) && _foreground && _samePlaybackSession);
       }
     } catch (_) {
       if (mounted && identical(_controller, c)) setState(() => _failed = true);
@@ -252,7 +264,7 @@ class _ChatImageViewerState extends State<ChatImageViewer> {
     if (_scoped) _cache.clearScope(widget.scope!);
     final bytes = _bytes;
     if (bytes != null) unawaited(MemoryImage(bytes).evict());
-    unawaited(NetworkImage(widget.url).evict());
+    unawaited(ProtectedNetworkImage(widget.url).evict().catchError((Object _) => false));
     setState(() {
       _bytes = null;
       _loading = false;
@@ -307,7 +319,7 @@ class _ChatImageViewerState extends State<ChatImageViewer> {
     if (_scoped) _cache.clearScope(widget.scope!);
     final bytes = _bytes;
     if (bytes != null) await MemoryImage(bytes).evict();
-    await NetworkImage(widget.url).evict();
+    try { await ProtectedNetworkImage(widget.url).evict(); } catch (_) {}
     if (!mounted) return;
     setState(() {
       _bytes = null;
@@ -349,7 +361,7 @@ class _ChatImageViewerState extends State<ChatImageViewer> {
                                     message:
                                         shellText(context, 'تعذر تحميل الصورة'),
                                     onRetry: () => unawaited(_retry())))
-                            : Image.network(widget.url,
+                            : ProtectedImage.network(widget.url,
                                 key: ValueKey('${widget.url}:$_attempt'),
                                 fit: BoxFit.contain,
                                 loadingBuilder: (_, child, progress) => progress == null

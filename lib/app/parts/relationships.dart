@@ -480,7 +480,7 @@ class _FollowEmptyState extends StatelessWidget {
                     ? Icons.people_outline_rounded
                     : Icons.person_add_alt_1_outlined,
                 size: 32,
-                color: AppTeal.main,
+                color: AppTeal.foreground(context),
               ),
             ),
             const SizedBox(height: 16),
@@ -1099,7 +1099,7 @@ class _FollowRequestTile extends StatelessWidget {
                 fromName: name,
                 fromPhotoUrl: photoUrl,
               ),
-              style: FilledButton.styleFrom(
+              style: FilledButton.styleFrom(foregroundColor: Colors.white,
                 backgroundColor: AppTeal.main,
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 14),

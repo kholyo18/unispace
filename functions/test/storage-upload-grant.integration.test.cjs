@@ -28,7 +28,7 @@ test('anonymous requests and forged auth envelopes cannot create a grant',async(
 test('extra fields mismatched caller and bad sizes are rejected before writes',async()=>{
  const f=await fixture();const base={expectedUid:f.owner.uid,path:`users/${f.owner.uid}/a.jpg`,contentType:'image/jpeg',size:3};
  for(const bad of [{...base,expectedUid:f.actor.uid},{...base,overwrite:true},{...base,size:0},{...base,size:20971521}]) await assert.rejects(handler(callableRequest(f.owner,bad)),{code:'invalid-argument'});
- assert.equal(await access(f.owner),undefined);
+ assert.equal((await access(f.owner)).storageAllowed,undefined);
 });
 test('signup may upload only its own profile before the profile document exists',async()=>{
  const f=await fixture();await db.doc(`users/${f.owner.uid}`).delete();await grant(f.owner);
@@ -126,4 +126,34 @@ test('direct client access to grants and the authorization projection is denied'
  for(const path of [`storageUploadGrants/${g.grantId}`,`authRevocations/${f.owner.uid}`]) {
   denied(await read(path,f.owner));denied(await patch(path,f.owner,{storageAllowed:true}));
  }
+});
+
+test('protected finalize and retries recheck ACL without consuming another grant at the quota boundary',async()=>{
+ const {createProtectedUploadHandlers}=require('../security/protected-upload');
+ const f=await fixture(),id=await chat(f),path='chats/'+id+'/images/quota.jpg';
+ const objects=new Map();let copies=0;
+ const storage={name:bucket,file:(name,options)=>({name,
+  getMetadata:async()=>{if(!objects.has(name))throw Object.assign(Error('missing'),{code:404});return[objects.get(name)];},
+  getSignedUrl:async()=>['https://storage.googleapis.com/'+bucket+'/'+name+'?signature=test'],
+  copy:async(destination,args)=>{const source=objects.get(name);assert.equal(options.generation,source.generation);assert.equal(args.preconditionOpts.ifGenerationMatch,'0');copies++;objects.set(destination.name,{...source,generation:'200',metadata:args.metadata});},
+  delete:async args=>{if(objects.has(name))assert.equal(args.ifGenerationMatch,objects.get(name).generation);objects.delete(name);}
+ })};
+ const protectedHandlers=createProtectedUploadHandlers({auth,db,FieldValue,Timestamp,bucket:()=>storage,prepareUpload:handler});
+ await db.doc('authRevocations/'+f.owner.uid).set({revokedBefore:0,storageGrantWindowStart:Date.now(),storageGrantCount:59});
+ const g=await protectedHandlers.prepare(callableRequest(f.owner,{expectedUid:f.owner.uid,path,contentType:'image/jpeg',size:3}));
+ objects.set(g.stagingPath,{generation:'100',size:'3',contentType:'image/jpeg',metadata:{uploadedby:f.owner.uid,uploadgrantid:g.grantId}});
+ const before=await access(f.owner),grantsBefore=await db.collection('storageUploadGrants').where('uid','==',f.owner.uid).get();
+ assert.equal(before.storageGrantCount,60);
+ const finalize=()=>protectedHandlers.finalize(callableRequest(f.owner,{grantId:g.grantId}));
+ const block=db.doc('users/'+f.actor.uid+'/blocked_accounts/'+f.owner.uid);
+ await block.set({});await assert.rejects(finalize(),{code:'permission-denied'});assert.equal(copies,0);await block.delete();
+ const result=await finalize();assert.deepEqual(await finalize(),result);assert.equal(copies,1);
+ await db.doc('chats/'+id).update({memberIds:[f.actor.uid,f.outsider.uid]});
+ await assert.rejects(finalize(),{code:'permission-denied'});
+ assert.deepEqual(await access(f.owner),before);
+ const grantsAfter=await db.collection('storageUploadGrants').where('uid','==',f.owner.uid).get();
+ assert.equal(grantsAfter.size,grantsBefore.size);
+ // No public request flag can select the server-only read-only mode.
+ await assert.rejects(handler(callableRequest(f.owner,{expectedUid:f.owner.uid,path:'users/'+f.owner.uid+'/avatar.jpg',contentType:'image/jpeg',size:3,issueGrant:false})),{code:'invalid-argument'});
+ await assert.rejects(grant(f.owner),{code:'resource-exhausted'});
 });

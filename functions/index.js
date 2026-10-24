@@ -22,7 +22,10 @@ const sessionGuard = createSessionGuard({ db: getFirestore() });
 const lifecycleExemptOnCall = (options, handler) => rawOnCall(options, sessionGuard(handler));
 const { createAccountAccessGuard } = require('./security/account-access-guard');
 const accountAccessGuard = createAccountAccessGuard({ db: getFirestore() });
-const onCall = (options, handler) => lifecycleExemptOnCall(options, accountAccessGuard(handler));
+const { createReleasePolicyReader, createReleaseVersionGuard } = require('./security/release-policy');
+const releaseVersionGuard = createReleaseVersionGuard({db:getFirestore()});
+exports.readReleasePolicy = rawOnCall({region:'europe-west1'}, createReleasePolicyReader({db:getFirestore()}));
+const onCall = (options, handler) => lifecycleExemptOnCall(options, accountAccessGuard(releaseVersionGuard(handler)));
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { getAuth } = require('firebase-admin/auth');
 const { FieldValue } = require('firebase-admin/firestore');
@@ -50,7 +53,7 @@ exports.generateTotpRecoveryKey = onCall({ region: 'europe-west1', timeoutSecond
   if (!recoveryApiKey.value()) throw new HttpsError('unavailable', 'Recovery is not configured.');
   return recoveryHandlers.generate(request);
 });
-exports.recoverTotpAccount = onCall({ region: 'europe-west1', timeoutSeconds: 60 }, request => {
+exports.recoverTotpAccount = lifecycleExemptOnCall({ region: 'europe-west1', timeoutSeconds: 60 }, request => {
   if (!recoveryApiKey.value()) throw new HttpsError('unavailable', 'Recovery is not configured.');
   return recoveryHandlers.recover(request);
 });
@@ -291,7 +294,7 @@ exports.mutateChatMessage = onCall({region:'europe-west1'},chatHandlers.mutate);
 const {createChatNotificationHandler}=require('./security/chat-push');
 exports.pushOnChatMessage=onDocumentCreated('chats/{chatId}/messages/{messageId}',createChatNotificationHandler({db:getFirestore(),FieldValue}));
 const {createGroupHandlers}=require('./security/chat-groups');
-const groupHandlers=createGroupHandlers({db:getFirestore(),auth:getAuth(),FieldValue});
+const groupHandlers=createGroupHandlers({db:getFirestore(),auth:getAuth(),FieldValue,bucket:()=>getStorage().bucket(commentMediaBucket.value())});
 exports.createChatGroup=onCall({region:'europe-west1'},groupHandlers.create);
 exports.manageChatGroup=onCall({region:'europe-west1'},groupHandlers.manage);
 exports.respondGroupInvite=onCall({region:'europe-west1'},groupHandlers.respond);
@@ -330,3 +333,17 @@ exports.confirmChatViewOnceUpload=onCall({region:'europe-west1'},chatViewOnceHan
 
 const {createChatNotificationActionHandler}=require('./security/chat-notification-actions');
 exports.handleChatNotificationAction=onCall({region:'europe-west1'},createChatNotificationActionHandler({db:getFirestore(),auth:getAuth(),chatHandlers}));
+
+// Protected media locators never carry permanent download tokens.
+const {createProtectedMediaHandler}=require('./security/protected-media');
+exports.readProtectedMedia=onCall({region:'europe-west1',timeoutSeconds:60},
+  createProtectedMediaHandler({auth:getAuth(),db:getFirestore(),bucket:()=>getStorage().bucket(commentMediaBucket.value())}));
+const {createProtectedUploadHandlers}=require('./security/protected-upload');
+const protectedUploads=createProtectedUploadHandlers({auth:getAuth(),db:getFirestore(),FieldValue,Timestamp,
+  bucket:()=>getStorage().bucket(commentMediaBucket.value()),
+  prepareUpload:createStorageUploadHandler({auth:getAuth(),db:getFirestore(),FieldValue,Timestamp,bucketName:()=>commentMediaBucket.value()})});
+exports.prepareProtectedUpload=onCall({region:'europe-west1',timeoutSeconds:60},protectedUploads.prepare);
+exports.finalizeProtectedUpload=onCall({region:'europe-west1',timeoutSeconds:120},protectedUploads.finalize);
+const {createProtectedUploadCleanup}=require('./security/protected-upload-cleanup');
+exports.cleanupProtectedUploadStaging=onSchedule({schedule:'every 24 hours',region:'europe-west1',timeoutSeconds:120},
+ createProtectedUploadCleanup({db:getFirestore(),bucket:()=>getStorage().bucket(commentMediaBucket.value())}));

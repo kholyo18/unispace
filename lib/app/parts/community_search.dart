@@ -34,8 +34,9 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
   // NEW: التبويب النشط لعرض النتائج
   _ResultTab _tab = _ResultTab.all;
 
+  StreamSubscription<User?>? _historySubscription;
   List<String> _recentSearches = [];
-  static const _recentSearchesKey = 'community_recent_searches';
+  late final String? _historyUid = FirebaseAuth.instance.currentUser?.uid;
 
   static const List<_ExploreItem> _exploreItems = [
     _ExploreItem(category: 'دراسة', label: 'امتحانات', activity: '٢٤٠+ منشور', icon: Icons.edit_note_rounded, color: Color(0xFFEF6C57)),
@@ -54,6 +55,11 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
       duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
     _loadRecentSearches();
+    _historySubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted && user?.uid != _historyUid) {
+        setState(() => _recentSearches = []);
+      }
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -62,6 +68,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
 
   @override
   void dispose() {
+    _historySubscription?.cancel();
     _controller.dispose();
     _focusNode.dispose();
     _scrollController.dispose();
@@ -71,9 +78,8 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
 
   Future<void> _loadRecentSearches() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getStringList(_recentSearchesKey) ?? [];
-      if (!mounted) return;
+      final saved = await AccountSearchHistory.load(_historyUid);
+      if (!mounted || FirebaseAuth.instance.currentUser?.uid != _historyUid) return;
       setState(() => _recentSearches = saved);
     } catch (e) {
       debugPrint('load recent searches failed: $e');
@@ -82,8 +88,8 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
 
   Future<void> _saveRecentSearches() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_recentSearchesKey, _recentSearches);
+      if (FirebaseAuth.instance.currentUser?.uid != _historyUid) return;
+      await AccountSearchHistory.save(_historyUid, _recentSearches);
     } catch (e) {
       debugPrint('save recent searches failed: $e');
     }
@@ -326,7 +332,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
   }
 
   static final _normalColor = AppTeal.main;
-  static const _aiColor = Color(0xFF7C5CFF);
+  static const _aiColor = UniSpaceColors.emerald;
 
   Color get _accent => _isAiMode ? _aiColor : _normalColor;
 
@@ -336,7 +342,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF000000) : Colors.white,
+      backgroundColor: isDark ? UniSpaceColors.darkBackground : Colors.white,
       body: SafeArea(
         child: Column(
           children: [
@@ -382,7 +388,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
                 hintText: _isAiMode ? mainText(context, "اسأل الذكاء الاصطناعي...") : mainText(context, "ابحث"),
                 hintStyle: TextStyle(color: theme.hintColor, fontSize: 15),
                 filled: true,
-                fillColor: isDark ? const Color(0xFF16181C) : const Color(0xFFEFF3F4),
+                fillColor: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightField,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
@@ -484,7 +490,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
               constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF16181C) : const Color(0xFFF7F8F9),
+                color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightField,
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(4), bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
               ),
               child: Column(
@@ -620,7 +626,7 @@ class _RedditStyleAiSearchScreenState extends State<RedditStyleAiSearchScreen>
             },
             onDelete: () => setState(() => _recentSearches.remove(s)),
           )),
-          Divider(height: 24, thickness: 6, color: isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF5F5F5)),
+          Divider(height: 24, thickness: 6, color: isDark ? UniSpaceColors.darkBackground : UniSpaceColors.lightField),
         ],
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),

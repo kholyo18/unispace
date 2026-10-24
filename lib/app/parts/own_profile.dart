@@ -25,13 +25,13 @@ class _ProfileTheme {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return _ProfileTheme._(
       isDark: dark,
-      pageBg: Theme.of(context).colorScheme.surface,
-      cardBg: dark ? const Color(0xFF171B1E) : Colors.white,
+      pageBg: Theme.of(context).scaffoldBackgroundColor,
+      cardBg: dark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
       cardBorder: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
-      textPrimary: dark ? const Color(0xFFE7EAEB) : const Color(0xFF1C1C1C),
-      textMuted: dark ? const Color(0xFF9098A0) : const Color(0xFF6B7280),
-      textFaint: dark ? const Color(0xFF5B6266) : const Color(0xFF9CA3AF),
-      avatarRing: dark ? const Color(0xFF171B1E) : Colors.white,
+      textPrimary: UniSpaceColors.ink(dark),
+      textMuted: dark ? UniSpaceColors.darkMuted : UniSpaceColors.lightMuted,
+      textFaint: UniSpaceColors.muted(dark),
+      avatarRing: dark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
     );
   }
 }
@@ -318,8 +318,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         throw  _MediaUploadError(mainText(context, "يجب أن تكون الصورة غير فارغة وألا تتجاوز 20 ميغابايت"));
       }
       if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError(mainText(context, "تغيّر الحساب"));
-      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
-      var url = await ref.getDownloadURL();
+      await StorageUploadService.putFile(ref, file, SettableMetadata(contentType: 'image/jpeg'));
+      var url = StorageUploadService.locator(ref);
       if (isProfile) {
         final sep = url.contains('?') ? '&' : '?';
         url = '$url${sep}v=${DateTime.now().millisecondsSinceEpoch}';
@@ -416,8 +416,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       isScrollControlled: true,
       builder: (ctx) {
         final sheetBg =
-        t.isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
-        final groupBg = t.isDark ? const Color(0xFF2C2C2E) : Colors.white;
+        t.isDark ? UniSpaceColors.darkSurface : UniSpaceColors.ivory;
+        final groupBg = t.isDark ? UniSpaceColors.darkContainer : UniSpaceColors.lightSurface;
         final divider = t.isDark
             ? Colors.white.withValues(alpha: 0.10)
             : Colors.black.withValues(alpha: 0.08);
@@ -895,7 +895,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           child: SizedBox(
             width: 36,
             height: 36,
-            child: Icon(icon, size: 18, color: AppTeal.main),
+            child: Icon(icon, size: 18, color: AppTeal.foreground(context)),
           ),
         ),
       ),
@@ -986,7 +986,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           end: Alignment.bottomRight,
           colors: [
             AppTeal.main.withValues(alpha: 0.85),
-            const Color(0xFF1565C0),
+            UniSpaceColors.forest,
           ],
         ),
       ),
@@ -1067,7 +1067,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             fit: BoxFit.cover,
                                           )
                                         else if (coverImageUrl != null)
-                                          Image.network(
+                                          ProtectedImage.network(
                                             coverImageUrl!,
                                             fit: BoxFit.cover,
                                             frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -1084,7 +1084,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                 end: Alignment.bottomRight,
                                                 colors: [
                                                   AppTeal.main,
-                                                  const Color(0xFF1565C0),
+                                                  UniSpaceColors.forest,
                                                   const Color(0xFF1A237E),
                                                 ],
                                               ),
@@ -1161,7 +1161,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           ? FileImage(profileImage!)
                                       as ImageProvider
                                           : (profileImageUrl != null
-                                          ? NetworkImage(
+                                          ? ProtectedCachedNetworkImageProvider(
                                         profileImageUrl!,
                                       )
                                           : null),
@@ -1717,7 +1717,7 @@ class _MoodEditSheetState extends State<_MoodEditSheet> {
                   child: FilledButton(
                     onPressed: () =>
                         Navigator.pop(context, _ctrl.text.trim()),
-                    style: FilledButton.styleFrom(
+                    style: FilledButton.styleFrom(foregroundColor: Colors.white,
                       backgroundColor: AppTeal.main,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -2554,7 +2554,7 @@ class AccountSettingsScreen extends StatelessWidget {
             child:  Text(mainText(ctx, "إلغاء")),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(foregroundColor: Colors.white, backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
             child:  Text(mainText(ctx, "متابعة")),
           ),
@@ -2692,7 +2692,7 @@ class AccountSettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  style: FilledButton.styleFrom(foregroundColor: Colors.white, backgroundColor: Colors.red),
                   onPressed: () => Navigator.pop(ctx, true),
                   child:  Text(mainText(ctx, "تأكيد والحذف")),
                 ),
@@ -2806,10 +2806,8 @@ class AccountSettingsScreen extends StatelessWidget {
     if (ok != true || !context.mounted) return;
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await SessionService.instance.revokeCurrentSession(user.uid);
-    }
-    await AuthSessionService.signOutFully();
+    await AuthSessionService.signOutFully(beforeSignOut: user == null ? null :
+      () => SessionService.instance.revokeCurrentSession(user.uid));
     if (!context.mounted) return;
     // AuthGate يتكفّل بإظهار SignIn
     Navigator.of(context).popUntil((r) => r.isFirst);
@@ -2880,19 +2878,7 @@ class AccountSettingsScreen extends StatelessWidget {
                 //   },
                 // ),
 
-                _settingsTile(
-                  context,
-                  icon: Icons.person_add_alt_1_outlined,
-                  title: mainText(context, "طلبات المتابعة"),
-                  subtitle: mainText(context, "إدارة طلبات المتابعة الجديدة"),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const FollowRequestsScreen(),
-                      ),
-                    );
-                  },
-                ),
+
               ],
             ),
 
@@ -3226,7 +3212,7 @@ class AccountSettingsScreen extends StatelessWidget {
             radius: 31,
             backgroundColor: Colors.white.withOpacity(.22),
             backgroundImage: user.photoURL != null
-                ? NetworkImage(user.photoURL!)
+                ? ProtectedCachedNetworkImageProvider(user.photoURL!)
                 : null,
             child: user.photoURL == null
                 ? const Icon(
@@ -3675,7 +3661,7 @@ class _BlockedAccountsSheetState extends State<_BlockedAccountsSheet> {
                         backgroundColor: theme.colorScheme.primary
                             .withValues(alpha: 0.12),
                         backgroundImage: photo.startsWith('http')
-                            ? NetworkImage(photo)
+                            ? ProtectedCachedNetworkImageProvider(photo)
                             : null,
                         child: photo.startsWith('http')
                             ? null

@@ -102,12 +102,16 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer> {
     final isNetwork =
         path.startsWith('http://') || path.startsWith('https://');
 
+    VideoPlayerController? pendingController;
+    final initialScope = ProtectedMediaService.instance.scope;
     VideoPlayerController c;
 
     try {
       if (isNetwork) {
         // تنزيل/قراءة من الكاش ثم تشغيل محلي
-        final file = await DefaultCacheManager().getSingleFile(path);
+        final access = await ProtectedMediaService.instance.resolve(path);
+        final file = await DefaultCacheManager().getSingleFile(access.url, key: media_crypto.sha256.convert(utf8.encode('${access.scope}|$path|${Uri.parse(access.url).queryParameters['generation']}')).toString());
+        if (ProtectedMediaService.instance.scope != access.scope) throw StateError('Media session changed');
         if (!mounted) return;
         c = VideoPlayerController.file(
           file,
@@ -120,11 +124,12 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer> {
         );
       }
 
+      pendingController = c;
       await c.initialize();
       await c.setLooping(true);
       await c.setVolume(1);
 
-      if (!mounted) {
+      if (!mounted || ProtectedMediaService.instance.scope != initialScope) {
         await c.dispose();
         return;
       }
@@ -138,18 +143,22 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer> {
 
       if (mounted) setState(() {});
     } catch (e, st) {
+      await pendingController?.dispose();
+      if (!mounted || ProtectedMediaService.instance.scope != initialScope) return;
       debugPrint('Fullscreen media video init failed: $e');
       debugPrintStack(stackTrace: st);
       // إن فشل الكاش، محاولة أخيرة من الشبكة
       if (isNetwork) {
         try {
+          final access = await ProtectedMediaService.instance.resolve(path);
+          if (!mounted || access.scope != initialScope) return;
           final fallback = VideoPlayerController.networkUrl(
-            Uri.parse(path),
+            Uri.parse(access.url),
             videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
           );
           await fallback.initialize();
           await fallback.setLooping(true);
-          if (!mounted) {
+          if (!mounted || ProtectedMediaService.instance.scope != initialScope) {
             await fallback.dispose();
             return;
           }
@@ -296,7 +305,7 @@ class _FullscreenMediaViewerState extends State<FullscreenMediaViewer> {
     final imageWidget = path.startsWith('assets/')
         ? Image.asset(path, fit: BoxFit.contain)
         : isNetwork
-        ? Image.network(
+        ? ProtectedImage.network(
       path,
       fit: BoxFit.contain,
       errorBuilder: (_, __, ___) => const Icon(

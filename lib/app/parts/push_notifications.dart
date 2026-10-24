@@ -18,34 +18,21 @@ AndroidNotificationChannel get _fcmChannel => AndroidNotificationChannel(
   importance: Importance.high,
 );
 
-final FlutterLocalNotificationsPlugin _localNotifs =
-FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin _localNotifs = FlutterLocalNotificationsPlugin();
 
 Future<void> initPushNotifications() async {
   PushPreferencesService.instance.start();
   try {
     final messaging = FirebaseMessaging.instance;
-
     try {
-      await messaging
-          .requestPermission(alert: true, badge: true, sound: true)
+      await messaging.requestPermission(alert: true, badge: true, sound: true)
           .timeout(const Duration(seconds: 8));
     } catch (e) {
       debugPrint('FCM permission: $e');
     }
-
-    await _localNotifs
-        .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>()
+    await _localNotifs.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_fcmChannel);
-
-    await _localNotifs.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(),
-      ),
-      onDidReceiveNotificationResponse: _notificationResponse,
-    );
+    await ExamNotificationsService.instance.initialize();
 
     final launch = await _localNotifs.getNotificationAppLaunchDetails();
     if (launch?.didNotificationLaunchApp == true && launch?.notificationResponse != null) {

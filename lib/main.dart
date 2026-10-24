@@ -1,3 +1,15 @@
+import 'ui/auth/password_reset_sheet.dart';
+import 'features/exams/notifications/exam_notifications_service.dart';
+import 'widgets/unispace_brand.dart';
+import 'widgets/brand_launch.dart';
+import 'package:crypto/crypto.dart' as media_crypto;
+import 'widgets/required_update_gate.dart';
+import 'services/protected_media_service.dart';
+import 'services/protected_network_image.dart';
+import 'ui/auth/account_recovery_screen.dart';
+import 'services/storage_upload_service.dart';
+import 'l10n/auth_settings_strings.dart';
+import 'services/account_search_history.dart';
 import 'services/chat_notification_actions.dart';
 import 'features/shell/chat/chat_group_pages.dart' show ChatGroupJoinPage;
 import 'services/chat_group_link.dart';
@@ -53,7 +65,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:app_links/app_links.dart' as deep_links;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
@@ -171,6 +182,7 @@ part 'app/parts/moderation.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  runApp(const BrandLaunchApp());
 
   PrivacyExternalRoutes.blockedAccounts = (_) => const BlockedUsersScreen();
   PrivacyExternalRoutes.hiddenPosts = (_) => const HiddenPostsScreen();
@@ -232,6 +244,8 @@ Future<void> main() async {
   PerformanceProbe.install();
   runApp(UniSpaceApp(initialThemeMode: themeMode, initialLocale: locale));
 
+  ExamNotificationsService.instance.onNotificationResponse = _notificationResponse;
+  ExamNotificationsService.instance.watchSettings();
   if (Firebase.apps.isNotEmpty) {
     unawaited(initPushNotifications());
   }

@@ -30,7 +30,7 @@ class _PostImagesSliderState extends State<PostImagesSlider> {
       return Image.asset(path, fit: BoxFit.cover, width: double.infinity);
     }
     if (path.startsWith('http://') || path.startsWith('https://')) {
-      return Image.network(
+      return ProtectedImage.network(
         path,
         fit: BoxFit.cover,
         width: double.infinity,
@@ -371,7 +371,7 @@ class _SimpleFullscreenImageViewerState
                             : path.startsWith('assets/')
                             ? Image.asset(path, fit: BoxFit.contain)
                             : isNetwork
-                            ? Image.network(
+                            ? ProtectedImage.network(
                           path,
                           fit: BoxFit.contain,
                           loadingBuilder: (context, child, progress) {

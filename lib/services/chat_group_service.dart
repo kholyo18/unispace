@@ -113,8 +113,8 @@ class ChatGroupService {
       {required String chatId,
       required String action,
       String? memberId,
-      String? name}) async {
-    if (!const ['invite', 'rename', 'promote', 'demote', 'remove', 'leave']
+      String? name, String? photoUrl}) async {
+    if (!const ['invite', 'rename', 'photo', 'promote', 'demote', 'remove', 'leave']
         .contains(action)) {
       throw FirebaseFunctionsException(
           code: 'invalid-argument', message: 'Invalid group action.');
@@ -123,7 +123,8 @@ class ChatGroupService {
       'chatId': chatId,
       'action': action,
       if (memberId != null) 'memberId': memberId,
-      if (name != null) 'name': name.trim()
+      if (name != null) 'name': name.trim(),
+      if (photoUrl != null) 'photoUrl': photoUrl
     });
   }
 

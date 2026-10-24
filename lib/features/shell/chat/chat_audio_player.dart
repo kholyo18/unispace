@@ -1,3 +1,4 @@
+import '../../../services/protected_media_service.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -12,8 +13,10 @@ class ChatAudioPlayer extends StatefulWidget {
     required this.mine,
     required this.totalDuration,
     this.controllerFactory,
+    this.foregroundColor,
   });
 
+  final Color? foregroundColor;
   final String url;
   final String scope;
   final bool mine;
@@ -42,6 +45,9 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
   }
 
   VideoPlayerController? _controller;
+  String? _playbackScope;
+  bool get _samePlaybackSession => _playbackScope == null ||
+      _playbackScope == ProtectedMediaService.instance.scope;
   bool _loading = false;
   bool _foreground = true;
   bool _failed = false;
@@ -78,13 +84,20 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
     });
     VideoPlayerController? pending;
     try {
-      pending = (widget.controllerFactory ??
-          ((url) =>
-              VideoPlayerController.networkUrl(Uri.parse(url))))(widget.url);
+      final factory = widget.controllerFactory;
+      final grant = factory == null
+          ? await ProtectedMediaService.instance.resolve(widget.url) : null;
+      if (!(mounted && generation == _loadGeneration)) return;
+      _playbackScope = grant?.scope;
+      pending = factory != null ? factory(widget.url)
+          : VideoPlayerController.networkUrl(Uri.parse(grant!.url));
       await pending.initialize().timeout(const Duration(seconds: 20));
-      if (!mounted || generation != _loadGeneration) return;
+      if (grant != null && grant.scope != ProtectedMediaService.instance.scope) {
+        throw StateError('Media session changed');
+      }
+      if (!mounted || generation != _loadGeneration || !_samePlaybackSession) return;
       await pending.setPlaybackSpeed(_speed);
-      if (!mounted || generation != _loadGeneration) return;
+      if (!mounted || generation != _loadGeneration || !_samePlaybackSession) return;
       pending.addListener(_onTick);
       _controller = pending;
       pending = null;
@@ -125,7 +138,7 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
     if (_loading || !_foreground) return;
     final generation = _loadGeneration;
     await _ensureLoaded();
-    if (!mounted || generation != _loadGeneration) return;
+    if (!mounted || generation != _loadGeneration || !_samePlaybackSession) return;
     final c = _controller;
     if (c == null) return;
     try {
@@ -135,12 +148,12 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
         if (c.value.position >= c.value.duration) {
           await c.seekTo(Duration.zero);
         }
-        if (!mounted || generation != _loadGeneration) return;
+        if (!mounted || generation != _loadGeneration || !_samePlaybackSession) return;
         await chatAudioCoordinator.play(this,
             start: c.play,
             pause: c.pause,
             valid: () =>
-                mounted && _foreground && generation == _loadGeneration);
+                mounted && _foreground && generation == _loadGeneration && _samePlaybackSession);
       }
     } catch (error) {
       if (mounted && generation == _loadGeneration)
@@ -152,7 +165,7 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
   Future<void> _seekToRatio(double ratio) async {
     final generation = _loadGeneration;
     await _ensureLoaded();
-    if (!mounted || generation != _loadGeneration) return;
+    if (!mounted || generation != _loadGeneration || !_samePlaybackSession) return;
     final c = _controller;
     if (c == null || !c.value.isInitialized) return;
     final duration = c.value.duration;
@@ -207,7 +220,6 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
   Widget build(BuildContext context) {
     super.build(context);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final c = _controller;
     final isPlaying = c?.value.isPlaying ?? false;
     final position = c?.value.position ?? Duration.zero;
@@ -219,13 +231,12 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
         : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
 
     // ألوان تتكيف مع فقاعة "أنا" (ملوّنة) أو فقاعة الطرف الآخر
-    final Color fg =
-        widget.mine ? Colors.white : (isDark ? Colors.white : Colors.black87);
-    final Color playedColor =
-        widget.mine ? Colors.white : theme.colorScheme.primary;
+    final Color fg = widget.foregroundColor ??
+        (widget.mine ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface);
+    final Color playedColor = fg;
     final Color unplayedColor = fg.withValues(alpha: widget.mine ? 0.35 : 0.22);
     final Color buttonBg = widget.mine
-        ? Colors.white.withValues(alpha: 0.22)
+        ? fg.withValues(alpha: 0.14)
         : theme.colorScheme.primary.withValues(alpha: 0.12);
 
     final displayedPosition =
@@ -234,7 +245,7 @@ class ChatAudioPlayerState extends State<ChatAudioPlayer>
         isPlaying || position.inMilliseconds > 0 ? displayedPosition : duration;
 
     return Container(
-      height: max(64.0, 42.0 * MediaQuery.textScalerOf(context).scale(1)),
+      constraints: const BoxConstraints(minHeight: 72),
       width: 220,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,

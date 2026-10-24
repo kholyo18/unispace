@@ -1,3 +1,4 @@
+const { publishedUploadMatches } = require('./published-upload');
 const {normalize} = require('./search-text');
 const { HttpsError } = require('firebase-functions/v2/https');
 const invalid = () => { throw new HttpsError('invalid-argument', 'Invalid post content.'); };
@@ -99,7 +100,7 @@ function createEditPostHandler({ auth, db, FieldValue, bucket }) {
       let metadata;
       try { [metadata] = await storage.file(objectPath).getMetadata(); }
       catch (_) { throw new HttpsError('failed-precondition','Uploaded media is unavailable.'); }
-      if (Number(metadata.size) <= 0 || !String(metadata.metadata?.firebaseStorageDownloadTokens || '').split(',').includes(url.searchParams.get('token'))) invalid();
+      if (!publishedUploadMatches(metadata, url, uid)) invalid();
       verified.add(value);
     }
     return db.runTransaction(async tx => {

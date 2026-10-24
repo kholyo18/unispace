@@ -390,12 +390,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   Container(
                     decoration: BoxDecoration(
                       color: _canPost
-                          ? Colors.blue.shade700          // أزرق غامق لما فيه محتوى
+                          ? Theme.of(context).colorScheme.primary          // أزرق غامق لما فيه محتوى
                           : Colors.white,                 // أبيض لما فاضي
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: _canPost
-                            ? Colors.blue.shade700
+                            ? Theme.of(context).colorScheme.primary
                             : Colors.grey.shade300,
                       ),
                     ),
@@ -452,7 +452,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       fontWeight: FontWeight.w700,
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
-                    cursorColor: Colors.blueAccent,
+                    cursorColor: Theme.of(context).colorScheme.primary,
                     cursorWidth: 2.5,
                     decoration: InputDecoration(
                       hintText: mainText(context, "Title"),
@@ -487,7 +487,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       height: 1.45,
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
-                    cursorColor: Colors.blueAccent,
+                    cursorColor: Theme.of(context).colorScheme.primary,
                     decoration: InputDecoration(
                       hintText: mainText(context, "Body ...What you think of?)"),
                       hintStyle: TextStyle(
@@ -547,7 +547,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                                               key: ValueKey(url),
                                               postId: widget.editingPost?.id ?? '',
                                               path: url, preview: true)
-                                          : Image.network(url, fit: BoxFit.cover),
+                                          : ProtectedImage.network(url, fit: BoxFit.cover),
                                       Positioned(
                                         top: 10,
                                         right: 10,
@@ -1136,7 +1136,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey.shade800 : const Color(0xFFF1F3F4),
+        color: isDark ? Colors.grey.shade800 : UniSpaceColors.lightField,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
       ),
       child: Row(

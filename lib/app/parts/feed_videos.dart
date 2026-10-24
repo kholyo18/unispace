@@ -147,7 +147,7 @@ class _AutoSizeVideoState extends State<_AutoSizeVideo> with WidgetsBindingObser
     PerformanceProbe.elapsed('video_feed_authorization_start', mediaWatch);
     try {
       if (!current()) throw StateError('Video unavailable');
-      final source = widget.postId == null ? path : await PostMediaLinks.read(widget.postId!, path);
+      final source = widget.postId == null ? (path.startsWith('https://') ? (await ProtectedMediaService.instance.resolve(path)).url : path) : await PostMediaLinks.read(widget.postId!, path);
       if (!current()) throw StateError('Video unavailable');
       final controller = createVideoPlaybackController(source);
       pending = controller;
@@ -836,7 +836,7 @@ class _VideoSlideWidgetState extends State<_VideoSlideWidget> with WidgetsBindin
     try {
       if (!current()) throw StateError('Video unavailable');
       final source = widget.commentId != null ? await _readCommentVideoLink()
-          : postId == null ? path : await PostMediaLinks.read(postId, path);
+          : postId == null ? (path.startsWith('https://') ? (await ProtectedMediaService.instance.resolve(path)).url : path) : await PostMediaLinks.read(postId, path);
       if (!current()) throw StateError('Video unavailable');
       final controller = createVideoPlaybackController(source);
       pending = controller;

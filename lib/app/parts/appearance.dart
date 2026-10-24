@@ -171,7 +171,7 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                             ),
                             image: hasCover
                                 ? DecorationImage(
-                              image: NetworkImage(coverUrl!),
+                              image: ProtectedNetworkImage(coverUrl!),
                               fit: BoxFit.cover,
                               colorFilter: ColorFilter.mode(
                                 Colors.black.withValues(alpha: 0.45),
@@ -468,6 +468,16 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
                     //     );
                     //   },
                     // ),
+                    if (user != null) _drawerItem(
+                      context,
+                      icon: Icons.person_add_alt_1_outlined,
+                      title: mainText(context, 'طلبات المتابعة'),
+                      onTap: () {
+                        final navigator = Navigator.of(context);
+                        navigator.pop();
+                        navigator.push(MaterialPageRoute(builder: (_) => const FollowRequestsScreen()));
+                      },
+                    ),
                     _sectionHeader(context, S.of(context).drawerSectionApp),
                     // _drawerItem(
                     //   context,
@@ -560,13 +570,9 @@ class _AppEndDrawerState extends State<AppEndDrawer> {
 
                           try {
                             final currentUser = FirebaseAuth.instance.currentUser;
-
-                            if (currentUser != null) {
-                              await SessionService.instance
-                                  .revokeCurrentSession(currentUser.uid);
-                            }
-
-                            await AuthSessionService.signOutFully();
+                            await AuthSessionService.signOutFully(
+                              beforeSignOut: currentUser == null ? null :
+                                  () => SessionService.instance.revokeCurrentSession(currentUser.uid));
 
                             if (!context.mounted) return;
 
@@ -887,7 +893,7 @@ class _ThemeModeSheet extends StatelessWidget {
                 subtitle: mainText(context, "استخدام المظهر الداكن دائمًا"),
                 value: ThemeMode.dark,
                 groupValue: app._themeMode,
-                color: Colors.indigo,
+                color: Theme.of(context).colorScheme.primary,
                 onChanged: (value) => _apply(context, value),
               ),
 

@@ -87,7 +87,7 @@ class _AutoSizeImageState extends State<_AutoSizeImage> with WidgetsBindingObser
     if (widget.isNetwork) return ResizeImage.resizeIfNeeded(
           900,
           null,
-          CachedNetworkImageProvider(_protected ? _signedPath! : widget.path,
+          ProtectedCachedNetworkImageProvider(_protected ? _signedPath! : widget.path,
               cacheKey: _imageCacheKey));
     if (widget.path.startsWith('assets/')) return AssetImage(widget.path);
     return FileImage(File(widget.path));
@@ -129,7 +129,7 @@ class _AutoSizeImageState extends State<_AutoSizeImage> with WidgetsBindingObser
     if (widget.isNetwork) {
       // FIX: CachedNetworkImage بدل Image.network — كتحفظ الصورة فالقرص،
       // فالمرة الثانية (بعد الرجوع/إعادة البناء) كتبان فورية بلا تحميل جديد
-      return CachedNetworkImage(
+      return ProtectedCachedNetworkImage(
         imageUrl: _protected ? _signedPath! : widget.path,
         cacheKey: _imageCacheKey,
         fit: fit,
@@ -155,10 +155,10 @@ class _AutoSizeImageState extends State<_AutoSizeImage> with WidgetsBindingObser
       ],
     )));
     return Container(
-      color: const Color(0xFFEAF7F8),
+      color: UniSpaceColors.ivory,
       height: 180,
       alignment: Alignment.center,
-      child: const Icon(Icons.broken_image_rounded, size: 38, color: Color(0xFF64748B)),
+      child: const Icon(Icons.broken_image_rounded, size: 38, color: UniSpaceColors.lightMuted),
     );
   }
 

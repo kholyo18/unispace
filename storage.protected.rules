@@ -1,0 +1,35 @@
+// Activate only after the protected-media client is verified and update policy enabled.
+// Bytes and metadata are served by authorization-checked Functions; signed PUTs
+// target private staging and final copies are made by the service account.
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function active() {
+      let c = firestore.get(/databases/(default)/documents/authRevocations/$(request.auth.uid)).data;
+      return request.auth.token.get('sid', '').matches('^[a-f0-9]{64}$')
+        && c.storageSessionSchema == 1
+        && c.get('storageRevokedSessions', {}).get(request.auth.token.sid, false) == false
+        && request.auth.token.get('firebase', {}).get('tenant', null) == null
+        && request.auth.token.auth_time is int && c.revokedBefore is int
+        && c.revokedBefore >= 0 && request.auth.token.auth_time > c.revokedBefore
+        && c.storageAllowed == true && request.time < c.storageUntil;
+    }
+    function session() { return request.auth != null && active(); }
+    match /users/{uid}/{fileName} {
+      allow delete: if session() && request.auth.uid == uid;
+    }
+    match /community_posts/{postId}/{folder}/{fileName} {
+      allow delete: if session() && folder in ['images', 'videos']
+        && firestore.get(/databases/(default)/documents/community_posts/$(postId)).data.authorId == request.auth.uid;
+    }
+    match /community_posts/{postId}/comments/{uid}/{commentId}/{fileName} {
+      allow delete: if session() && request.auth.uid == uid;
+    }
+    match /chats/{chatId}/{folder}/{fileName} {
+      allow delete: if session()
+        && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.memberIds
+        && resource.metadata.get('uploadedBy', '') == request.auth.uid;
+    }
+    // Includes private_upload_staging: no client read, list, create or update.
+  }
+}

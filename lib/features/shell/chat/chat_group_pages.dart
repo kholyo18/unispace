@@ -1,3 +1,11 @@
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import '../../../widgets/image_assignment_crop.dart';
+import '../../../services/storage_upload_service.dart';
+import '../../../ui/settings/public_profile_service.dart';
+import 'chat_profile_avatar.dart';
+import 'chat_group_creation_form.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'new_conversation_page.dart';
@@ -43,7 +51,7 @@ class CreateChatGroupPage extends StatefulWidget {
 class _CreateChatGroupPageState extends State<CreateChatGroupPage>
     with _GroupOwner<CreateChatGroupPage> {
   final _name = TextEditingController();
-  final _selected = <String, String>{};
+  final _selected = <String, ChatContact>{};
   final _service = ChatGroupService();
   final _id =
       'group_${FirebaseFirestore.instance.collection('chats').doc().id}';
@@ -52,11 +60,25 @@ class _CreateChatGroupPageState extends State<CreateChatGroupPage>
   List<String>? _submittedMembers;
   bool _busy = false;
   Object? _error;
-  bool _invalidName = false;
+  late final _contactSearch = ChatContactSearchController(
+      search: searchChatContacts, currentUserId: () => _hasOwner ? _uid : null);
+  void _toggle(ChatContact person) {
+    if (!_hasOwner || _busy || _submittedName != null || person.id == _uid)
+      return;
+    setState(() {
+      if (_selected.containsKey(person.id)) {
+        _selected.remove(person.id);
+      } else {
+        _selected[person.id] = person;
+      }
+    });
+  }
+
   bool _created = false;
   int _sent = 0;
   @override
   void _clearOwnerData() {
+    _contactSearch.accountChanged();
     _created = false;
     _sent = 0;
     _selected.clear();
@@ -66,28 +88,15 @@ class _CreateChatGroupPageState extends State<CreateChatGroupPage>
     _error = null;
   }
 
-  Future<void> _searchPerson() async {
-    if (!_hasOwner || _busy || _submittedName != null) return;
-    final person = await Navigator.of(context).push<ChatContact>(
-        MaterialPageRoute(builder: (_) => const NewConversationPage()));
-    if (!mounted || !_hasOwner || person == null || person.id == _uid) return;
-    {
-      setState(() => _selected[person.id] = person.name);
-    }
-  }
-
   Future<void> _create() async {
     if (_busy || !_hasOwner) return;
-    if (_name.text.trim().isEmpty || _name.text.trim().length > 80) {
-      setState(() => _invalidName = true);
-      return;
-    }
-    _submittedName ??= _name.text.trim();
+    _submittedName ??= _name.text.trim().isEmpty
+        ? chatGroupText(context, 'New group')
+        : _name.text.trim();
     _submittedMembers ??= List<String>.unmodifiable(_selected.keys);
     setState(() {
       _busy = true;
       _error = null;
-      _invalidName = false;
     });
     try {
       final id = await _service.create(
@@ -111,6 +120,7 @@ class _CreateChatGroupPageState extends State<CreateChatGroupPage>
 
   @override
   void dispose() {
+    _contactSearch.dispose();
     _name.dispose();
     super.dispose();
   }
@@ -123,90 +133,38 @@ class _CreateChatGroupPageState extends State<CreateChatGroupPage>
           appBar: AppBar(),
           body: Center(child: Text(chatGroupText(context, 'Sign in again'))));
     }
-    return Scaffold(
-      appBar: AppBar(title: Text(chatGroupText(context, 'New group'))),
-      body: ChatGroupFormLayout(children: [
-        Padding(
-            padding: const EdgeInsets.all(16),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              TextField(
-                  controller: _name,
-                  enabled: !locked,
-                  maxLength: 80,
-                  decoration: InputDecoration(
-                      labelText: chatGroupText(context, 'Group name'),
-                      errorText: _invalidName
-                          ? chatGroupText(context, 'Name required')
-                          : null,
-                      border: const OutlineInputBorder())),
-              Text(chatGroupText(context, 'Invitations explanation')),
-              Text(chatGroupText(
-                  context, 'Joining gives access to existing group messages.')),
-              const SizedBox(height: 8),
-              Text(
-                  '${chatGroupText(context, 'Members')}: ${_selected.length + 1}'),
-              if (_selected.isNotEmpty)
-                SizedBox(
-                    height: 48,
-                    child:
-                        ListView(scrollDirection: Axis.horizontal, children: [
-                      for (final entry in _selected.entries)
-                        Padding(
-                            padding: const EdgeInsetsDirectional.only(end: 6),
-                            child: InputChip(
-                                label: Text(entry.value),
-                                onDeleted: locked
-                                    ? null
-                                    : () => setState(
-                                        () => _selected.remove(entry.key)))),
-                    ])),
-              if (locked && !_busy && !_created)
-                Text(chatGroupText(context, 'Submission locked')),
-              if (_created) ...[
-                Text(chatGroupText(context, 'Invitations sent') +
-                    ': $_sent/' +
-                    (_submittedMembers?.length ?? 0).toString()),
-                if (!_busy && _error != null) ...[
-                  Text(chatGroupText(
-                      context, 'Group created; invitations pending')),
-                  TextButton(
-                      onPressed: () => Navigator.of(context).pop(_id),
-                      child: Text(chatGroupText(context, 'Open group'))),
-                ],
-              ],
-              if (_error != null) _GroupError(error: _error!),
-            ])),
-        TextButton.icon(
-            onPressed: locked ? null : _searchPerson,
-            icon: const Icon(Icons.person_search_outlined),
-            label: Text(chatGroupText(context, 'Find people'))),
-        SizedBox(
-            height: 320,
-            child: _PeerSelector(
-                excluded: {_uid!},
-                selected: _selected.keys.toSet(),
-                enabled: !locked,
-                onSelect: (id, name) => setState(() {
-                      if (_selected.containsKey(id)) {
-                        _selected.remove(id);
-                      } else {
-                        _selected[id] = name;
-                      }
-                    }))),
-        Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                    onPressed: _busy ? null : _create,
-                    child: _busy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(chatGroupText(context,
-                            _error == null ? 'Create group' : 'Retry'))))),
+    return ChatGroupCreationForm(
+      search: _contactSearch,
+      nameController: _name,
+      selected: _selected,
+      onToggle: _toggle,
+      locked: locked,
+      busy: _busy,
+      retry: _error != null,
+      onCreate: _create,
+      suggestions: _PeerSelector(
+          excluded: {_uid!},
+          selected: _selected.keys.toSet(),
+          showSearch: false,
+          enabled: !locked,
+          onSelect: (id, name) => _toggle(ChatContact(id: id, name: name))),
+      status: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (locked && !_busy && !_created)
+          Text(chatGroupText(context, 'Submission locked')),
+        if (_created) ...[
+          Text(chatGroupText(context, 'Members added') +
+              ': ' +
+              _sent.toString() +
+              '/' +
+              (_submittedMembers?.length ?? 0).toString()),
+          if (!_busy && _error != null) ...[
+            Text(chatGroupText(context, 'Group created; additions pending')),
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(_id),
+                child: Text(chatGroupText(context, 'Open group'))),
+          ],
+        ],
+        if (_error != null) _GroupError(error: _error!),
       ]),
     );
   }
@@ -218,9 +176,10 @@ class _PeerSelector extends StatefulWidget {
       {required this.excluded,
       required this.selected,
       required this.onSelect,
-      this.enabled = true});
+      this.enabled = true,
+      this.showSearch = true});
   final Set<String> excluded, selected;
-  final bool enabled;
+  final bool enabled, showSearch;
   final void Function(String id, String name) onSelect;
   @override
   State<_PeerSelector> createState() => _PeerSelectorState();
@@ -254,15 +213,16 @@ class _PeerSelectorState extends State<_PeerSelector>
 
   @override
   Widget build(BuildContext context) => Column(children: [
-        Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-                controller: _search,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: chatGroupText(context, 'Search people'),
-                    border: const OutlineInputBorder()))),
+        if (widget.showSearch)
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: TextField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: chatGroupText(context, 'Search people'),
+                      border: const OutlineInputBorder()))),
         Text(chatGroupText(context, 'Choose existing contacts'),
             style: Theme.of(context).textTheme.bodySmall),
         Expanded(
@@ -282,6 +242,7 @@ class _PeerSelectorState extends State<_PeerSelector>
                     return const Center(child: CircularProgressIndicator());
                   }
                   final peers = <String, String>{};
+                  final photos = <String, String?>{};
                   for (final doc in snapshot.data!.docs) {
                     final data = doc.data();
                     if (data['type'] == 'group') continue;
@@ -294,6 +255,7 @@ class _PeerSelectorState extends State<_PeerSelector>
                       final name = member is Map
                           ? (member['name'] ?? '').toString().trim()
                           : '';
+                      photos[id] = member is Map ? (member['photoUrl'] ?? member['avatarUrl'])?.toString() : null;
                       peers[id] = name.isEmpty
                           ? chatGroupText(context, 'Member')
                           : name;
@@ -314,6 +276,16 @@ class _PeerSelectorState extends State<_PeerSelector>
                       itemCount: items.length,
                       itemBuilder: (context, index) {
                         final peer = items[index];
+                        if (!widget.showSearch) {
+                          final chosen = widget.selected.contains(peer.key);
+                          return ListTile(
+                            leading: ChatProfileAvatar(name: peer.value, photoUrl: photos[peer.key]),
+                            title: Text(peer.value), selected: chosen,
+                            trailing: Icon(chosen ? Icons.check_circle : Icons.radio_button_unchecked,
+                              color: chosen ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
+                            onTap: widget.enabled ? () => widget.onSelect(peer.key, peer.value) : null,
+                          );
+                        }
                         return CheckboxListTile(
                             value: widget.selected.contains(peer.key),
                             title: Text(peer.value),
@@ -329,8 +301,9 @@ class _PeerSelectorState extends State<_PeerSelector>
 
 class ChatGroupDetailsPage extends StatefulWidget {
   const ChatGroupDetailsPage(
-      {super.key, required this.chatId, this.onStarredMessages});
+      {super.key, required this.chatId, this.onStarredMessages, this.onConversationSettings});
   final VoidCallback? onStarredMessages;
+  final VoidCallback? onConversationSettings;
   final String chatId;
   @override
   State<ChatGroupDetailsPage> createState() => _ChatGroupDetailsPageState();
@@ -378,8 +351,29 @@ class _ChatGroupDetailsPageState extends State<ChatGroupDetailsPage>
         Navigator.pop(context, true);
       } else if (action == 'invite') {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(chatGroupText(context, 'Invitation sent'))));
+            SnackBar(content: Text(chatGroupText(context, 'Member added'))));
       }
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _changePhoto() async {
+    if (_busy || !_hasOwner) return;
+    final session = PublicProfileService.viewerSession;
+    setState(() { _busy = true; _error = null; });
+    try {
+      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (!mounted || !_hasOwner || picked == null || session != PublicProfileService.viewerSession) return;
+      final cropped = await cropImageForAssignment(context, File(picked.path), circle: true);
+      if (!mounted || !_hasOwner || cropped == null || session != PublicProfileService.viewerSession) return;
+      final ref = FirebaseStorage.instance.ref('chats/${widget.chatId}/images/group_${DateTime.now().microsecondsSinceEpoch}.jpg');
+      final uploaded = await StorageUploadService.putFile(ref, cropped,
+          SettableMetadata(contentType: 'image/jpeg'));
+      if (!_hasOwner || session != PublicProfileService.viewerSession) return;
+      await _service.manage(chatId: widget.chatId, action: 'photo', photoUrl: uploaded.url);
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
@@ -448,8 +442,16 @@ class _ChatGroupDetailsPageState extends State<ChatGroupDetailsPage>
               final members =
                   data['members'] is Map ? data['members'] as Map : const {};
               return ListView(padding: const EdgeInsets.all(16), children: [
-                const CircleAvatar(
-                    radius: 36, child: Icon(Icons.groups_outlined, size: 36)),
+                Center(child: ChatProfileAvatar(name: name,
+                    photoUrl: data['photoUrl'] as String?)),
+                if (isAdmin) TextButton.icon(onPressed: _busy ? null : _changePhoto,
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: Text(chatGroupText(context, 'Change group photo'))),
+                if (widget.onConversationSettings != null) ListTile(
+                    leading: const Icon(Icons.tune),
+                    title: Text(chatGroupText(context, 'Conversation settings and media')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: widget.onConversationSettings),
                 const SizedBox(height: 12),
                 if (widget.onStarredMessages != null)
                   Material(
@@ -467,11 +469,16 @@ class _ChatGroupDetailsPageState extends State<ChatGroupDetailsPage>
                 if (_busy) const LinearProgressIndicator(),
                 if (_error != null) _GroupError(error: _error!),
                 if (isAdmin)
-                  TextButton.icon(icon: const Icon(Icons.admin_panel_settings_outlined),
-                    label: Text(chatGroupText(context, 'Group access')),
-                    onPressed: _busy ? null : () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => ChatGroupAccessPage(chatId: widget.chatId,
-                        adminsOnly: data['adminsOnlyMessaging'] == true)))),
+                  TextButton.icon(
+                      icon: const Icon(Icons.admin_panel_settings_outlined),
+                      label: Text(chatGroupText(context, 'Group access')),
+                      onPressed: _busy
+                          ? null
+                          : () => Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => ChatGroupAccessPage(
+                                  chatId: widget.chatId,
+                                  adminsOnly:
+                                      data['adminsOnlyMessaging'] == true)))),
                 if (isAdmin)
                   Wrap(spacing: 8, children: [
                     TextButton.icon(
@@ -483,7 +490,7 @@ class _ChatGroupDetailsPageState extends State<ChatGroupDetailsPage>
                             ? null
                             : () => _invite({...ids, ...pendingIds}),
                         icon: const Icon(Icons.person_add_outlined),
-                        label: Text(chatGroupText(context, 'Invite member'))),
+                        label: Text(chatGroupText(context, 'Add member'))),
                   ]),
                 const Divider(),
                 for (final id in ids)
@@ -492,8 +499,8 @@ class _ChatGroupDetailsPageState extends State<ChatGroupDetailsPage>
                     final memberName =
                         brief is Map ? (brief['name'] ?? '').toString() : '';
                     return ListTile(
-                        leading: const CircleAvatar(
-                            child: Icon(Icons.person_outline)),
+                        leading: ChatProfileAvatar(name: memberName,
+                            photoUrl: brief is Map ? brief['photoUrl'] as String? : null),
                         title: Text(id == _uid
                             ? chatGroupText(context, 'You')
                             : memberName.isEmpty
@@ -773,40 +780,80 @@ class _ChatGroupJoinPageState extends State<ChatGroupJoinPage>
   String? _status;
   Object? _error;
   @override
-  void _clearOwnerData() { _link.clear(); _status = null; _error = null; }
+  void _clearOwnerData() {
+    _link.clear();
+    _status = null;
+    _error = null;
+  }
+
   @override
-  void dispose() { _link.dispose(); super.dispose(); }
+  void dispose() {
+    _link.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     if (_busy || !_hasOwner) return;
-    setState(() { _busy = true; _error = null; _status = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+      _status = null;
+    });
     try {
       final status = await _service.requestJoin(_link.text);
       if (mounted && _hasOwner) setState(() => _status = status);
-    } catch (error) { if (mounted && _hasOwner) setState(() => _error = error); }
-    finally { if (mounted) setState(() => _busy = false); }
+    } catch (error) {
+      if (mounted && _hasOwner) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(chatGroupText(context, 'Join by invitation link'))),
-    body: ChatGroupFormLayout(children: [Padding(padding: const EdgeInsets.all(16), child:
-      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(chatGroupText(context, 'Join request explanation')),
-        const SizedBox(height: 12),
-        TextField(controller: _link, enabled: _hasOwner && !_busy,
-          keyboardType: TextInputType.url, autocorrect: false, enableSuggestions: false,
-          decoration: InputDecoration(labelText: chatGroupText(context, 'Invitation link'), border: const OutlineInputBorder())),
-        if (!_hasOwner) Text(chatGroupText(context, 'Sign in again')),
-        if (_error != null) _GroupError(error: _error!),
-        if (_status != null) Text(chatGroupText(context, _status == 'open' ? 'Already a member' : 'Join request sent')),
-        const SizedBox(height: 12),
-        FilledButton(onPressed: !_hasOwner || _busy ? null : _submit,
-          child: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            : Text(chatGroupText(context, 'Request to join'))),
-      ]))]));
+      appBar: AppBar(
+          title: Text(chatGroupText(context, 'Join by invitation link'))),
+      body: ChatGroupFormLayout(children: [
+        Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(chatGroupText(context, 'Join request explanation')),
+                  const SizedBox(height: 12),
+                  TextField(
+                      controller: _link,
+                      enabled: _hasOwner && !_busy,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: InputDecoration(
+                          labelText: chatGroupText(context, 'Invitation link'),
+                          border: const OutlineInputBorder())),
+                  if (!_hasOwner) Text(chatGroupText(context, 'Sign in again')),
+                  if (_error != null) _GroupError(error: _error!),
+                  if (_status != null)
+                    Text(chatGroupText(
+                        context,
+                        _status == 'open'
+                            ? 'Already a member'
+                            : 'Join request sent')),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                      onPressed: !_hasOwner || _busy ? null : _submit,
+                      child: _busy
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : Text(chatGroupText(context, 'Request to join'))),
+                ]))
+      ]));
 }
 
 class ChatGroupAccessPage extends StatefulWidget {
-  const ChatGroupAccessPage({super.key, required this.chatId, required this.adminsOnly});
+  const ChatGroupAccessPage(
+      {super.key, required this.chatId, required this.adminsOnly});
   final String chatId;
   final bool adminsOnly;
   @override
@@ -822,82 +869,188 @@ class _ChatGroupAccessPageState extends State<ChatGroupAccessPage>
   Object? _error;
   List<Map<String, dynamic>> _requests = [];
   @override
-  void initState() { super.initState(); _reload(); }
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
   @override
   void _clearOwnerData() {
-    _requests = []; _error = null;
-    if (_showingLink && mounted) { _showingLink = false; Navigator.of(context, rootNavigator: true).pop(); }
+    _requests = [];
+    _error = null;
+    if (_showingLink && mounted) {
+      _showingLink = false;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
   }
+
   Future<void> _reload() async {
     if (_busy || !_hasOwner) return;
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final requests = await _service.joinRequests(widget.chatId);
       if (mounted && _hasOwner) setState(() => _requests = requests);
-    } catch (error) { if (mounted && _hasOwner) setState(() => _error = error); }
-    finally { if (mounted) setState(() => _busy = false); }
+    } catch (error) {
+      if (mounted && _hasOwner) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
+
   Future<void> _setting(String action, {bool? value}) async {
     if (_busy || !_hasOwner) return;
     if (action == 'rotateLink' || action == 'revokeLink') {
-      final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-        content: Text(chatGroupText(context, 'Link change confirmation')),
-        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(chatGroupText(context, 'Cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(chatGroupText(context, 'Confirm')))]));
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                  content:
+                      Text(chatGroupText(context, 'Link change confirmation')),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: Text(chatGroupText(context, 'Cancel'))),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: Text(chatGroupText(context, 'Confirm')))
+                  ]));
       if (confirmed != true || !mounted || !_hasOwner) return;
     }
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      final result = await _service.access(chatId: widget.chatId, action: action, adminsOnly: value);
+      final result = await _service.access(
+          chatId: widget.chatId, action: action, adminsOnly: value);
       if (!mounted || !_hasOwner) return;
-      if (action == 'setMessaging') setState(() => _adminsOnly = result['adminsOnly'] == true);
+      if (action == 'setMessaging')
+        setState(() => _adminsOnly = result['adminsOnly'] == true);
       if (action == 'rotateLink') {
         final link = result['link'];
-        if (link is! String || link.isEmpty) throw StateError('Missing group link');
+        if (link is! String || link.isEmpty)
+          throw StateError('Missing group link');
         _showingLink = true;
-        await showDialog<void>(context: context, builder: (context) => AlertDialog(
-          title: Text(chatGroupText(context, 'Invitation link')),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(chatGroupText(context, 'Link expires in seven days')), const SizedBox(height: 8), SelectableText(link)]),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(chatGroupText(context, 'Cancel'))),
-            FilledButton(onPressed: () async { if (!_hasOwner) return; await Clipboard.setData(ClipboardData(text: link));
-              if (context.mounted) Navigator.pop(context); }, child: Text(chatGroupText(context, 'Copy link')))]));
+        await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+                    title: Text(chatGroupText(context, 'Invitation link')),
+                    content: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(
+                          chatGroupText(context, 'Link expires in seven days')),
+                      const SizedBox(height: 8),
+                      SelectableText(link)
+                    ]),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(chatGroupText(context, 'Cancel'))),
+                      FilledButton(
+                          onPressed: () async {
+                            if (!_hasOwner) return;
+                            await Clipboard.setData(ClipboardData(text: link));
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                          child: Text(chatGroupText(context, 'Copy link')))
+                    ]));
         _showingLink = false;
       } else if (action == 'revokeLink') {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(chatGroupText(context, 'Invitation link revoked'))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(chatGroupText(context, 'Invitation link revoked'))));
       }
-    } catch (error) { if (mounted && _hasOwner) setState(() => _error = error); }
-    finally { if (mounted) setState(() => _busy = false); }
+    } catch (error) {
+      if (mounted && _hasOwner) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
+
   Future<void> _review(String uid, bool approve) async {
     if (_busy || !_hasOwner) return;
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      await _service.reviewJoin(chatId: widget.chatId, requesterId: uid, approve: approve);
+      await _service.reviewJoin(
+          chatId: widget.chatId, requesterId: uid, approve: approve);
       final requests = await _service.joinRequests(widget.chatId);
       if (mounted && _hasOwner) setState(() => _requests = requests);
-    } catch (error) { if (mounted && _hasOwner) setState(() => _error = error); }
-    finally { if (mounted) setState(() => _busy = false); }
+    } catch (error) {
+      if (mounted && _hasOwner) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(chatGroupText(context, 'Group access'))),
-    body: !_hasOwner ? Center(child: Text(chatGroupText(context, 'Sign in again'))) : ListView(padding: const EdgeInsets.all(16), children: [
-      if (_busy) const LinearProgressIndicator(),
-      if (_error != null) _GroupError(error: _error!),
-      SwitchListTile(title: Text(chatGroupText(context, 'Only admins can send messages')),
-        value: _adminsOnly, onChanged: _busy ? null : (value) => _setting('setMessaging', value: value)),
-      Text(chatGroupText(context, 'Join request explanation')),
-      TextButton.icon(onPressed: _busy ? null : () => _setting('rotateLink'), icon: const Icon(Icons.link), label: Text(chatGroupText(context, 'Create new invitation link'))),
-      TextButton.icon(onPressed: _busy ? null : () => _setting('revokeLink'), icon: const Icon(Icons.link_off), label: Text(chatGroupText(context, 'Revoke invitation link'))),
-      const Divider(),
-      Row(children: [Expanded(child: Text(chatGroupText(context, 'Join requests'))),
-        IconButton(onPressed: _busy ? null : _reload, tooltip: chatGroupText(context, 'Refresh'), icon: const Icon(Icons.refresh))]),
-      if (!_busy && _requests.isEmpty) Text(chatGroupText(context, 'No pending join requests')),
-      for (final request in _requests) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text((request['name'] as String?)?.isNotEmpty == true ? request['name'] as String : chatGroupText(context, 'Member')),
-        Wrap(spacing: 8, children: [TextButton(onPressed: _busy ? null : () => _review(request['uid'] as String, false), child: Text(chatGroupText(context, 'Reject'))),
-          FilledButton(onPressed: _busy ? null : () => _review(request['uid'] as String, true), child: Text(chatGroupText(context, 'Approve')))])]))),
-      if (_requests.length >= 50) Text(chatGroupText(context, 'More requests after reviewing this page')),
-    ]));
+      appBar: AppBar(title: Text(chatGroupText(context, 'Group access'))),
+      body: !_hasOwner
+          ? Center(child: Text(chatGroupText(context, 'Sign in again')))
+          : ListView(padding: const EdgeInsets.all(16), children: [
+              if (_busy) const LinearProgressIndicator(),
+              if (_error != null) _GroupError(error: _error!),
+              SwitchListTile(
+                  title: Text(
+                      chatGroupText(context, 'Only admins can send messages')),
+                  value: _adminsOnly,
+                  onChanged: _busy
+                      ? null
+                      : (value) => _setting('setMessaging', value: value)),
+              Text(chatGroupText(context, 'Join request explanation')),
+              TextButton.icon(
+                  onPressed: _busy ? null : () => _setting('rotateLink'),
+                  icon: const Icon(Icons.link),
+                  label: Text(
+                      chatGroupText(context, 'Create new invitation link'))),
+              TextButton.icon(
+                  onPressed: _busy ? null : () => _setting('revokeLink'),
+                  icon: const Icon(Icons.link_off),
+                  label:
+                      Text(chatGroupText(context, 'Revoke invitation link'))),
+              const Divider(),
+              Row(children: [
+                Expanded(child: Text(chatGroupText(context, 'Join requests'))),
+                IconButton(
+                    onPressed: _busy ? null : _reload,
+                    tooltip: chatGroupText(context, 'Refresh'),
+                    icon: const Icon(Icons.refresh))
+              ]),
+              if (!_busy && _requests.isEmpty)
+                Text(chatGroupText(context, 'No pending join requests')),
+              for (final request in _requests)
+                Card(
+                    child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text((request['name'] as String?)?.isNotEmpty ==
+                                      true
+                                  ? request['name'] as String
+                                  : chatGroupText(context, 'Member')),
+                              Wrap(spacing: 8, children: [
+                                TextButton(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _review(
+                                            request['uid'] as String, false),
+                                    child:
+                                        Text(chatGroupText(context, 'Reject'))),
+                                FilledButton(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _review(
+                                            request['uid'] as String, true),
+                                    child:
+                                        Text(chatGroupText(context, 'Approve')))
+                              ])
+                            ]))),
+              if (_requests.length >= 50)
+                Text(chatGroupText(
+                    context, 'More requests after reviewing this page')),
+            ]));
 }

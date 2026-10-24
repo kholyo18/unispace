@@ -740,12 +740,12 @@ class _AcademicShortcutCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF16181C) : Colors.white,
+        color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFFE6E8EC),
+              : UniSpaceColors.lightBorder,
         ),
       ),
       child: child,
@@ -790,13 +790,13 @@ class _AcademicShortcutHeader extends StatelessWidget {
           decoration: BoxDecoration(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.06)
-                : const Color(0xFFF3F4F6),
+                : UniSpaceColors.lightField,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             featureText(context, 'جامعي'),
             style: theme.textTheme.labelSmall?.copyWith(
-              color: isDark ? Colors.white70 : const Color(0xFF6B7280),
+              color: isDark ? Colors.white70 : UniSpaceColors.lightMuted,
               fontWeight: FontWeight.w700,
               fontSize: 11,
             ),
@@ -881,7 +881,7 @@ class _AcademicShortcutButton extends StatelessWidget {
       child: Material(
         color: primary
             ? accent
-            : (isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF4F6F8)),
+            : (isDark ? Colors.white.withValues(alpha: 0.06) : UniSpaceColors.lightField),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onPressed,
@@ -896,7 +896,7 @@ class _AcademicShortcutButton extends StatelessWidget {
                   size: 18,
                   color: primary
                       ? Colors.white
-                      : (isDark ? Colors.white : const Color(0xFF111827)),
+                      : (isDark ? Colors.white : UniSpaceColors.darkField),
                 ),
                 const SizedBox(width: 6),
                 Flexible(
@@ -907,7 +907,7 @@ class _AcademicShortcutButton extends StatelessWidget {
                     style: TextStyle(
                       color: primary
                           ? Colors.white
-                          : (isDark ? Colors.white : const Color(0xFF111827)),
+                          : (isDark ? Colors.white : UniSpaceColors.darkField),
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
@@ -1291,13 +1291,13 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final fill = isDark ? const Color(0xFF1C1E22) : const Color(0xFFF6F7F9);
+    final fill = isDark ? UniSpaceColors.darkField : UniSpaceColors.lightField;
     return InputDecoration(
       labelText: label,
       hintText: hint,
       filled: true,
       fillColor: enabled ? fill : fill.withValues(alpha: 0.55),
-      prefixIcon: Icon(icon, size: 20, color: AppTeal.main),
+      prefixIcon: Icon(icon, size: 20, color: AppTeal.foreground(context)),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide.none,
@@ -1308,7 +1308,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: AppTeal.main, width: 1.4),
+        borderSide: BorderSide(color: AppTeal.foreground(context), width: 1.4),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     );
@@ -1405,7 +1405,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
               alignment: AlignmentDirectional.topStart,
               child: Material(
                 elevation: 8,
-                color: isDark ? const Color(0xFF1C1E22) : Colors.white,
+                color: isDark ? UniSpaceColors.darkField : UniSpaceColors.lightSurface,
                 shadowColor: Colors.black26,
                 borderRadius: BorderRadius.circular(14),
                 child: ConstrainedBox(
@@ -1457,7 +1457,7 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
 
     return Scaffold(
       backgroundColor:
-      isDark ? theme.scaffoldBackgroundColor : const Color(0xFFF4F5F7),
+      isDark ? theme.scaffoldBackgroundColor : UniSpaceColors.lightField,
       appBar: AppBar(
         title: Text(S.of(context).academicSettingsTitle),
         centerTitle: true,
@@ -1519,12 +1519,12 @@ class _AcademicSettingsScreenState extends State<AcademicSettingsScreen> {
           Container(
             padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF16181C) : Colors.white,
+              color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFFE6E8EC),
+                    : UniSpaceColors.lightBorder,
               ),
             ),
             child: Column(
@@ -1874,12 +1874,12 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
     final failed = avg > 0 && avg < threshold;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0D),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(S.of(context).quickCalc),
         centerTitle: true,
-        backgroundColor: const Color(0xFF0B0B0D),
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
@@ -1900,10 +1900,10 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                         : 'MOYENNE',
                     style: TextStyle(
                       color: failed
-                          ? const Color(0xFFFF453A)
+                          ? Theme.of(context).colorScheme.error
                           : passed
-                          ? const Color(0xFF30D158)
-                          : const Color(0xFF8E8E93),
+                          ? UniSpaceColors.accent(Theme.of(context).brightness == Brightness.dark)
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
                       letterSpacing: 1.4,
@@ -1916,8 +1916,8 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                   child: Text(
                     avg.toStringAsFixed(2),
                     maxLines: 1,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontSize: 64,
                       height: 1,
                       fontWeight: FontWeight.w300,
@@ -1930,8 +1930,8 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                   alignment: Alignment.centerRight,
                   child: Text(
                     '${featureText(context, 'CRED')}  ${totalcred.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      color: Color(0xFF8E8E93),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.2,
@@ -1946,7 +1946,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                 ? Center(
               child: Text(
                 featureText(context, 'أضف مادة'),
-                style: TextStyle(color: Color(0xFF8E8E93)),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             )
                 : ListView.builder(
@@ -1956,7 +1956,7 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Theme(
-                    data: ThemeData.dark(),
+                    data: Theme.of(context),
                     child: _QuickCalcDismissibleItem(
                       data: subjects[i],
                       index: i,
@@ -1979,7 +1979,8 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                       label: S.of(context).add,
                       icon: Icons.add,
                       onTap: _add,
-                      bg: const Color(0xFF2C2C2E),
+                      bg: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fg: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1988,7 +1989,8 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                       label: S.of(context).calculate,
                       icon: Icons.calculate,
                       onTap: _calc,
-                      bg: const Color(0xFFFF9F0A),
+                      bg: Theme.of(context).colorScheme.primary,
+                      fg: Theme.of(context).colorScheme.onPrimary,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1998,7 +2000,8 @@ class _QuickAverageScreenState extends State<QuickAverageScreen> {
                       icon: Icons.save_outlined,
                       onTap: _saveState,
                       onLongPress: _clearSavedState,
-                      bg: const Color(0xFF2C2C2E),
+                      bg: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fg: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 ],
@@ -2213,8 +2216,8 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
 
   Color get _moyColor {
     final m = widget.data.moy;
-    if (m <= 0) return const Color(0xFF8E8E93);
-    return m >= 10 ? const Color(0xFF30D158) : const Color(0xFFFF453A);
+    if (m <= 0) return Theme.of(context).colorScheme.onSurfaceVariant;
+    return m >= 10 ? UniSpaceColors.accent(Theme.of(context).brightness == Brightness.dark) : Theme.of(context).colorScheme.error;
   }
 
   Widget _keyPad({
@@ -2229,21 +2232,21 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
       textAlign: TextAlign.center,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       maxLength: maxLength,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurface,
         fontSize: 18,
         fontWeight: FontWeight.w600,
         fontFeatures: [FontFeature.tabularFigures()],
       ),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(
-          color: Color(0xFF8E8E93),
+        labelStyle: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
           fontSize: 11,
           fontWeight: FontWeight.w800,
         ),
         filled: true,
-        fillColor: const Color(0xFF2C2C2E),
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         counterText: '',
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -2253,7 +2256,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFFF9F0A), width: 1.3),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.3),
         ),
       ),
     );
@@ -2265,7 +2268,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -2279,15 +2282,15 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                     widget.data.subject = v;
                     setState(() {});
                   },
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                   decoration: InputDecoration(
                     hintText: featureText(context, 'المادة'),
                     hintStyle: TextStyle(
-                      color: Color(0xFF636366),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
                     ),
                     border: InputBorder.none,
@@ -2311,7 +2314,7 @@ class _NoteCardWidgetState extends State<NoteCardWidget> {
                   expanded
                       ? Icons.keyboard_arrow_up_rounded
                       : Icons.keyboard_arrow_down_rounded,
-                  color: const Color(0xFF8E8E93),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -2883,8 +2886,8 @@ class FacultyMajorsScreen extends StatelessWidget {
   });
 
   static final Color _primaryColor = AppTeal.main;
-  static const Color _blueColor = Color(0xFF1565C0);
-  static const Color _lightBackgroundColor = Color(0xFFEAF7F8);
+  static const Color _blueColor = UniSpaceColors.forest;
+  static const Color _lightBackgroundColor = UniSpaceColors.lightBackground;
 
   static const _accents = <Color>[
     Color(0xFF0D9488),
@@ -2949,7 +2952,7 @@ class FacultyMajorsScreen extends StatelessWidget {
                   bottom: index == majors.length - 1 ? 0 : 10,
                 ),
                 child: Material(
-                  color: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+                  color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
@@ -3095,11 +3098,11 @@ class _FacultySummary extends StatelessWidget {
           colors: isDark
               ? [
             accent.withValues(alpha: 0.22),
-            const Color(0xFF1C1C1F),
+            UniSpaceColors.darkSurface,
           ]
               : [
             accent.withValues(alpha: 0.16),
-            const Color(0xFFEAF7F8),
+            UniSpaceColors.lightBackground,
             Colors.white,
           ],
         ),
@@ -3208,7 +3211,7 @@ class _SummaryStat extends StatelessWidget {
           Text(
             value,
             style: theme.textTheme.titleMedium?.copyWith(
-              color: AppTeal.main,
+              color: AppTeal.foreground(context),
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -3304,8 +3307,8 @@ class MajorTracksScreen extends StatelessWidget {
   });
 
   static final Color _primaryColor = AppTeal.main;
-  static const Color _blueColor = Color(0xFF2563EB);
-  static const Color _lightBackgroundColor = Color(0xFFEAF7F8);
+  static const Color _blueColor = UniSpaceColors.forest;
+  static const Color _lightBackgroundColor = UniSpaceColors.lightBackground;
 
   static const _accents = <Color>[
     Color(0xFF0D9488),
@@ -3435,11 +3438,11 @@ class _TrackSummary extends StatelessWidget {
           colors: isDark
               ? [
             accent.withValues(alpha: 0.22),
-            const Color(0xFF1C1C1F),
+            UniSpaceColors.darkSurface,
           ]
               : [
             accent.withValues(alpha: 0.16),
-            const Color(0xFFEAF7F8),
+            UniSpaceColors.lightBackground,
             Colors.white,
           ],
         ),
@@ -3550,7 +3553,7 @@ class _TrackSummaryStat extends StatelessWidget {
           Text(
             value,
             style: theme.textTheme.titleMedium?.copyWith(
-              color: AppTeal.main,
+              color: AppTeal.foreground(context),
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -3641,7 +3644,7 @@ class _TrackSpecialtyCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Material(
-      color: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+      color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
@@ -4147,7 +4150,7 @@ class _CinemaSemesterSwitch extends StatelessWidget {
             decoration: BoxDecoration(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.06)
-                  : const Color(0xFFF3F4F6),
+                  : UniSpaceColors.lightField,
               borderRadius: BorderRadius.circular(12),
             ),
           ),
@@ -4164,7 +4167,7 @@ class _CinemaSemesterSwitch extends StatelessWidget {
                 padding: const EdgeInsets.all(3),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1C1C1F) : Colors.white,
+                    color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: accent.withValues(alpha: 0.28),

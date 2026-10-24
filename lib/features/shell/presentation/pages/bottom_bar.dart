@@ -32,7 +32,7 @@ class ModernUniSpaceBottomBar extends StatefulWidget {
     _UniSpaceBottomTabItem(
       label: 'المجتمع',
       icon: Icons.groups_rounded,
-      color: Color(0xFF8B5CF6),
+      color: UniSpaceColors.forest,
     ),
 
     _UniSpaceBottomTabItem(
@@ -43,7 +43,7 @@ class ModernUniSpaceBottomBar extends StatefulWidget {
     _UniSpaceBottomTabItem(
       label: 'الرئيسية',
       icon: Icons.home_rounded,
-      color: Color(0xFF2563EB),
+      color: UniSpaceColors.forest,
     ),
   ];
 
@@ -181,8 +181,7 @@ class _ModernUniSpaceBottomBarState extends State<ModernUniSpaceBottomBar> {
                                     horizontal: 3, vertical: 1),
                                 child: DecoratedBox(
                                   decoration: BoxDecoration(
-                                    color: items[_visualIndex]
-                                        .color
+                                    color: theme.colorScheme.primary
                                         .withValues(alpha: 0.18),
                                     borderRadius: BorderRadius.circular(24),
                                   ),
@@ -208,7 +207,7 @@ class _ModernUniSpaceBottomBarState extends State<ModernUniSpaceBottomBar> {
                                       ? _ChatTabIcon(
                                       selected: selected,
                                       color: selected
-                                          ? item.color
+                                          ? theme.colorScheme.primary
                                           : theme.colorScheme
                                           .onSurfaceVariant
                                           .withValues(alpha: 0.55),
@@ -218,7 +217,7 @@ class _ModernUniSpaceBottomBarState extends State<ModernUniSpaceBottomBar> {
                                     item.icon,
                                     size: 20,
                                     color: selected
-                                        ? item.color
+                                        ? theme.colorScheme.primary
                                         : theme.colorScheme
                                         .onSurfaceVariant
                                         .withValues(alpha: 0.55),

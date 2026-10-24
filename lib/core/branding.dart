@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
+import 'brand_palette.dart';
+export 'brand_palette.dart';
 
-const kUniSpaceGreen = Color(0xFFB2DFDB);
-const kUniSpaceBlue = Color(0xFF004D40);
+const kUniSpaceGreen = UniSpaceColors.lightContainer;
+const kUniSpaceBlue = UniSpaceColors.forest;
 const kNoteYellow = Color(0xFFFFF3C4);
-const kDefaultTeal = Color(0xFF0F7C80);
+const kDefaultTeal = UniSpaceColors.forest;
 
 
 class AppTeal {
-  static Color main = const Color(0xFF0F7C80);
-  static Color accent = const Color(0xFF13B8A6);
-  static Color chat = const Color(0xFF10A37F);
-  static Color green = const Color(0xFFB2DFDB);
-  static Color dark = const Color(0xFF004D40);
+  static Color main = UniSpaceColors.forest;
+  static Color accent = UniSpaceColors.emerald;
+  static Color chat = UniSpaceColors.forest;
+  static Color green = UniSpaceColors.lightContainer;
+  static Color dark = UniSpaceColors.forest;
+
+  static Color foreground(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? Color.lerp(main, UniSpaceColors.ivory, 0.65)!
+          : main;
 
   static Color get shade500 => main;
   static Color get shade700 => Color.lerp(main, Colors.black, 0.25)!;
@@ -20,14 +27,14 @@ class AppTeal {
 
   static void apply(Color c) {
     main = c;
-    accent = Color.lerp(c, const Color(0xFF13B8A6), 0.30)!;
-    chat = Color.lerp(c, const Color(0xFF10A37F), 0.20)!;
-    green = Color.lerp(c, Colors.white, 0.55)!;
-    dark = Color.lerp(c, Colors.black, 0.35)!;
+    accent = c == UniSpaceColors.forest ? UniSpaceColors.emerald : Color.lerp(c, UniSpaceColors.emerald, 0.30)!;
+    chat = Color.lerp(c, UniSpaceColors.forest, 0.20)!;
+    green = c == UniSpaceColors.forest ? UniSpaceColors.lightContainer : Color.lerp(c, Colors.white, 0.55)!;
+    dark = c == UniSpaceColors.forest ? UniSpaceColors.forest : Color.lerp(c, Colors.black, 0.35)!;
   }
 }
 class AppPrimary {
-  static Color seed = const Color(0xFF30475E);
+  static Color seed = UniSpaceColors.forest;
 
   static void apply(Color c) {
     seed = c;

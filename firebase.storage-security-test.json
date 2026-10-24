@@ -21,6 +21,6 @@
     }
   },
   "storage": {
-    "rules": "security/rules-review/storage.candidate.rules"
+    "rules": "storage.rules"
   }
 }

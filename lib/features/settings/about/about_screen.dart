@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import '../../../widgets/unispace_brand.dart';
 
 import '../../../generated/l10n.dart';
 import '../../../ui/contact/contact_us_sheet.dart';
@@ -130,18 +130,7 @@ class _HeaderSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        CircleAvatar(
-          radius: 42,
-          backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
-          child: SvgPicture.asset(
-            'assets/brand/logo-mark.svg',
-            height: 48,
-            colorFilter: ColorFilter.mode(
-              colorScheme.primary,
-              BlendMode.srcIn,
-            ),
-          ),
-        ),
+        const UniSpaceBrandMark(width: 84),
         const SizedBox(height: 12),
         Text(
           'UniSpace',

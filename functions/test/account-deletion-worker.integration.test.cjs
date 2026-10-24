@@ -200,6 +200,8 @@ test('scheduled worker purges one account while preserving shared data', async (
     await db.doc('storageUploadGrants/alice-active').set({uid:'alice',expiresAt:Timestamp.fromMillis(now + 60000)});
     await db.doc('storageUploadGrants/bob-active').set({uid:'bob',expiresAt:Timestamp.fromMillis(now + 60000)});
     await db.doc('storageUploadGrants/bob-expired').set({uid:'bob',expiresAt:Timestamp.fromMillis(now - 60000)});
+    await db.doc('protectedUploadTickets/alice-ticket').set({uid:'alice',state:'complete'});
+    await db.doc('protectedUploadTickets/bob-ticket').set({uid:'bob',state:'complete'});
     const result = await worker();
     assert.deepEqual(result, { processed: true, status: 'completed' });
 
@@ -210,6 +212,8 @@ test('scheduled worker purges one account while preserving shared data', async (
     assert.ok(tombstoneId.startsWith('deleted_'));
 
     assert.equal((await db.doc('users/alice').get()).exists, false);
+    assert.equal((await db.doc('protectedUploadTickets/alice-ticket').get()).exists, false);
+    assert.equal((await db.doc('protectedUploadTickets/bob-ticket').get()).exists, true);
     assert.equal((await db.doc('accountStateControls/alice').get()).exists, false);
     assert.equal((await db.doc('storageUploadGrants/alice-active').get()).exists, false);
     assert.equal((await db.doc('storageUploadGrants/bob-active').get()).exists, true);
@@ -271,6 +275,8 @@ test('scheduled worker purges one account while preserving shared data', async (
     assert.ok(deletedPrefixes.includes('community_posts/p-owned/'));
     assert.ok(deletedPrefixes.includes('community_posts/p-other/comments/alice/alice-comment/'));
     assert.ok(deletedPrefixes.includes('users/alice/'));
+    assert.ok(deletedPrefixes.includes('private_upload_staging/alice/'));
+    assert.equal(deletedPrefixes.includes('private_upload_staging/bob/'), false);
     assert.ok(deletedObjects.includes('chats/c1/images/1.jpg'));
     assert.ok(deletedObjects.includes('chats/c1/wallpaper/alice.jpg'));
   } finally {

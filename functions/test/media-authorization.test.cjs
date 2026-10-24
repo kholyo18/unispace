@@ -54,6 +54,19 @@ test('authorized media is signed for the inspected object generation with a boun
   assert.equal(f.calls[1].options.action, 'read');
 });
 
+test('post access-only verification checks membership without metadata reads or signing', async () => {
+  const f = await setup();
+  const verify = createMediaDownloadHandler({auth:f.auth, db, bucket:f.bucket}, false, false, {verifyOnly:true});
+  assert.deepEqual(await verify(f.request({postId:f.postId, url:f.url})),
+    {authorized:true, postId:f.postId, source:f.url});
+  assert.deepEqual(f.calls, []);
+  await assert.rejects(verify(f.request({postId:f.postId, url:f.url + '&other=1'})), {code:'permission-denied'});
+  await f.ref.update({status:'removed'});
+  await assert.rejects(verify(f.request({postId:f.postId, url:f.url})), {code:'not-found'});
+  assert.deepEqual(f.calls, []);
+  assert.throws(() => createMediaDownloadHandler({auth:f.auth, db, bucket:f.bucket}, true, false, {verifyOnly:true}));
+});
+
 test('private content needs owner-side acceptance; forged following mirror grants nothing', async () => {
   const f = await setup();
   await db.doc('users/' + f.author).set({privacy:{privateAccount:true}}, {merge:true});

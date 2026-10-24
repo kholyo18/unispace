@@ -323,7 +323,7 @@ void main() {
       expect(p.nickname, '');
       expect(p.muted, isFalse);
       expect(p.bubbleGradient, isNull);
-      expect(p.bubbleColor, 0xFF0D9488);
+      expect(p.bubbleColor, 0xFF00483F);
       expect(p.clearedAt, isNull);
     });
   }
@@ -332,7 +332,7 @@ void main() {
       'theme': {uid: 'bad'},
     }, uid);
     expect(p.wallpaper, 'default');
-    expect(p.bubbleColor, 0xFF0D9488);
+    expect(p.bubbleColor, 0xFF00483F);
   });
   test(
     'unsafe theme leaf types and invalid colors fall back without casting',
@@ -349,7 +349,7 @@ void main() {
       }, uid);
       expect(p.wallpaper, 'default');
       expect(p.wallpaperUrl, '');
-      expect(p.bubbleColor, 0xFF0D9488);
+      expect(p.bubbleColor, 0xFF00483F);
       expect(p.bubbleGradient, isNull);
     },
   );

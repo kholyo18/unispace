@@ -183,3 +183,46 @@ test('immutable media metadata cannot be reassigned even by the uploader',async(
   assert.equal((await get(f.owner,path)).data.metadata.uploadedBy,f.owner.uid);
  }
 });
+
+async function secondSession(actor) {
+ const sid=require('node:crypto').createHash('sha256').update(randomUUID()).digest('hex');
+ const custom=await auth.createCustomToken(actor.uid,{sid});
+ const reply=await fetch('http://'+process.env.FIREBASE_AUTH_EMULATOR_HOST+'/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=demo',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:custom,returnSecureToken:true})});
+ assert.equal(reply.status,200);const login=await reply.json();
+ const token=await auth.verifyIdToken(login.idToken);
+ await db.doc('users/'+actor.uid+'/sessions/'+sid).set({sessionId:sid,authSessionVersion:1,isRevoked:false});
+ return {uid:actor.uid,sid,token:login.idToken,authTime:token.auth_time};
+}
+test('session grant cannot be reused by another signed session of the same account',async()=>{
+ const f=await setup(),other=await secondSession(f.owner),path='users/'+f.owner.uid+'/sid.jpg';
+ const grant=await issue(f.owner,path);
+ await db.doc('storageUploadGrants/'+grant.grantId).update({authTime:other.authTime});
+ denied(await upload(other,path,{grant}));
+ allowed(await upload(other,path,{grant:await issue(other,path)}));
+});
+test('selective revocation atomically invalidates old grants and reads while preserving another device',async()=>{
+ const f=await setup(),other=await secondSession(f.owner),path='users/'+f.owner.uid+'/revoke.jpg';
+ const grant=await issue(f.owner,path);
+ const revoke=require('../security/device-sessions').createRevokeDeviceSessionsHandler({db,auth,FieldValue});
+ await revoke(callableRequest(other,{mode:'single',sessionId:f.owner.sid}));
+ denied(await upload(f.owner,path,{grant}));denied(await get(f.owner,f.chatPath));
+ await assert.rejects(issue(f.owner,path),{code:'unauthenticated'});
+ allowed(await upload(other,path,{grant:await issue(other,path)}));
+ allowed(await get(other,path));
+});
+test('projection bootstrap includes sessions revoked before this release',async()=>{
+ const f=await setup(),other=await secondSession(f.owner);
+ await db.doc('users/'+f.owner.uid+'/sessions/'+f.owner.sid).update({isRevoked:true});
+ await db.doc('authRevocations/'+f.owner.uid).update({storageSessionSchema:FieldValue.delete(),storageRevokedSessions:FieldValue.delete()});
+ await issue(other,'users/'+f.owner.uid+'/new.jpg');
+ denied(await get(f.owner,f.chatPath));allowed(await get(other,f.chatPath));
+});
+
+test('documented remaining boundary: a grant issued before membership removal remains usable until expiry',async()=>{
+ const f=await setup(),path=`chats/${f.chat}/images/pre-removal.jpg`,grant=await issue(f.owner,path);
+ await db.doc(`chats/${f.chat}`).update({memberIds:[f.actor.uid]});
+ await assert.rejects(issue(f.owner,`chats/${f.chat}/images/after-removal.jpg`),{code:'permission-denied'});
+ allowed(await upload(f.owner,path,{grant}));
+ denied(await get(f.owner,path));
+});

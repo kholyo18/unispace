@@ -27,11 +27,20 @@ Repository-side legal/account deletion resources are implemented and verified by
 
 ## Photo/video access
 
-Completed:
+The current inline chat attachment gallery uses photo_manager to display local thumbnails before selection. It retains READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, Android 14+ READ_MEDIA_VISUAL_USER_SELECTED, and READ_EXTERNAL_STORAGE capped at API 32. Other flows use the system-backed image_picker. Permission denial and limited access must remain usable; only chosen attachments should be uploaded.
 
-- Chat media selection no longer reads the device library through `photo_manager`.
-- Gallery selection now uses `image_picker` mixed-media selection. On Android 13+ this uses the Android system Photo Picker.
-- `READ_MEDIA_IMAGES` and `READ_MEDIA_VIDEO` were removed from the main Android manifest.
-- CI rejects either broad media permission if it is reintroduced.
+The source CI checks this explicit permission contract and rejects unnecessary write/all-files, background-location, media-location and broad contacts permissions. Passing that check is not Google Play policy approval.
 
-`READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` were also removed after repository review found no remaining app code that depends on broad external-storage access. CI now rejects all four broad media/storage permissions if they are reintroduced.
+Before uploading publicly, complete the Play photo/video access declaration and show why system pickers are insufficient for the app's core functionality. An inline gallery alone is not evidence of eligibility. If the use case is rejected, migrate the gallery to a system-picker implementation through a separately reviewed change; do not silently remove permissions while leaving dependent features broken.
+
+Policy: https://support.google.com/googleplay/android-developer/answer/14115180
+
+## Other data and release validation
+
+- Foreground coarse/fine location supports confirmed location messages; no background location is requested.
+- Contact cards use a user-selected system contact or manually entered details; no broad contacts permission is requested.
+- Translation sends text outside Firebase to Google translation endpoints. Validate the opt-in disclosure, disable control, privacy policy, and Data Safety classification.
+- CI pins Flutter 3.44.8 to match the SDK used for local verification. This is a reproducible toolchain pin, not a claim that it is the latest release.
+- Build a new signed release AAB and test the Play-delivered build on real devices with the app-signing SHA fingerprints and production App Check configuration. Debug build success does not verify these boundaries.
+- Recheck the hosted deletion/privacy/terms URLs and complete account deletion end to end using a test account.
+- Verify gallery full/limited/denied permissions, foreground location consent, contact sharing, login recovery, and chat delivery with at least two accounts before public rollout.

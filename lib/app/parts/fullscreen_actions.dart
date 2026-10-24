@@ -48,7 +48,7 @@ void _showPostTagsSheet(BuildContext context, _Post post) {
           children: [
             Row(
               children: [
-                 Icon(Icons.device_hub_rounded, color: AppTeal.main),
+                 Icon(Icons.device_hub_rounded, color: AppTeal.foreground(context)),
                 const SizedBox(width: 8),
                 Text(
                   mainText(context, "الوسوم على هذا المنشور"),
@@ -112,7 +112,7 @@ class _RedditStyleMetaState extends State<_RedditStyleMeta> {
                 backgroundColor: Colors.white24,
                 backgroundImage: (widget.authorPhotoUrl != null &&
                     widget.authorPhotoUrl!.trim().isNotEmpty)
-                    ? NetworkImage(widget.authorPhotoUrl!)
+                    ? ProtectedNetworkImage(widget.authorPhotoUrl!)
                     : null,
                 child: (widget.authorPhotoUrl == null ||
                     widget.authorPhotoUrl!.trim().isEmpty)
@@ -567,7 +567,7 @@ class _FullscreenTagsButton extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF17A2A8),
+                      color: UniSpaceColors.emerald,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(

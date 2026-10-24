@@ -79,13 +79,13 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
           .child('images')
           .child('image_${uploadId}_$index.jpg');
 
-      final uploadTask = ref.putData(
+      final uploadTask = StorageUploadService.putData(ref,
         bytes,
         SettableMetadata(contentType: 'image/jpeg'),
       );
 
       final snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
+      return snapshot.url;
     } on FirebaseException catch (e, stack) {
       rethrow;
     } catch (e, stack) {
@@ -169,7 +169,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
   }
 
   void _onAuthorProfileChanged() {
-    if (mounted) _loadInitial();
+    if (mounted) _loadInitial(showFullLoader: false);
   }
   void _onHiddenListChanged() {
     if (mounted) _loadInitial(showFullLoader: false);
@@ -431,7 +431,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
       for (final url in post.imagePaths.take(2)) {
         final u = url.trim();
         if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
-          precacheImage(CachedNetworkImageProvider(u), context);
+          precacheImage(ProtectedCachedNetworkImageProvider(u), context);
         }
       }
 
@@ -439,7 +439,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
         if (s['type']?.toString() != 'image') continue;
         final u = (s['url'] ?? s['mediaPath'] ?? '').toString().trim();
         if (u.startsWith('http') && Uri.tryParse(u)?.host != 'firebasestorage.googleapis.com') {
-          precacheImage(CachedNetworkImageProvider(u), context);
+          precacheImage(ProtectedCachedNetworkImageProvider(u), context);
         }
       }
     }
@@ -451,7 +451,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
   void _listenForNewPosts(int generation, String? me) {
     _newPostsSub?.cancel();
     var loading = false;
-    _newPostsSub = Timer.periodic(const Duration(seconds: 15), (_) async {
+    _newPostsSub = Timer.periodic(const Duration(seconds: 60), (_) async {
       if (loading || !_isCurrentFeed(generation, me) || _refreshingFeed ||
           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
           ModalRoute.of(context)?.isCurrent != true || !TickerMode.of(context)) return;
@@ -524,8 +524,8 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
     final ref = FirebaseStorage.instance
         .ref().child('community_posts/$postId/videos/video_${uploadId}_$index.$extension');
 
-    await ref.putFile(file, SettableMetadata(contentType: contentType));
-    return await ref.getDownloadURL();
+    await StorageUploadService.putFile(ref, file, SettableMetadata(contentType: contentType));
+    return StorageUploadService.locator(ref);
   }
 
   Future<void> _newPost() async {
@@ -822,7 +822,7 @@ class _CommunityScreenState extends State<CommunityScreen> with WidgetsBindingOb
             ),
           ),
           child:RefreshIndicator(
-              color: AppTeal.main,
+              color: AppTeal.foreground(context),
               notificationPredicate: (n) => n.depth == 1,
               onRefresh: () {
                 _pinPostId = null;
@@ -1355,7 +1355,7 @@ class _RedditStylePostCardState extends State<_RedditStylePostCard> {
             (repostData['commentId']?.toString().trim().isNotEmpty ?? false));
 
     return Material(
-      color: isDark ? const Color(0xFF16181C) : Colors.white,
+      color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
@@ -1592,7 +1592,7 @@ class _SearchRepostQuote extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withValues(alpha: 0.04)
-            : const Color(0xFFF4F5F7),
+            : UniSpaceColors.lightField,
         borderRadius: BorderRadius.circular(10),
         border: Border(
           right: BorderSide(color: accent.withValues(alpha: 0.55), width: 3),
@@ -1655,7 +1655,7 @@ class _SearchRepostQuote extends StatelessWidget {
             const SizedBox(width: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.network(
+              child: ProtectedImage.network(
                 image,
                 width: 44,
                 height: 44,
@@ -1697,7 +1697,7 @@ class _MediaThumbnail extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (imageUrl != null)
-              Image.network(
+              ProtectedImage.network(
                 imageUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => _placeholder(),
@@ -1804,7 +1804,7 @@ class _PillAction extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark
               ? Colors.white.withValues(alpha: 0.06)
-              : const Color(0xFFF1F2F3),
+              : UniSpaceColors.lightField,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -1944,7 +1944,7 @@ class _RedditStyleCommentTile extends StatelessWidget {
 
 
     return Material(
-      color: isDark ? const Color(0xFF16181C) : Colors.white,
+      color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -2085,7 +2085,7 @@ class _RedditStyleCommentTile extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.05)
-                        : const Color(0xFFF4F5F7),
+                        : UniSpaceColors.lightField,
                     borderRadius: BorderRadius.circular(8),
                     border: Border(
                       right: BorderSide(color: accent.withValues(alpha: 0.5), width: 3),

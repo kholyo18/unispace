@@ -7,6 +7,56 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 
+/// Keeps authenticated routes unmounted until their session metadata is ready.
+/// A new signed session gets a new future; ordinary rebuilds reuse the result.
+class AuthenticatedSessionReady extends StatefulWidget {
+  const AuthenticatedSessionReady({super.key, required this.sessionKey,
+    required this.initialize, required this.child});
+  final String sessionKey;
+  final Future<void> Function() initialize;
+  final Widget child;
+
+  @override
+  State<AuthenticatedSessionReady> createState() => _AuthenticatedSessionReadyState();
+}
+
+class _AuthenticatedSessionReadyState extends State<AuthenticatedSessionReady> {
+  late Future<void> _ready;
+  Future<void> _initialize() => Future<void>.sync(widget.initialize)
+      .timeout(const Duration(seconds: 30));
+  @override
+  void initState() { super.initState(); _ready = _initialize(); }
+  @override
+  void didUpdateWidget(AuthenticatedSessionReady oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionKey != widget.sessionKey) _ready = _initialize();
+  }
+  @override
+  Widget build(BuildContext context) => FutureBuilder<void>(
+    future: _ready,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return const BrandLoadingScene();
+      }
+      if (snapshot.hasError) {
+        return Scaffold(body: SafeArea(child: Center(child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(mainText(context, 'تحقق من اتصال الإنترنت ثم أعد المحاولة.'), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: () {
+              final ready = _initialize();
+              setState(() { _ready = ready; });
+            },
+              child: Text(mainText(context, 'إعادة المحاولة'))),
+          ]),
+        ))));
+      }
+      return widget.child;
+    },
+  );
+}
+
 class _NativeMfaRequiredScreen extends StatefulWidget {
   const _NativeMfaRequiredScreen({required this.onContinue});
 
@@ -67,6 +117,17 @@ class _NativeMfaRequiredScreenState extends State<_NativeMfaRequiredScreen> {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  late final Stream<MapEntry<User?, String>> _authSessions =
+      FirebaseAuth.instance.idTokenChanges().asyncMap((user) async {
+    if (user == null) return const MapEntry<User?, String>(null, '');
+    try {
+      final token = await user.getIdTokenResult();
+      return MapEntry<User?, String>(user, '${token.claims?['sid'] ?? ''}');
+    } catch (_) {
+      // Keep the authenticated account on a retry screen when offline.
+      return MapEntry<User?, String>(user, 'unresolved');
+    }
+  });
   User? _lastAuthUser;
   bool _blockingSignOut = false;
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _userDocStream;
@@ -127,8 +188,8 @@ class _AuthGateState extends State<AuthGate> {
     return ValueListenableBuilder<int>(
       valueListenable: TwoFactorService.instance.authRefresh,
       builder: (_, __, ___) {
-        return StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
+        return StreamBuilder<MapEntry<User?, String>>(
+          stream: _authSessions,
           builder: (ctx, snap) {
             if (Firebase.apps.isEmpty) {
               return  Scaffold(
@@ -138,27 +199,26 @@ class _AuthGateState extends State<AuthGate> {
               );
             }
             if (snap.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
+              return const BrandLoadingScene();
             }
 
-            if (!identical(_lastAuthUser, snap.data)) {
-              _lastAuthUser = snap.data;
+            if (!identical(_lastAuthUser, snap.data?.key)) {
+              _lastAuthUser = snap.data?.key;
               if (kDebugMode) {
                 debugPrint(
-                  '[AuthGate] authStateChanges user=${snap.data?.uid ?? 'null'}',
+                  '[AuthGate] authStateChanges user=${snap.data?.key?.uid ?? 'null'}',
                 );
               }
             }
 
-            if (!snap.hasData) {
+            if (snap.data?.key == null) {
               _userDocStream = null;
               _userDocStreamUid = null;
               return const SignInScreen();
             }
 
-            final user = snap.data!;
+            final user = snap.data!.key!;
+            final signedSid = snap.data!.value;
             final isPasswordUser = user.providerData
                 .any((info) => info.providerId == 'password');
 // if (isPasswordUser && !user.emailVerified) {
@@ -168,12 +228,27 @@ class _AuthGateState extends State<AuthGate> {
             //     password: '',
             //   );
             // }
+            Widget ready(Widget child) => AuthenticatedSessionReady(
+              sessionKey: '${user.uid}:$signedSid:${TwoFactorService.instance.authRefresh.value}',
+              initialize: () async {
+                if (FirebaseAuth.instance.currentUser?.uid != user.uid) throw StateError('Session changed.');
+                final expectedSid = signedSid == 'unresolved'
+                    ? '${(await user.getIdTokenResult()).claims?['sid'] ?? ''}' : signedSid;
+                await SessionService.instance.initSession(user.uid);
+                final current = FirebaseAuth.instance.currentUser;
+                if (current?.uid != user.uid ||
+                    '${(await current!.getIdTokenResult()).claims?['sid'] ?? ''}' != expectedSid) {
+                  throw StateError('Session changed.');
+                }
+              },
+              child: child,
+            );
             return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: _statusStreamFor(user.uid),
               builder: (context, statusSnap) {
                 if (statusSnap.hasError) {
                   debugPrint('AuthGate user doc: ${statusSnap.error}');
-                  return _routeAuthenticated(user, isPasswordUser);
+                  return ready(_routeAuthenticated(user, isPasswordUser));
                 }
 
                 final doc = statusSnap.data;
@@ -191,13 +266,11 @@ class _AuthGateState extends State<AuthGate> {
                   if (kDebugMode) {
                     debugPrint('[AuthGate] routing -> ReactivateAccountScreen');
                   }
-                  return ReactivateAccountScreen(onReactivated: _refreshStatus);
+                  return ready(ReactivateAccountScreen(onReactivated: _refreshStatus));
                 }
 
                 if (!statusSnap.hasData) {
-                  return const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  );
+                  return const BrandLoadingScene();
                 }
 
                 final completed = data?['onboardingCompleted'] == true;
@@ -213,14 +286,14 @@ class _AuthGateState extends State<AuthGate> {
                   final parts = (user.displayName ?? '').trim().split(RegExp(r'\s+'));
                   final first = parts.isNotEmpty ? parts.first : '';
                   final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
-                  return SignUpFlowScreen(
+                  return ready(SignUpFlowScreen(
                     skipAccountCreation: isGoogle,
                     initialFirstName: first,
                     initialLastName: last,
-                  );
+                  ));
                 }
 
-                return _routeAuthenticated(user, isPasswordUser);
+                return ready(_routeAuthenticated(user, isPasswordUser));
               },
             );
           },
@@ -544,44 +617,18 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
-  String _mapPasswordResetError(FirebaseAuthException error) {
-    switch (error.code) {
-      case 'invalid-email':
-        return S.of(context).invalidEmailError;
-      case 'user-not-found':
-        return S.of(context).userNotFoundError;
-      case 'too-many-requests':
-        return S.of(context).tooManyRequestsError;
-      default:
-        return S.of(context).resetLinkFailed;
-    }
-  }
-
-  Future<void> _showForgotPasswordSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => _ForgotPasswordSheet(
-        initialEmail: email.text.trim(),
-        onShowSnack: _showAuthSnack,
-        mapPasswordResetError: _mapPasswordResetError,
-      ),
-    );
-  }
+  Future<void> _showForgotPasswordSheet() => showPasswordResetSheet(context, initialEmail: email.text.trim());
 
   bool get _dark => Theme.of(context).brightness == Brightness.dark;
 
-  Color get _bg => _dark ? const Color(0xFF061016) : const Color(0xFFF3F7F6);
-  Color get _sheet => _dark ? const Color(0xFF0A1216) : Colors.white;
-  Color get _ink => _dark ? Colors.white : const Color(0xFF102027);
-  Color get _muted => _dark ? const Color(0xFF9BB0B8) : const Color(0xFF5B6E75);
-  Color get _field => _dark ? const Color(0xFF0E171C) : const Color(0xFFF4F7F8);
-  Color get _stroke => _dark ? const Color(0xFF1E2C33) : const Color(0xFFD7E3E6);
+  Color get _accent => _dark ? UniSpaceColors.mint : UniSpaceBrand.forest;
+
+  Color get _bg => UniSpaceColors.background(_dark);
+  Color get _sheet => _dark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface;
+  Color get _ink => UniSpaceColors.ink(_dark);
+  Color get _muted => _dark ? UniSpaceColors.darkMuted : UniSpaceColors.lightMuted;
+  Color get _field => _dark ? UniSpaceColors.darkField : UniSpaceColors.lightField;
+  Color get _stroke => _dark ? UniSpaceColors.darkBorder : UniSpaceColors.lightBorder;
 
   InputDecoration _deco({
     required String label,
@@ -605,7 +652,7 @@ class _SignInScreenState extends State<SignInScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: AppTeal.main, width: 1.4),
+        borderSide: BorderSide(color: _accent, width: 1.4),
       ),
     );
   }
@@ -613,136 +660,42 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   Widget build(BuildContext context) {
     final busy = loading || googleLoading;
-
-    return Scaffold(
+    return Theme(
+      data: Theme.of(context).copyWith(textTheme: Theme.of(context).textTheme.apply(fontFamily: 'Tajawal')),
+      child: Builder(builder: (context) {
+      return Scaffold(
       backgroundColor: _bg,
       resizeToAvoidBottomInset: true,
-      body: Stack(
-        children: [
-          Positioned(
-            top: -90,
-            right: -70,
-            child: _GlowOrb(size: 280, opacity: _dark ? 0.55 : 0.28),
-          ),
-          Positioned(
-            top: 180,
-            left: -90,
-            child: _GlowOrb(size: 180, opacity: _dark ? 0.28 : 0.16),
-          ),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final sheetHeight = c.maxHeight < 560
-                    ? c.maxHeight
-                    : c.maxHeight * 0.6;
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(35, 28, 28, 0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'UNISPACE',
-                              style: TextStyle(
-                                color: AppTeal.main,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                                letterSpacing: 3.2,
-                              ),
-                            ),
-                            const SizedBox(height: 50),
-                            Container(
-                              width: 58,
-                              height: 58,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    AppTeal.main,
-                                    Color.lerp(AppTeal.main, Colors.black, 0.22)!,
-                                  ],
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppTeal.main.withValues(
-                                      alpha: _dark ? 0.45 : 0.28,
-                                    ),
-                                    blurRadius: 22,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.school_rounded,
-                                color: Colors.white,
-                                size: 30,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              mainText(context, "مساحتك الجامعية"),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: _ink,
-                                fontSize: 42,
-                                height: 1.05,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              mainText(context, "Welcome to UniSpace where we all meet"),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: _muted,
-                                fontSize: 15,
-                                height: 1.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: sheetHeight,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-                        decoration: BoxDecoration(
-                          color: _sheet,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(32),
-                          ),
-                          border: Border(top: BorderSide(color: _stroke)),
-                          boxShadow: _dark
-                              ? null
-                              : [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
-                              blurRadius: 24,
-                              offset: const Offset(0, -8),
-                            ),
-                          ],
-                        ),
-                        child: SingleChildScrollView(
-                          keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const SizedBox(height:5),
+      body: DecoratedBox(
+        decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [_bg, UniSpaceColors.field(_dark)],
+        )),
+        child: SafeArea(child: Center(child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SingleChildScrollView(
+            key: const ValueKey('login-scroll'),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Center(child: UniSpaceBrandMark(width: 148)),
+              const SizedBox(height: 14),
+              Text('UniSpace', textDirection: TextDirection.ltr, textAlign: TextAlign.center,
+                style: TextStyle(color: _ink, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -1)),
+              const SizedBox(height: 22),
+              Theme(data: Theme.of(context).copyWith(
+                colorScheme: Theme.of(context).colorScheme.copyWith(primary: _accent),
+              ), child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(color: _sheet, borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: _stroke),
+                  boxShadow: [BoxShadow(color: UniSpaceBrand.forest.withValues(alpha: .05), blurRadius: 28, offset: const Offset(0, 12))]),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Text(mainText(context, 'مرحبًا بك'),
+                    key: const ValueKey('login-welcome'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: _ink, fontSize: 30, height: 1.3, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 26),
                               TextField(
                                 controller: email,
                                 keyboardType: TextInputType.emailAddress,
@@ -779,15 +732,10 @@ class _SignInScreenState extends State<SignInScreen> {
                                   busy ? null : _showForgotPasswordSheet,
                                   child: Text(
                                     S.of(context).forgotPassword,
-                                    style: TextStyle(color: AppTeal.main),
+                                    style: TextStyle(color: _accent),
                                   ),
                                 ),
                               ),
-                              // TextButton(
-                              //   onPressed: busy ? null : () => Navigator.of(context).push(
-                              //     MaterialPageRoute(builder: (_) => const AccountRecoveryScreen())),
-                              //   child: const Text('فقدت تطبيق المصادقة؟'),
-                              // ),
                               Column(
                                 children: [
                                   Material(
@@ -810,104 +758,6 @@ class _SignInScreenState extends State<SignInScreen> {
                                       ),
                                     ),
                                   ),
-                                  Text(
-                                    mainText(context, "اطّلع على"),
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        color: _muted,
-                                        fontSize: 12,
-                                        height: 1.4),
-                                  ),
-                                  Row(
-                                    key: const ValueKey('login-legal-details'),
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      TextButton(
-                                        key: const ValueKey('login-read-terms'),
-                                        onPressed: busy
-                                            ? null
-                                            : () => Navigator.of(context)
-                                                    .push<void>(
-                                                MaterialPageRoute<void>(
-                                                  builder: (_) =>
-                                                      const TermsOfUseScreen(),
-                                                ),
-                                              ),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor:
-                                              const Color(0xFF00376B),
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                          textStyle: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        child:  Text(mainText(context, "شروط الاستخدام")),
-                                      ),
-                                      Text(' · ',
-                                          style: TextStyle(
-                                              color: _muted, fontSize: 12)),
-                                      TextButton(
-                                      key: const ValueKey('login-read-privacy'),
-                                      onPressed: busy
-                                          ? null
-                                          : () => Navigator.of(context)
-                                                    .push<void>(
-                                                MaterialPageRoute<void>(
-                                                  builder: (_) =>
-                                                      const PrivacyPolicyScreen(),
-                                                ),
-                                              ),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor:
-                                              const Color(0xFF00376B),
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                          textStyle: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        child:  Text(mainText(context, "سياسة الخصوصية")),
-                                      ),
-                                      Text(' · ',
-                                          style: TextStyle(
-                                              color: _muted, fontSize: 12)),
-                                      TextButton(
-                                      key: const ValueKey('login-read-community'),
-                                      onPressed: busy
-                                          ? null
-                                          : () => Navigator.of(context)
-                                                    .push<void>(
-                                                MaterialPageRoute<void>(
-                                                  builder: (_) =>
-                                                      const CommunityGuidelinesScreen(),
-                                                ),
-                                              ),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor:
-                                              const Color(0xFF00376B),
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                          textStyle: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        child:  Text(mainText(context, "قواعد المجتمع")),
-                                  ),
-                                ],
-                              ),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -917,8 +767,8 @@ class _SignInScreenState extends State<SignInScreen> {
                                   key: const ValueKey('login-email-submit'),
                                   onPressed: busy || !_termsAccepted ? null : _login,
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: AppTeal.main,
-                                    foregroundColor: Colors.white,
+                                    backgroundColor: _accent,
+                                    foregroundColor: _dark ? UniSpaceBrand.forest : Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(18),
                                     ),
@@ -941,29 +791,13 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 14),
-                              GestureDetector(
-                                onTap: busy ? null : _register,
-                                child: Text.rich(
-                                  TextSpan(
-                                    text: mainText(context, "ليس لديك حساب؟  "),
-                                    style: TextStyle(color: _muted),
-                                    children: [
-                                      TextSpan(
-                                        text: S.of(context).register,
-                                        style: TextStyle(
-                                          color: AppTeal.main,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                              const SizedBox(height: 18),
-                              SizedBox(
-                                height: 50,
+                  Padding(padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Row(children: [Expanded(child: Divider(color: _stroke)),
+                      Padding(padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Text(mainText(context, 'أو'), style: TextStyle(color: _muted))),
+                      Expanded(child: Divider(color: _stroke))])),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(minHeight: 50),
                                 child: OutlinedButton(
                                   key: const ValueKey('login-google-submit'),
                                   onPressed: busy || !_termsAccepted ? null : _signInWithGoogle,
@@ -971,7 +805,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                     foregroundColor: _ink,
                                     backgroundColor: _dark
                                         ? Colors.transparent
-                                        : const Color(0xFFF7FAFA),
+                                        : UniSpaceColors.lightField,
                                     side: BorderSide(color: _stroke),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
@@ -996,223 +830,152 @@ class _SignInScreenState extends State<SignInScreen> {
                                         color: Color(0xFFDB4437),
                                       ),
                                       SizedBox(width: 10),
-                                      Text(
+                                      Flexible(child: Text(
                                         mainText(context, "متابعة عبر Google"),
+                                        textAlign: TextAlign.center,
                                         style: TextStyle(
                                           fontWeight: FontWeight.w700,
                                         ),
-                                      ),
+                                      )),
                                     ],
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
-class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({required this.size, required this.opacity});
-  final double size;
-  final double opacity;
+                ]),
+              )),
+                              const SizedBox(height: 14),
+                              GestureDetector(
+                                onTap: busy ? null : _register,
+                                child: Text.rich(
+                                  TextSpan(
+                                    text: mainText(context, "ليس لديك حساب؟  "),
+                                    style: TextStyle(color: _muted),
+                                    children: [
+                                      TextSpan(
+                                        text: S.of(context).register,
+                                        style: TextStyle(
+                                          color: _accent,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
 
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              AppTeal.main.withValues(alpha: opacity),
-              AppTeal.main.withValues(alpha: 0),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-typedef _PasswordResetErrorMapper = String Function(FirebaseAuthException error);
-
-class _ForgotPasswordSheet extends StatefulWidget {
-  const _ForgotPasswordSheet({
-    required this.initialEmail,
-    required this.onShowSnack,
-    required this.mapPasswordResetError,
-  });
-
-  final String initialEmail;
-  final ValueChanged<String> onShowSnack;
-  final _PasswordResetErrorMapper mapPasswordResetError;
-
-  @override
-  State<_ForgotPasswordSheet> createState() => _ForgotPasswordSheetState();
-}
-
-class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
-  late final TextEditingController _resetEmailController;
-  late final FocusNode _resetFocusNode;
-  bool _isSending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _resetEmailController = TextEditingController(text: widget.initialEmail);
-    _resetFocusNode = FocusNode();
-  }
-
-  @override
-  void dispose() {
-    // Dispose sheet-owned controllers/nodes to avoid dangling dependents when the sheet is swipe-dismissed.
-    _resetEmailController.dispose();
-    _resetFocusNode.dispose();
-    super.dispose();
-  }
-
-  Future<void> _sendResetEmail() async {
-    final localizations = S.of(context);
-    final trimmedEmail = _resetEmailController.text.trim();
-    if (trimmedEmail.isEmpty || !trimmedEmail.contains('@')) {
-      widget.onShowSnack(localizations.invalidEmailValidation);
-      return;
-    }
-
-    setState(() => _isSending = true);
-
-    try {
-      await FirebaseAuth.instance.setLanguageCode(Localizations.localeOf(context).languageCode);
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: trimmedEmail);
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      widget.onShowSnack(localizations.resetLinkSentSuccess);
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      widget.onShowSnack(widget.mapPasswordResetError(e));
-    } catch (_) {
-      if (!mounted) return;
-      widget.onShowSnack(localizations.resetLinkFailed);
-    } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.of(context).viewInsets;
-    final localizations = S.of(context);
-
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(24, 12, 24, viewInsets.bottom + 24),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: kUniSpaceBlue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.lock_reset, color: kUniSpaceBlue),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      localizations.resetPasswordTitle,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed:
-                    _isSending ? null : () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
               const SizedBox(height: 12),
-              Text(
-                localizations.resetPasswordHelper,
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _resetEmailController,
-                focusNode: _resetFocusNode,
-                enabled: !_isSending,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.email_outlined),
-                  labelText: localizations.email,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _isSending ? null : _sendResetEmail,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_isSending)
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        ),
-                      if (_isSending) const SizedBox(width: 12),
-                      Text(
-                        _isSending
-                            ? localizations.sendResetLinkLoading
-                            : localizations.sendResetLink,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: TextButton(
-                  onPressed: _isSending ? null : () => Navigator.of(context).pop(),
-                  child: Text(localizations.cancel),
-                ),
-              ),
-            ],
+                                  Wrap(
+                                    key: const ValueKey('login-legal-details'),
+                                    alignment: WrapAlignment.center,
+                                    spacing: 2,
+                                    runSpacing: 4,
+                                    children: [
+                                      TextButton(
+                                        key: const ValueKey('login-read-terms'),
+                                        onPressed: busy
+                                            ? null
+                                            : () => Navigator.of(context)
+                                                    .push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const TermsOfUseScreen(),
+                                                ),
+                                              ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor:
+                                              _accent,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          textStyle: const TextStyle(
+                                            fontFamily: 'Tajawal',
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        child:  Text(mainText(context, "شروط الاستخدام")),
+                                      ),
+                                      Text(' · ',
+                                          style: TextStyle(
+                                              color: _muted, fontSize: 12)),
+                                      TextButton(
+                                      key: const ValueKey('login-read-privacy'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context)
+                                                    .push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const PrivacyPolicyScreen(),
+                                                ),
+                                              ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor:
+                                              _accent,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          textStyle: const TextStyle(
+                                            fontFamily: 'Tajawal',
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        child:  Text(mainText(context, "سياسة الخصوصية")),
+                                      ),
+                                      Text(' · ',
+                                          style: TextStyle(
+                                              color: _muted, fontSize: 12)),
+                                      TextButton(
+                                      key: const ValueKey('login-read-community'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => Navigator.of(context)
+                                                    .push<void>(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const CommunityGuidelinesScreen(),
+                                                ),
+                                              ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor:
+                                              _accent,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          textStyle: const TextStyle(
+                                            fontFamily: 'Tajawal',
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        child:  Text(mainText(context, "قواعد المجتمع")),
+                                  ),
+                                ],
+                              ),
+
+                              TextButton(
+                                key: const ValueKey('login-authenticator-recovery'),
+                                style: TextButton.styleFrom(foregroundColor: _muted),
+                                onPressed: busy ? null : () => Navigator.of(context).push<void>(
+                                  MaterialPageRoute<void>(builder: (_) => const AccountRecoveryScreen())),
+                                child: Text(authSettingsText(context, 'فقدت تطبيق المصادقة؟')),
+                              ),
+
+            ]),
           ),
-        ),
+        ))),
       ),
     );
+    }));
   }
 }
 

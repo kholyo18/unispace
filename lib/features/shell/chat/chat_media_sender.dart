@@ -28,7 +28,7 @@ class ChatMediaSender {
   final ChatOutbox outbox;
   late ChatMediaSendQueue queue;
   bool closed = false;
-  final tasks = <ChatMediaDraft, UploadTask>{};
+  final tasks = <ChatMediaDraft, ProtectedUploadTask>{};
   final cancelled = <ChatMediaDraft>{};
   Future<void> authorize() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -146,7 +146,7 @@ class ChatMediaSender {
       } else {
         final ref = FirebaseStorage.instance.ref(
             'chats/${chatId}/${draft.video ? 'videos' : 'images'}/$id.${format.extension}');
-        StreamSubscription<TaskSnapshot>? uploadSub;
+        StreamSubscription<ProtectedUploadSnapshot>? uploadSub;
         try {
           await StorageUploadService.putFile(ref, draft.file,
               SettableMetadata(contentType: format.contentType),
@@ -160,7 +160,7 @@ class ChatMediaSender {
                 onError: (Object _) {});
           });
           guard();
-          draft.uploadUrl = await ref.getDownloadURL();
+          draft.uploadUrl = StorageUploadService.locator(ref);
         } finally {
           await uploadSub?.cancel();
         }
@@ -181,7 +181,7 @@ class ChatMediaSender {
                 if (closed || cancelled.contains(draft))
                   unawaited(task.cancel());
               });
-              draft.thumbnailUrl = await thumbRef.getDownloadURL();
+              draft.thumbnailUrl = StorageUploadService.locator(thumbRef);
             }
           } catch (_) {
             /* A thumbnail failure must not discard an uploaded video. */

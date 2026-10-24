@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 
 // Application-authored UI text only. Stored identifiers and user content stay unchanged.
 const mainMessageCatalog = <String, List<String>>{
+  "مرحبًا بك": <String>["Welcome", "Bienvenue"],
+  "أو": <String>["or", "ou"],
   "تعذر تحميل بعض نتائج المنشورات. أعد البحث للمحاولة مجددًا.": <String>["Some post results could not load. Search again to retry.", "Certains résultats n’ont pas pu être chargés. Relancez la recherche."],
   "النتائج محدودة؛ قد لا تشمل المنشورات الأقدم.": <String>["Results are limited and may not include older posts.", "Les résultats sont limités et peuvent exclure les anciennes publications."],
   "اسم المستخدم": <String>["Username", "Nom d’utilisateur"],

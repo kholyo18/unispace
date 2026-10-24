@@ -91,28 +91,33 @@ class PushPreferencesService with WidgetsBindingObserver {
     });
     return _pending;
   }
-  void cancelSignOut() { _signingOutUid = null; }
+  void cancelSignOut() { ++_revision; _signingOutUid = null; }
 
   Future<void> prepareSignOut() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     _signingOutUid = uid;
-    ++_revision;
-    // Drain the serialized registration before detaching it; suppress new registrations meanwhile.
-    await _pending;
+    final revision = ++_revision;
+    bool current() => _revision == revision && _signingOutUid == uid &&
+        FirebaseAuth.instance.currentUser?.uid == uid;
+    // Late cleanup must never detach a subsequent login's push token.
+    await _pending.timeout(const Duration(seconds: 3));
+    if (!current()) return;
     var confirmed = false;
     try {
       final token = await FirebaseMessaging.instance.getToken().timeout(const Duration(seconds: 8));
-      if (token != null && token.isNotEmpty && FirebaseAuth.instance.currentUser?.uid == uid) {
+      if (token != null && token.isNotEmpty && current()) {
         final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
             .httpsCallable('detachPushDevice', options: HttpsCallableOptions(timeout: const Duration(seconds: 10)))
             .call<Map<String, dynamic>>({'token':token});
         confirmed = result.data['detached'] == true;
       }
     } catch (_) {}
+    if (!current()) return;
     try {
       await FirebaseMessaging.instance.deleteToken().timeout(const Duration(seconds: 8));
     } catch (_) {}
+    if (!current()) return;
     status.value = confirmed
         ? 'تم فصل إشعارات الجهاز عن الحساب.'
         : 'تعذر تأكيد فصل إشعارات الجهاز. قد تبقى رسائل سبق إرسالها.';

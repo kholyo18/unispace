@@ -105,7 +105,7 @@ class _CommunityPostTagChip extends StatelessWidget {
           Text(
             mainTagText(context, label),
             style:  TextStyle(
-              color: AppTeal.main,
+              color: AppTeal.foreground(context),
               fontWeight: FontWeight.w800,
               fontSize: 11.5,
               height: 1.15,
@@ -169,7 +169,7 @@ class _CommunityPostActionBar extends StatelessWidget {
               icon: FontAwesomeIcons.comment,
               label: commentLabel,
               selected: false,
-              selectedColor: const Color(0xFF1565C0),
+              selectedColor: UniSpaceColors.forest,
               onTap: onCommentTap,
             ),
 

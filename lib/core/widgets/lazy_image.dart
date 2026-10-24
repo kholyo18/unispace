@@ -1,5 +1,5 @@
+import '../../services/protected_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'skeleton.dart';
 
@@ -41,7 +41,7 @@ class _LazyImageState extends State<LazyImage> with AutomaticKeepAliveClientMixi
       child: _isVisible
           ? GestureDetector(
         onTap: widget.onTap,
-        child: CachedNetworkImage(
+        child: ProtectedCachedNetworkImage(
           imageUrl: widget.url,
           height: widget.height,
           fit: widget.fit,

@@ -1,3 +1,4 @@
+const { publishedUploadMatches } = require('./published-upload');
 const { HttpsError } = require('firebase-functions/v2/https');
 const { createContentSearchPageHandler, removed } = require('./content-search-page');
 const validId = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && !v.includes('/') && !['.', '..'].includes(v);
@@ -46,8 +47,7 @@ function createCommentHandler({ auth, db, FieldValue, Timestamp, bucket }) {
         if (!objectPath.startsWith(expected) || !/^[a-zA-Z0-9]{1,8}$/.test(objectPath.slice(expected.length))) throw Error();
       } catch (_) { throw new HttpsError('invalid-argument','Invalid comment media.'); }
       const [metadata] = await storage.file(objectPath).getMetadata();
-      const tokens = String(metadata.metadata?.firebaseStorageDownloadTokens || '').split(',');
-      if (!tokens.includes(url.searchParams.get('token')) || Number(metadata.size) <= 0) {
+      if (!publishedUploadMatches(metadata, url, uid)) {
         throw new HttpsError('invalid-argument','Media is unavailable.');
       }
     }

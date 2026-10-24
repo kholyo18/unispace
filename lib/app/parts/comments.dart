@@ -179,10 +179,10 @@ class _CommentsScreenState extends State<_CommentsContentScreen>
   List<String> _hiddenWords = [];
 
   static  Color _primaryTeal = AppTeal.main;
-  static const Color _primaryBlue = Color(0xFF1565C0);
-  static const Color _lightCyan = Color(0xFFEAF7F8);
-  static const Color _textDark = Color(0xFF1F2937);
-  static const Color _mutedText = Color(0xFF64748B);
+  static const Color _primaryBlue = UniSpaceColors.forest;
+  static const Color _lightCyan = UniSpaceColors.ivory;
+  static const Color _textDark = UniSpaceColors.forest;
+  static const Color _mutedText = UniSpaceColors.lightMuted;
 
   // NEW: خزنة مفاتيح كل تعليق باش نقدرو نمرّرو لأي واحد منهم (القفز للأب)
   final Map<String, GlobalKey> _commentKeys = {};
@@ -1547,9 +1547,9 @@ class _CommentComposerState extends State<_CommentComposer> {
     final hasPhoto = _avatarUrl != null && _avatarUrl!.trim().isNotEmpty;
 
     final sendActiveColor =
-    isDark ? const Color(0xFF3B82F6) : const Color(0xFF2563EB);
+    UniSpaceColors.accent(isDark);
     final sendDisabledColor =
-    isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    isDark ? UniSpaceColors.darkContainer : UniSpaceColors.lightBorder;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -1641,7 +1641,7 @@ class _CommentComposerState extends State<_CommentComposer> {
                     ),
                   ),
                   child: hasPhoto
-                      ? Image.network(
+                      ? ProtectedImage.network(
                     _avatarUrl!,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Icon(
@@ -1805,7 +1805,7 @@ class _CommentComposerState extends State<_CommentComposer> {
                               size: 20,
                               color: canSend
                                   ? Colors.white
-                                  : const Color(0xFF94A3B8),
+                                  : UniSpaceColors.darkMuted,
                             ),
                           ),
                         ),
@@ -3644,7 +3644,7 @@ class _CommentMediaState extends State<_CommentMedia> {
               ? _AuthorizedImageView(key: ValueKey(
                           [widget.postId, widget.commentId, url].join('|')),
                   postId: widget.postId, commentId: widget.commentId, path: url, preview: true)
-              : Image.network(
+              : ProtectedImage.network(
             url,
             fit: BoxFit.cover,
             loadingBuilder: (context, child, progress) =>
@@ -3860,7 +3860,7 @@ class _ExpandableTextState extends State<ExpandableText> {
                   child: Text(
                     _expanded ? mainText(context, "عرض أقل") : mainText(context, "عرض المزيد"),
                     style: style.copyWith(
-                      color: const Color(0xFF1565C0),
+                      color: UniSpaceColors.forest,
                       fontWeight: FontWeight.w800,
                       fontSize: (style.fontSize ?? 13) * 0.95,
                     ),
@@ -3925,31 +3925,31 @@ class _CommentTheme {
 
   factory _CommentTheme.of(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    const accent = Color(0xFF17A2A8);
-    const accentSecondary = Color(0xFF1565C0);
+    final accent = Theme.of(context).colorScheme.primary;
+    final accentSecondary = Theme.of(context).colorScheme.primary;
 
     return _CommentTheme._(
       isDark: dark,
-      pageBg: Theme.of(context).colorScheme.surface,
-      cardBg: dark ? const Color(0xFF171B1E) : Colors.white,
+      pageBg: Theme.of(context).scaffoldBackgroundColor,
+      cardBg: dark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
       cardBorder: dark
           ? Colors.white.withValues(alpha: 0.06)
           : Colors.black.withValues(alpha: 0.06),
-      textPrimary: dark ? const Color(0xFFE7EAEB) : const Color(0xFF1C1C1C),
-      textMuted: dark ? const Color(0xFF8B9296) : const Color(0xFF6B7280),
-      textFaint: dark ? const Color(0xFF5B6266) : const Color(0xFF9CA3AF),
+      textPrimary: UniSpaceColors.ink(dark),
+      textMuted: dark ? UniSpaceColors.darkMuted : UniSpaceColors.lightMuted,
+      textFaint: UniSpaceColors.muted(dark),
       accent: accent,
       accentSecondary: accentSecondary,
       threadLine: dark
           ? Colors.white.withValues(alpha: 0.1)
           : Colors.black.withValues(alpha: 0.1),
-      avatarBg: dark ? const Color(0xFF2A2F33) : const Color(0xFFE9EAEB),
+      avatarBg: dark ? UniSpaceColors.darkContainer : UniSpaceColors.lightField,
       chipBg: dark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
-      inputBg: dark ? const Color(0xFF1D2226) : const Color(0xFFF5F6F7),
+      inputBg: dark ? UniSpaceColors.darkField : UniSpaceColors.lightField,
       inputBorder: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
-      sheetBg: dark ? const Color(0xFF1B1F22) : Colors.white,
+      sheetBg: dark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
       danger: const Color(0xFFE5484D),
-      textBody: dark ? const Color(0xFFC9CDCE) : const Color(0xFF34383C),
+      textBody: dark ? UniSpaceColors.darkMuted : UniSpaceColors.forest,
     );
   }
 }
@@ -3981,9 +3981,9 @@ Future<void> _postComment({required BuildContext context, required String postId
       }
       final contentType = attachment.uploadContentType;
       if (FirebaseAuth.instance.currentUser?.uid != user.uid) throw StateError(mainText(context, "تغيّر الحساب"));
-      await ref.putData(
+      await StorageUploadService.putData(ref,
           attachment.bytes, SettableMetadata(contentType: contentType));
-      mediaUrl = await ref.getDownloadURL();
+      mediaUrl = StorageUploadService.locator(ref);
       mediaType = switch (attachment.kind) {
         CommentMediaKind.video => 'video', CommentMediaKind.gif => 'gif', CommentMediaKind.image => 'image',
       };

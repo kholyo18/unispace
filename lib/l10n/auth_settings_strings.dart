@@ -13,6 +13,17 @@ String authSettingsTextForLocale(String language, String key, [Map<String, Objec
 }
 
 const authSettingsCatalog = <String, List<String>>{
+  "أنواع الإشعارات": ["Notification categories","Catégories de notifications"],
+  "إذن الإشعارات": ["Notification permission","Autorisation des notifications"],
+  "جارٍ التحقق من إذن الإشعارات…": ["Checking notification permission…","Vérification de l’autorisation…"],
+  "الإشعارات محظورة في إعدادات الهاتف. اسمح بها لتلقي التنبيهات.": ["Notifications are blocked in phone settings. Allow them to receive alerts.","Les notifications sont bloquées dans les réglages du téléphone. Autorisez-les pour recevoir les alertes."],
+  "إذن الإشعارات متاح على هذا الجهاز.": ["Notification permission is available on this device.","Les notifications sont autorisées sur cet appareil."],
+  "لم يُمنح إذن الإشعارات بعد.": ["Notification permission has not been granted yet.","L’autorisation des notifications n’a pas encore été accordée."],
+  "تعذر التحقق من إذن الإشعارات.": ["Could not check notification permission.","Impossible de vérifier l’autorisation des notifications."],
+  "فتح إعدادات الهاتف": ["Open phone settings","Ouvrir les réglages du téléphone"],
+  "التحقق من الإذن": ["Check permission","Vérifier l’autorisation"],
+  "مزامنة الإشعارات": ["Notification sync","Synchronisation des notifications"],
+  "تعذر تحديث تذكيرات الامتحانات. أعد المحاولة.": ["Could not update exam reminders. Retry.","Impossible de mettre à jour les rappels d’examens. Réessayez."],
   'تعذر تأكيد حفظ البيانات بسبب الاتصال. بياناتك ما زالت في هذه الشاشة؛ تحقق من الإنترنت ثم أعد الحفظ.': ['Could not confirm the save because of the connection. Your entries remain on this screen; check your internet connection and save again.', 'Impossible de confirmer l’enregistrement à cause de la connexion. Vos données restent sur cet écran ; vérifiez Internet puis réessayez.'],
   'تعذر الوصول إلى خدمة حفظ الحساب. حاول لاحقًا.': ['The account saving service could not be reached. Try later.', 'Le service d’enregistrement du compte est inaccessible. Réessayez plus tard.'],
   'مرحبًا بك في UniSpace.': ['Welcome to UniSpace.', 'Bienvenue sur UniSpace.'],

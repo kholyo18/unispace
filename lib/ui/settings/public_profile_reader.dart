@@ -70,12 +70,14 @@ class PublicProfileReader {
   Stream<Map<String, dynamic>> watch(
     String userId, {
     Duration interval = const Duration(seconds: 30),
+    bool Function()? shouldRefresh,
   }) async* {
     final session = sessionKey();
     if (session == null) throw StateError('Sign in before watching a profile');
     yield await load(userId);
     await for (final _ in Stream<void>.periodic(interval)) {
       if (sessionKey() != session) throw StateError('Profile session changed');
+      if (shouldRefresh != null && !shouldRefresh()) continue;
       yield await load(userId);
     }
   }

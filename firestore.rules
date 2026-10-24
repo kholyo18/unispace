@@ -122,8 +122,9 @@ service cloud.firestore {
             || request.resource.data.get('security', {}).get('backupCodes', []) == []));
     }
     match /users/{userId} {
-      // Other-profile reads still require migration; unchanged in this candidate slice.
-      allow read: if activeSession();
+      // Raw profiles contain private account fields; public identity uses readPublicProfile.
+      allow get: if activeSession() && request.auth.uid == userId;
+      allow list: if false;
       allow update: if activeProfileOwner(userId) && editableProfileChange();
       // Signup and permanent deletion must complete through server-owned lifecycle paths.
       allow create, delete: if false;
@@ -222,6 +223,12 @@ service cloud.firestore {
       allow read: if activeSession();
       allow write: if activeSession() && request.auth.uid == userId;
     }
+
+    // Upload capabilities are server-owned; clients must use prepareStorageUpload.
+    match /storageUploadGrants/{grantId} { allow read, write: if false; }
+    match /protectedUploadTickets/{grantId} { allow read, write: if false; }
+    match /releasePolicy/{platform} { allow read, write: if false; }
+    match /maintenanceCursors/{cursor} { allow read, write: if false; }
 
     // Migrated to authenticated, server-authorized callables.
     match /community_reports/{reportId} { allow read, write: if false; }

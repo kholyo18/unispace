@@ -43,6 +43,40 @@ abstract final class AcademicStrings {
   // Exact known catalog spellings are intentional: .name stays unchanged.
   // The opaque ك.ع.خ.اع. abbreviation is retained until its author supplies an expansion.
   static const _names = <String, List<String>>{
+    'اساسيات الادارة الحديثة': [
+      'Fundamentals of modern management',
+      'Fondements de la gestion moderne'
+    ],
+    'مقدمة في الدكاء لاصطناعي': [
+      'Introduction to artificial intelligence',
+      'Introduction à l’intelligence artificielle'
+    ],
+    'مقدمة في الدكاء الاصطناعي': [
+      'Introduction to artificial intelligence',
+      'Introduction à l’intelligence artificielle'
+    ],
+    'اساسيات الدكاء الاصطناعي': [
+      'Fundamentals of artificial intelligence',
+      'Fondements de l’intelligence artificielle'
+    ],
+    'الانجليزية الاقتصادية العامة': [
+      'General English for economics',
+      'Anglais général pour l’économie'
+    ],
+    'الامجليزية الاقتصادية العامة': [
+      'General English for economics',
+      'Anglais général pour l’économie'
+    ],
+    'كتابة وعرض خطط الاعمال بالغة الانجليزية': [
+      'Writing and presenting business plans in English',
+      'Rédaction et présentation de plans d’affaires en anglais'
+    ],
+    'انجليزية تجارية': ['Business English', 'Anglais commercial'],
+    'الانجليزية المالية والمحاسبية': [
+      'English for finance and accounting',
+      'Anglais financier et comptable'
+    ],
+    'انجليزية اقتصادية': ['English for economics', 'Anglais économique'],
     'EXAM': ['Exam', 'Examen'],
     'TD': ['Tutorials', 'TD'],
     'TP': ['Practical work', 'TP'],

@@ -29,6 +29,14 @@ abstract final class ChatGroupStrings {
   }
 
   static const values = <String, List<String>>{
+    'Members added': ['الأعضاء المضافون', 'Membres ajoutés'],
+    'Group created; additions pending': ['تم إنشاء المجموعة، ولم تكتمل إضافة الجميع. أعد المحاولة أو أضف الباقين لاحقًا.', 'Le groupe est créé. Réessayez pour ajouter les personnes restantes, ou ajoutez-les plus tard.'],
+    'Conversation started': ['بداية المحادثة', 'Début de la conversation'],
+    'Member added': ['تمت إضافة العضو', 'Membre ajouté'],
+    'Add member': ['إضافة عضو', 'Ajouter un membre'],
+    'Change group photo': ['تغيير صورة المجموعة', 'Modifier la photo du groupe'],
+    'Conversation settings and media': ['إعدادات المحادثة والوسائط', 'Réglages et médias de la conversation'],
+    'People are added directly when their privacy settings allow it. They can leave the group.': ['يُضاف الأشخاص مباشرة إذا سمحت إعدادات الخصوصية، ويمكنهم مغادرة المجموعة.', 'Les personnes sont ajoutées directement si leurs réglages de confidentialité le permettent. Elles peuvent quitter le groupe.'],
     'Reject': ['رفض', 'Refuser'],
     'Refresh': ["تحديث","Actualiser"],
     'Approve': ["موافقة","Approuver"],
@@ -76,6 +84,9 @@ abstract final class ChatGroupStrings {
       'Nommez un autre admin avant de quitter le groupe.'
     ],
     'New group': ['مجموعة جديدة', 'Nouveau groupe'],
+    'Group name too long': ['اسم المجموعة طويل جدًا. اختصره قليلًا.', 'Le nom du groupe est trop long. Raccourcissez-le.'],
+    'Group name (optional)': ['اسم المجموعة (اختياري)', 'Nom du groupe (facultatif)'],
+    'Remove selection': ['إلغاء الاختيار', 'Retirer de la sélection'],
     'Group name': ['اسم المجموعة', 'Nom du groupe'],
     'Group details': ['معلومات المجموعة', 'Détails du groupe'],
     'Group invitations': ['دعوات المجموعات', 'Invitations aux groupes'],

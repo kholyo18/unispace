@@ -289,7 +289,7 @@ class _FullscreenImageViewerState extends State<FullscreenImageViewer> {
                         final Widget imageWidget = path.startsWith('assets/')
                             ? Image.asset(path, fit: BoxFit.contain)
                             : isNetwork
-                            ? Image.network(
+                            ? ProtectedImage.network(
                           path,
                           fit: BoxFit.contain,
                           loadingBuilder: (context, child, progress) {

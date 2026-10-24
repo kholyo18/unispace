@@ -49,6 +49,15 @@ function createCompleteSignupHandler({auth, db, bucketName}) {
           email:account.email || null,birthDate:i.birthDate === null ? null : Timestamp.fromMillis(i.birthDate),
           gender:i.gender,college:i.college,department:i.department,major:i.major,level:i.level,
           onboardingCompleted:true,updatedAt:FieldValue.serverTimestamp()};
+        if (!old?.privacy) {
+          data.privacy = {privateAccount: old?.profileVisibility === 'private',
+            appearInSearch:true,suggestAccount:true,showAcademicInfo:true,showSocialLinks:true,
+            followersVisibility:'everyone',followingVisibility:'everyone',
+            whoCanComment:'everyone',whoCanRepost:'everyone',whoCanMention:'everyone',whoCanMessage:'everyone',
+            messageRequests:true,readReceipts:true,typingIndicator:true,showOnline:true,
+            showEmailOnProfile:false,findByEmail:false,findByPhone:false,showLastSeen:false,hideLikeCounts:false};
+        }
+        if (old?.profileVisibility == null) data.profileVisibility = old?.privacy?.privateAccount === true ? 'private' : 'public';
         for (const key of ['profileImageUrl','coverImageUrl']) if (Object.hasOwn(i,key)) data[key] = i[key];
         tx.set(profileRef, data, {merge:true});
       }

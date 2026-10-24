@@ -23,8 +23,20 @@ async function user() {
   });
   assert.equal(result.status, 200);
   const data = await result.json();
-  const claims = JSON.parse(Buffer.from(data.idToken.split('.')[1], 'base64url'));
-  return { uid: data.localId, token: data.idToken, authTime: claims.auth_time };
+  const sid = createHash('sha256').update(randomUUID()).digest('hex');
+  await auth.setCustomUserClaims(data.localId, { sid });
+  const login = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: data.email, password: 'Local-only-test-48!', returnSecureToken: true }),
+    signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(login.status, 200);
+  const signed = await login.json();
+  const claims = JSON.parse(Buffer.from(signed.idToken.split('.')[1], 'base64url'));
+  assert.equal(claims.sid, sid);
+  await db.doc(`users/${data.localId}/sessions/${sid}`).set({ sessionId: sid, authSessionVersion: 1, isRevoked: false });
+  await db.doc(`authRevocations/${data.localId}`).set({ revokedBefore: 0 });
+  return { uid: data.localId, token: signed.idToken, authTime: claims.auth_time, sid };
 }
 async function fixture() {
   const [owner, actor, outsider] = await Promise.all([user(), user(), user()]);

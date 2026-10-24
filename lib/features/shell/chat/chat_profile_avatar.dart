@@ -1,3 +1,4 @@
+import '../../../widgets/protected_avatar_image.dart';
 import 'package:flutter/material.dart';
 
 class ChatProfileAvatar extends StatelessWidget {
@@ -24,11 +25,8 @@ class ChatProfileAvatar extends StatelessWidget {
               color: colors.primary.withValues(alpha: .14),
               child: url.isEmpty
                   ? fallback
-                  : Image.network(url,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => fallback,
-                      loadingBuilder: (_, child, progress) =>
-                          progress == null ? child : fallback),
+                  : ProtectedAvatarImage(url: url, size: 52,
+                      placeholder: fallback),
             )));
   }
 }

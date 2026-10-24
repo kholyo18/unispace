@@ -1,3 +1,4 @@
+import '../../widgets/brand_launch.dart';
 import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:flutter/material.dart';
 
@@ -23,7 +24,7 @@ class _AuthSecurityCheckState extends State<AuthSecurityCheck> {
     future: _result,
     builder: (context, snapshot) {
       if (snapshot.connectionState != ConnectionState.done) {
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        return const BrandLoadingScene();
       }
       if (snapshot.hasError || !snapshot.hasData) {
         return Scaffold(body: Center(child: Padding(

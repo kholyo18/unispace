@@ -1,6 +1,6 @@
+import '../../../services/protected_network_image.dart';
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -274,7 +274,7 @@ class _NewConversationPageState extends State<NewConversationPage> {
                                       width: 44,
                                       height: 44,
                                       child: photo?.scheme == 'https'
-                                          ? CachedNetworkImage(
+                                          ? ProtectedCachedNetworkImage(
                                               imageUrl: person.photoUrl!,
                                               fit: BoxFit.cover,
                                               placeholder: (_, __) =>

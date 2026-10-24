@@ -190,4 +190,125 @@ void main() {
     history.redo();
     expect(history.current.texts.first.position, const Offset(.2, .3));
   });
+  test('source and display transforms invert all rotations and mirrors', () {
+    for (var turns = -4; turns < 8; turns++) {
+      for (final mirrored in [false, true]) {
+        const source = Offset(.13, .71);
+        final displayed = photoDisplayPoint(source, turns, mirrored: mirrored);
+        final restored = photoSourcePoint(displayed, turns, mirrored: mirrored);
+        expect((restored - source).distance, lessThan(1e-10));
+      }
+    }
+  });
+  test('mirror then rotation preserves pixel placement', () async {
+    final image = await source();
+    for (var turns = 0; turns < 4; turns++) {
+      final output = await exported(
+          image, PhotoEdit(path: 'source', mirrored: true, turns: turns));
+      final red =
+          photoDisplayPoint(const Offset(.1, .5), turns, mirrored: true);
+      final blue =
+          photoDisplayPoint(const Offset(.8, .5), turns, mirrored: true);
+      expect(
+          await pixel(output, (red.dx * output.width).floor(),
+              (red.dy * output.height).floor()),
+          [255, 0, 0, 255]);
+      expect(
+          await pixel(output, (blue.dx * output.width).floor(),
+              (blue.dy * output.height).floor()),
+          [0, 0, 255, 255]);
+      output.dispose();
+    }
+    image.dispose();
+  });
+  test('eraser removes only ink and restores opaque source', () async {
+    final image = await source();
+    final output = await exported(
+        image,
+        PhotoEdit(path: 'source', strokes: [
+          PhotoStroke(
+              [const Offset(.1, .5), const Offset(.9, .5)], Colors.green, .8),
+          PhotoStroke([const Offset(.25, .5)], Colors.white, .5, erase: true),
+        ]));
+    expect(await pixel(output, 10, 5), [255, 0, 0, 255]);
+    expect(await pixel(output, 28, 5), [76, 175, 80, 255]);
+    output.dispose();
+    image.dispose();
+  });
+  test('marker opacity blends with source without changing alpha', () async {
+    final image = await source();
+    final output = await exported(
+        image,
+        PhotoEdit(path: 'source', strokes: [
+          PhotoStroke([const Offset(.25, .5)], Colors.white, 1, opacity: .5),
+        ]));
+    final rgba = await pixel(output, 10, 5);
+    expect(rgba[0], 255);
+    expect(rgba[1], closeTo(128, 1));
+    expect(rgba[2], closeTo(128, 1));
+    expect(rgba[3], 255);
+    output.dispose();
+    image.dispose();
+  });
+  test('history owns immutable lists and nested stroke point snapshots', () {
+    final points = [const Offset(.1, .1)];
+    final strokes = [PhotoStroke(points, Colors.red, .1)];
+    final texts = [const PhotoText('A', Offset(.5, .5), Colors.white, .1)];
+    final history =
+        PhotoHistory(PhotoEdit(path: 'a', strokes: strokes, texts: texts));
+    points.clear();
+    strokes.clear();
+    texts.clear();
+    expect(history.current.strokes.single.points.single, const Offset(.1, .1));
+    expect(history.current.texts.single.text, 'A');
+    expect(() => history.current.strokes.clear(), throwsUnsupportedError);
+    expect(() => history.current.strokes.single.points.clear(),
+        throwsUnsupportedError);
+    history.push(history.current.copy(mirrored: true));
+    history.undo();
+    expect(history.current.mirrored, false);
+    history.redo();
+    expect(history.current.mirrored, true);
+  });
+  test('text copies retain decoration and support explicit background clearing',
+      () {
+    const original = PhotoText('مرحبا', Offset(.5, .5), Colors.red, .2,
+        angle: 1.2,
+        background: Colors.black,
+        fontStyle: 2,
+        align: TextAlign.right,
+        emoji: true);
+    final copy = original.copy(text: 'Hello', color: Colors.blue, size: .3);
+    expect(copy.angle, 1.2);
+    expect(copy.background, Colors.black);
+    expect(copy.fontStyle, 2);
+    expect(copy.align, TextAlign.right);
+    expect(copy.emoji, true);
+    expect(copy.text, 'Hello');
+    expect(copy.copy(clearBackground: true).background, isNull);
+    expect(original.background, Colors.black);
+  });
+  test('text hit testing follows rotated layout in source coordinates', () {
+    const size = Size(400, 200);
+    const text = PhotoText('Wide text', Offset(.5, .5), Colors.white, .2,
+        angle: 1.5707963267948966);
+    final bounds = photoTextBounds(text, size);
+    expect(hitTestPhotoText(text, const Offset(.5, .5), size), true);
+    // A horizontal offset beyond half the text height is outside after rotation.
+    final horizontal = Offset(.5 + (bounds.height / 2 + 5) / size.width, .5);
+    expect(hitTestPhotoText(text, horizontal, size), false);
+    final vertical = Offset(.5, .5 + (bounds.width / 2 - 2) / size.height);
+    expect(hitTestPhotoText(text, vertical, size), true);
+  });
+  test('six filters render and preserve opaque alpha', () async {
+    expect(photoFilters.length, 6);
+    final image = await source();
+    for (var filter = 0; filter < photoFilters.length; filter++) {
+      final output =
+          await exported(image, PhotoEdit(path: 'a', filter: filter));
+      expect((await pixel(output, 5, 5))[3], 255);
+      output.dispose();
+    }
+    image.dispose();
+  });
 }

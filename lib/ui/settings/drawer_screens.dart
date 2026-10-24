@@ -1,7 +1,10 @@
+import '../auth/password_reset_sheet.dart';
+import 'settings_components.dart';
+export 'notifications_settings_screen.dart';
+import 'package:UniSpace/core/brand_palette.dart';
 import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'account_state_service.dart';
 import 'algerian_phone.dart';
-import 'push_preferences_service.dart';
 import '../auth/account_recovery_screen.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'private_totp_qr.dart';
@@ -35,91 +38,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-
-class NotificationsSettingsScreen extends StatelessWidget {
-  const NotificationsSettingsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(S.of(context).notificationsSettingsTitle),
-      ),
-      body: ValueListenableBuilder<SettingsData>(
-        valueListenable: AppSettings.instance.notifier,
-        builder: (context, settings, _) {
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                S.of(context).notificationsSettingsDescription,
-                style: theme.textTheme.bodyMedium,
-              ),
-              ValueListenableBuilder<String>(
-                valueListenable: PushPreferencesService.instance.status,
-                builder: (context, status, _) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(authSettingsText(context, 'إشعارات هذا الجهاز')),
-                  subtitle: Text(authSettingsText(context, status)),
-                  trailing: IconButton(
-                    tooltip: authSettingsText(context, 'إعادة المزامنة'),
-                    icon: const Icon(Icons.sync),
-                    onPressed: () => PushPreferencesService.instance.sync(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SwitchListTile.adaptive(
-                value: settings.notificationsEnabled,
-                title: Text(S.of(context).notificationsEnabled),
-                subtitle: Text(S.of(context).notificationsEnabledHint),
-                onChanged: (value) =>
-                    AppSettings.instance.setNotificationsEnabled(value),
-              ),
-              const SizedBox(height: 12),
-              SwitchListTile.adaptive(
-                value: settings.examRemindersEnabled,
-                title: Text(S.of(context).notificationsExamReminders),
-                subtitle: Text(S.of(context).notificationsExamRemindersHint),
-                onChanged: settings.notificationsEnabled
-                    ? (value) =>
-                        AppSettings.instance.setExamRemindersEnabled(value)
-                    : null,
-              ),
-              SwitchListTile.adaptive(
-                value: settings.announcementsEnabled,
-                title: Text(S.of(context).notificationsAnnouncements),
-                subtitle: Text(S.of(context).notificationsAnnouncementsHint),
-                onChanged: settings.notificationsEnabled
-                    ? (value) =>
-                        AppSettings.instance.setAnnouncementsEnabled(value)
-                    : null,
-              ),
-              SwitchListTile.adaptive(
-                value: settings.communityUpdatesEnabled,
-                title: Text(S.of(context).notificationsCommunity),
-                subtitle: Text(S.of(context).notificationsCommunityHint),
-                onChanged: settings.notificationsEnabled
-                    ? (value) =>
-                        AppSettings.instance.setCommunityUpdatesEnabled(value)
-                    : null,
-              ),
-              if (!settings.notificationsEnabled)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    S.of(context).notificationsDisabledHint,
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
 
 class SecurityCenterScreen extends StatefulWidget {
   const SecurityCenterScreen({super.key});
@@ -1394,7 +1312,7 @@ class _FontScaleOptionTile extends StatelessWidget {
 
 
 
-const Color kSecurityAccent = Color(0xFF0D9488);
+const Color kSecurityAccent = UniSpaceColors.forest;
 
 String securityDeviceLabel() {
   switch (defaultTargetPlatform) {
@@ -1578,11 +1496,13 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
         .completed;
 
     return RefreshIndicator(
-      color: kSecurityAccent,
+      color: Theme.of(context).colorScheme.primary,
       onRefresh: _boot,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
+          SettingsIntro(icon: Icons.shield_outlined, title: S.of(context).securitySegmentTitle,
+            subtitle: authSettingsText(context, 'هذه الإعدادات تحمي دخول حسابك. من يرى منشوراتك ومن يراسلك في تبويب الخصوصية.')),
           _SecScoreCard(score: score, total: totalChecks, missing: missing),
           const SizedBox(height: 22),
           _SecGroup(
@@ -1670,7 +1590,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
                   _alerts
                       ? Icons.notifications_active_outlined
                       : Icons.notifications_off_outlined,
-                  color: kSecurityAccent,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 title: Text(
                   authSettingsText(context, 'تنبيهات الدخول'),
@@ -1682,7 +1602,7 @@ class _SecurityCenterContentState extends State<SecurityCenterContent> {
                       : authSettingsText(context, 'لن يصلك تنبيه عند دخول جديد'),
                 ),
                 value: _loadingAlerts ? true : _alerts,
-                activeColor: kSecurityAccent,
+                activeColor: Theme.of(context).colorScheme.primary,
                 onChanged: _loadingAlerts ? null : _toggleAlerts,
               ),
             ],
@@ -1780,7 +1700,7 @@ class _SecScoreCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF16181C) : Colors.white,
+        color: isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
@@ -1872,40 +1792,10 @@ class _SecGroup extends StatelessWidget {
   const _SecGroup({required this.title, required this.children});
   final String title;
   final List<Widget> children;
-
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.only(start: 8, bottom: 8),
-          child: Text(
-            title,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        Material(
-          color: isDark ? const Color(0xFF16181C) : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.06),
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(children: children),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    SettingsSectionTitle(title), SettingsPanel(children: children),
+  ]);
 }
 
 class _SecRowDivider extends StatelessWidget {
@@ -1947,11 +1837,7 @@ class _SecRowTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-      leading: CircleAvatar(
-        radius: 18,
-        backgroundColor: kSecurityAccent.withValues(alpha: 0.12),
-        child: Icon(icon, size: 18, color: kSecurityAccent),
-      ),
+      leading: SettingsIcon(icon),
       title: Text(
         title,
         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
@@ -1980,7 +1866,7 @@ class _SecRowTile extends StatelessWidget {
             ),
           ],
           Icon(
-            Icons.chevron_left_rounded,
+            Directionality.of(context) == m.TextDirection.rtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
             color: muted ? theme.hintColor : theme.colorScheme.onSurfaceVariant,
           ),
         ],
@@ -2120,7 +2006,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
               child: Text(authSettingsText(context, 'إبقاء الجلسات')),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(
+              style: FilledButton.styleFrom(foregroundColor: Colors.white,
                 backgroundColor: kSecurityAccent,
               ),
               onPressed: () => Navigator.pop(ctx, true),
@@ -2170,6 +2056,11 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
             visible: _show1,
             onToggle: () => setState(() => _show1 = !_show1),
           ),
+          Align(alignment: AlignmentDirectional.centerEnd,
+            child: TextButton(key: const ValueKey('settings-forgot-password'),
+              onPressed: _busy ? null : () => showPasswordResetSheet(context,
+                initialEmail: FirebaseAuth.instance.currentUser?.email ?? '', lockEmail: true),
+              child: Text(S.of(context).forgotPassword))),
           const SizedBox(height: 12),
           _SecPasswordField(
             controller: _next,
@@ -2187,7 +2078,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _busy ? null : _submit,
-            style: FilledButton.styleFrom(
+            style: FilledButton.styleFrom(foregroundColor: Colors.white,
               backgroundColor: kSecurityAccent,
               minimumSize: const Size.fromHeight(48),
             ),
@@ -2394,7 +2285,7 @@ class _EmailSecurityPageState extends State<_EmailSecurityPage> {
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _busy ? null : _changeEmail,
-            style: FilledButton.styleFrom(
+            style: FilledButton.styleFrom(foregroundColor: Colors.white,
               backgroundColor: kSecurityAccent,
               minimumSize: const Size.fromHeight(48),
             ),
@@ -2580,7 +2471,7 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
           OutlinedButton(
             onPressed: _busy ? null : _sendCode,
             style: OutlinedButton.styleFrom(
-              foregroundColor: kSecurityAccent,
+              foregroundColor: Theme.of(context).colorScheme.primary,
               minimumSize: const Size.fromHeight(48),
             ),
             child: Text(authSettingsText(context, 'إرسال رمز التحقق')),
@@ -2605,7 +2496,7 @@ class _PhoneSecurityPageState extends State<_PhoneSecurityPage> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _busy ? null : _confirm,
-              style: FilledButton.styleFrom(
+              style: FilledButton.styleFrom(foregroundColor: Colors.white,
                 backgroundColor: kSecurityAccent,
                 minimumSize: const Size.fromHeight(48),
               ),
@@ -2891,7 +2782,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
           if (!_on && qr == null)
             FilledButton(
               onPressed: _busy ? null : _startEnroll,
-              style: FilledButton.styleFrom(
+              style: FilledButton.styleFrom(foregroundColor: Colors.white,
                 backgroundColor: kSecurityAccent,
                 minimumSize: const Size.fromHeight(48),
               ),
@@ -2940,7 +2831,7 @@ class _TwoFactorPageState extends State<_TwoFactorPage> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _busy ? null : _confirmEnroll,
-              style: FilledButton.styleFrom(
+              style: FilledButton.styleFrom(foregroundColor: Colors.white,
                 backgroundColor: kSecurityAccent,
                 minimumSize: const Size.fromHeight(48),
               ),
@@ -3058,7 +2949,7 @@ class _MfaSignInPageState extends State<MfaSignInPage> {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _busy ? null : _submit,
-              style: FilledButton.styleFrom(
+              style: FilledButton.styleFrom(foregroundColor: Colors.white,
                 backgroundColor: kSecurityAccent,
                 minimumSize: const Size.fromHeight(48),
               ),
@@ -3309,6 +3200,7 @@ class _FreezeAccountPageState extends State<_FreezeAccountPage> {
             style: FilledButton.styleFrom(
               backgroundColor:
               _frozen ? kSecurityAccent : const Color(0xFFD97706),
+              foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(48),
             ),
             child: Text(_frozen ? authSettingsText(context, 'إلغاء التجميد') : authSettingsText(context, 'تجميد الحساب')),

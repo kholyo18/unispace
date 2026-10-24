@@ -1,3 +1,4 @@
+import '../settings_components.dart';
 import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../../services/post_privacy_sync.dart';
@@ -412,9 +413,6 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.hintColor;
-
     if (_loading) {
       return const Center(
         child: SizedBox(
@@ -430,19 +428,9 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          Text(
-            authSettingsText(context, 'الخصوصية'),
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            authSettingsText(context, 'تحكم في من يرى حسابك ومن يمكنه التفاعل معك.'),
-            style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-          ),
-          const SizedBox(height: 22),
-
+          SettingsIntro(icon: Icons.privacy_tip_outlined,
+            title: authSettingsText(context, 'الخصوصية'),
+            subtitle: authSettingsText(context, 'تحكم في من يرى حسابك ومن يمكنه التفاعل معك.')),
           _header(authSettingsText(context, 'الحساب')),
           _card([
             _switchTile(
@@ -763,50 +751,12 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     );
   }
 
-  Widget _header(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 13.5,
-          color: Theme.of(context).hintColor,
-        ),
-      ),
-    );
-  }
+  Widget _header(String title) => SettingsSectionTitle(title);
 
-  Widget _card(List<Widget> children) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Material(
-        color: theme.colorScheme.surface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: theme.dividerColor.withValues(alpha: 0.35),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            for (var i = 0; i < children.length; i++) ...[
-              children[i],
-              if (i != children.length - 1)
-                Divider(
-                  height: 1,
-                  indent: 56,
-                  color: theme.dividerColor.withValues(alpha: 0.25),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _card(List<Widget> children) => Padding(
+    padding: const EdgeInsets.only(bottom: 20),
+    child: SettingsPanel(dividers: true, children: children),
+  );
 
   Widget _switchTile({
     required IconData icon,
@@ -817,7 +767,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
   }) {
     return SwitchListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      secondary: Icon(icon),
+      secondary: SettingsIcon(icon),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
       subtitle: subtitle == null
           ? null
@@ -889,7 +839,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
     final theme = Theme.of(context);
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      leading: Icon(icon),
+      leading: SettingsIcon(icon),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
       subtitle: subtitle == null
           ? (value == null
@@ -899,7 +849,7 @@ class _PrivacyAccountOverviewTabState extends State<PrivacyAccountOverviewTab> {
         value == null ? subtitle : '$subtitle\n$value',
         style: TextStyle(color: theme.hintColor),
       ),
-      trailing: const Icon(Icons.chevron_left_rounded),
+      trailing: Icon(Directionality.of(context) == TextDirection.rtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded),
       onTap: onTap,
     );
   }

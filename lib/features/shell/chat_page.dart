@@ -1,3 +1,7 @@
+import '../../widgets/protected_avatar_image.dart';
+import '../../services/protected_network_image.dart';
+import '../../services/chat_translation_consent.dart';
+import '../../widgets/image_assignment_crop.dart';
 import '../../services/chat_download_coordinator.dart';
 import 'chat/chat_transfer_center.dart';
 import 'package:UniSpace/services/chat_unread_reminders.dart';
@@ -192,7 +196,7 @@ Color _chatWallpaperColor(String id, bool isDark) {
     case 'graphite':
       return const Color(0xFF0F172A);
     default:
-      return isDark ? Colors.black : const Color(0xFFF5F7FA);
+      return UniSpaceColors.background(isDark);
   }
 }
 
@@ -204,7 +208,7 @@ BoxDecoration chatWallpaperDecoration({
   if (id == 'photo' && url.trim().isNotEmpty) {
     return BoxDecoration(
       image: DecorationImage(
-        image: NetworkImage(url),
+        image: ProtectedNetworkImage(url),
         fit: BoxFit.cover,
         colorFilter: ColorFilter.mode(
           Colors.black.withValues(alpha: isDark ? 0.45 : 0.18),
@@ -352,8 +356,10 @@ class _ChatDetailsPage extends StatefulWidget {
     this.onBubbleGradientChanged,
     this.onWallpaperUrlChanged,
     required this.onWallpaperPhoto,
+    this.isGroup = false,
   });
 
+  final bool isGroup;
   final String chatId;
   final String peerId;
   final String peerName;
@@ -454,7 +460,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(shellText(context, "إلغاء"))),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            style: FilledButton.styleFrom(foregroundColor: Colors.white, backgroundColor: const Color(0xFFDC2626)),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(shellText(context, "حظر")),
           ),
@@ -681,7 +687,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
       _BubbleStyle(
         id: 'teal',
         label: shellText(context, "فيروزي"),
-        color: const Color(0xFF0D9488),
+        color: UniSpaceColors.forest,
       ),
       _BubbleStyle(
         id: 'blue',
@@ -1046,20 +1052,10 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
     await _savePreference(() async {
       final files = await showChatMediaGallery(context, imagesOnly: true);
       if (files == null || files.isEmpty || !_currentPreferences) return false;
-      final source = files.single;
-      final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-        scrollable: true,
-        title: Text(shellText(ctx, 'خلفية المحادثة')),
-        content: SizedBox(width: 280, height: 340, child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.file(source, fit: BoxFit.cover, cacheWidth: 700),
-        )),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(mediaText(ctx, 'إلغاء', 'Cancel', 'Annuler'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(mediaText(ctx, 'تعيين الخلفية', 'Set wallpaper', 'Définir le fond'))),
-        ],
-      ));
-      if (confirmed != true || !_currentPreferences) return false;
+      final screen = MediaQuery.sizeOf(context);
+      final source = await cropImageForAssignment(context, files.single,
+          aspectRatio: screen.width / screen.height);
+      if (source == null || !_currentPreferences) return false;
       // The conversation owns this work after the details route is closed.
       final url = await widget.onWallpaperPhoto(source);
       if (mounted && url != null) setState(() { _wallpaper = 'photo'; _wallpaperUrl = url; });
@@ -1086,7 +1082,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
         return Material(
           color: isDark
               ? const Color(0xFF18191D)
-              : const Color(0xFFF7F7F7),
+              : UniSpaceColors.ivory,
           borderRadius: const BorderRadius.vertical(
             top: Radius.circular(20),
           ),
@@ -1112,6 +1108,19 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                         muted: _muted,
                       ),
 
+                      ListTile(leading: const Icon(Icons.search),
+                        title: Text(shellText(context, 'ابحث في المحادثة')),
+                        onTap: widget.onSearch),
+                      ListTile(leading: const Icon(Icons.star_outline),
+                        title: Text(chatGroupText(context, 'Starred messages')),
+                        onTap: widget.onStarredMessages),
+                      ListTile(leading: const Icon(Icons.delete_outline),
+                        title: Text(shellText(context, 'مسح')),
+                        onTap: widget.onClear),
+                      if (widget.startedAt != null) ListTile(
+                        leading: const Icon(Icons.calendar_today_outlined),
+                        title: Text(chatGroupText(context, 'Conversation started')),
+                        subtitle: Text(MaterialLocalizations.of(context).formatMediumDate(widget.startedAt!))),
                       const SizedBox(height: 18),
 
                       _SimpleSettingsGroup(
@@ -1157,7 +1166,18 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                             ),
                             value: _auto,
                             onChanged: _savingPreference ? null : (value) async {
-                              if (await _savePreference(() => widget.preferences.setAutoTranslate(value))) {
+                              if (await _savePreference(() async {
+                                final uid = FirebaseAuth.instance.currentUser?.uid;
+                                if (uid == null) return false;
+                                if (value && !await hasChatTranslationConsent(uid)) {
+                                  if (!mounted || !_currentPreferences) return false;
+                                  if (!await confirmChatTranslation(context)) return false;
+                                  if (!mounted || !_currentPreferences || FirebaseAuth.instance.currentUser?.uid != uid) return false;
+                                  await recordChatTranslationConsent(uid);
+                                }
+                                if (!_currentPreferences || FirebaseAuth.instance.currentUser?.uid != uid) return false;
+                                return widget.preferences.setAutoTranslate(value);
+                              })) {
                                 setState(() => _auto = value);
                               }
                             },
@@ -1170,7 +1190,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
                       _SimpleSettingsGroup(
                         title: shellText(context, "التخصيص"),
                         children: [
-                          ListTile(
+                          if (!widget.isGroup) ListTile(
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                             ),
@@ -1261,7 +1281,7 @@ class _ChatDetailsPageState extends State<_ChatDetailsPage> {
 
                       const SizedBox(height: 14),
 
-                      _SimpleSettingsGroup(
+                      if (!widget.isGroup) _SimpleSettingsGroup(
                         title: shellText(context, "إجراءات الحساب"),
                         children: [
                           ListTile(
@@ -1563,7 +1583,7 @@ class _CompactCustomWallpaperOption extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (hasImage)
-                      Image.network(
+                      ProtectedImage.network(
                         imageUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) {
@@ -1850,7 +1870,7 @@ class _SimpleSettingsGroup extends StatelessWidget {
           ),
         ),
         Material(
-          color: isDark ? const Color(0xFF222428) : Colors.white,
+          color: UniSpaceColors.surface(isDark),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: BorderSide(color: theme.dividerColor.withOpacity(0.25)),
@@ -1888,7 +1908,7 @@ class _ChatSharedGrid extends StatelessWidget {
         if (m is types.ImageMessage) {
           return ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(m.uri, fit: BoxFit.cover),
+            child: ProtectedImage.network(m.uri, fit: BoxFit.cover),
           );
         }
         if (m is types.VideoMessage) {
@@ -2164,37 +2184,27 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  String? _avatarOwner;
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _avatarProfile;
   Widget _buildProfileAvatar(BuildContext context, String uid) {
-    final primary = _primary(context);
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: _firestore.collection('users').doc(uid).get(),
+    if (_avatarOwner != uid) {
+      _avatarOwner = uid;
+      _avatarProfile = _firestore.collection('users').doc(uid).snapshots();
+    }
+    final placeholder = Icon(Icons.person_outline, color: _primary(context), size: 23);
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      key: ValueKey(uid),
+      stream: _avatarProfile,
       builder: (context, snapshot) {
-        final data = snapshot.data?.data() ?? {};
-        final photoUrl = _readPhoto(data);
-
-        return GestureDetector(
-          onTap: widget.onOpenDrawer,
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _card(context),
-              border: Border.all(color: _border(context).withValues(alpha: .5)),
-              image: photoUrl != null
-                  ? DecorationImage(
-                image: NetworkImage(photoUrl),
-                fit: BoxFit.cover,
-              )
-                  : null,
-            ),
-            child: photoUrl == null
-                ? Icon(Icons.person_outline, color: primary, size: 23)
-                : null,
-          ),
-        );
-      },
-    );
+        final photo = snapshot.hasError ? null : _readPhoto(snapshot.data?.data() ?? {});
+        return GestureDetector(onTap: widget.onOpenDrawer,
+          child: Container(width: 44, height: 44,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: _card(context),
+              border: Border.all(color: _border(context).withValues(alpha: .5))),
+            child: photo == null || photo.isEmpty ? placeholder :
+              ProtectedAvatarImage(url: photo, size: 44, placeholder: placeholder)));
+      });
   }
 
   Widget _buildSearchField(BuildContext context) {
@@ -2810,7 +2820,7 @@ class _ChatRowState extends State<_ChatRow> {
 
     final isGroup = data['type'] == 'group';
     final name = isGroup ? (data['name']?.toString() ?? chatUiText(context, 'Group')) : _ChatPageState._readName(peer, fallback: shellText(context, 'User'));
-    final photoUrl = isGroup ? null : _ChatPageState._readPhoto(peer);
+    final photoUrl = isGroup ? data['photoUrl'] as String? : _ChatPageState._readPhoto(peer);
     final lastTime = data['lastMessageAt'];
     final muted = ChatPreferencesSnapshot.readMuted(data, widget.myUid);
     final lastMessage = data['lastMessage']?.toString() ?? '';
@@ -3036,16 +3046,12 @@ class _Avatar extends StatelessWidget {
         shape: BoxShape.circle,
         color: Theme.of(context).colorScheme.secondaryContainer,
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .35)),
-        image: photoUrl != null && photoUrl!.isNotEmpty
-            ? DecorationImage(
-          image: NetworkImage(photoUrl!),
-          fit: BoxFit.cover,
-        )
-            : null,
       ),
+      clipBehavior: Clip.antiAlias,
       child: photoUrl == null || photoUrl!.isEmpty
           ? Icon(Icons.person_outline, color: Theme.of(context).colorScheme.onSecondaryContainer, size: 25)
-          : null,
+          : ProtectedAvatarImage(url: photoUrl!, size: 52,
+              placeholder: Icon(Icons.person_outline, color: primary)),
     );
   }
 }
@@ -3157,8 +3163,66 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> with WidgetsBinding
     return member is Map && (member['name']?.toString() ?? '').isNotEmpty
         ? member['name'].toString() : (_isGroup ? shellText(context, 'User') : _conversationName);
   }
+  void _openConversationDetails() {
+                showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => _ChatDetailsPage(
+                    chatId: widget.chatId,
+                    peerId: widget.peerId,
+                    isGroup: _isGroup,
+                    peerName: _conversationName,
+                    peerPhotoUrl: _isGroup ? _conversationData['photoUrl'] as String? : widget.peerPhotoUrl,
+                    muted: _muted,
+                    nickname: _nickname,
+                    wallpaper: _wallpaper,
+                    wallpaperUrl: _wallpaperUrl,
+                    bubbleColor: _bubbleColor,
+                    autoTranslate: _autoTranslate,
+                    autoTranslateLang: _autoTranslateLang,
+                    startedAt: _chatStartedAt,
+                    messages: _messages,
+                    onStarredMessages: () { Navigator.of(context).pop(); _openStarredMessages(); },
+                    onSearch: () {
+                      Navigator.pop(context);
+                      if (_isGroup) Navigator.pop(context);
+                      setState(() => _searching = true);
+                    },
+                    onOpenProfile: _openPeerProfile,
+                    preferences: _chatPreferences,
+                    onClear: _clearChat,
+                    onWallpaperPhoto: _setPhotoWallpaper,
+                    onWallpaperChanged: (id) {
+                      setState(() {
+                        _wallpaper = id;
+                        if (id != 'photo') _wallpaperUrl = '';
+                      });
+                    },
+                    onBubbleColorChanged: (c) {
+                      setState(() {
+                        _bubbleColor = c;
+                        _bubbleGradient = null;
+                      });
+                    },
+                    onBubbleGradientChanged: (g) {
+                      setState(() {
+                        _bubbleGradient = g
+                            ?.map((e) => Color(e))
+                            .toList();
+                      });
+                    },
+                    onWallpaperUrlChanged: (url) {
+                      setState(() {
+                        _wallpaper = 'photo';
+                        _wallpaperUrl = url;
+                      });
+                    },
+                  ),
+                );
+  }
   Future<void> _openGroupDetails() async {
-    final left = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ChatGroupDetailsPage(chatId: widget.chatId, onStarredMessages: _openStarredMessages)));
+    final left = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ChatGroupDetailsPage(chatId: widget.chatId, onStarredMessages: _openStarredMessages, onConversationSettings: _openConversationDetails)));
     if (!mounted) return;
     if (left == true) { Navigator.of(context).pop(); } else { unawaited(_markChatRead()); }
   }
@@ -3200,10 +3264,10 @@ _translations.dispose();
   final _messageService = ChatMessageService();
   final List<Future<void> Function()> _uploadRetries = [];
   bool _uploadFailed = false;
-  UploadTask? _activeUpload;
-  StreamSubscription<TaskSnapshot>? _uploadSub;
+  ProtectedUploadTask? _activeUpload;
+  StreamSubscription<ProtectedUploadSnapshot>? _uploadSub;
   double? _uploadProgress;
-  void _trackUpload(UploadTask task) {
+  void _trackUpload(ProtectedUploadTask task) {
     if (!mounted || !_chatActivity.isCurrent) { unawaited(task.cancel()); return; }
     setState(() { _activeUpload = task; _uploadProgress = 0; });
     _uploadSub?.cancel();
@@ -3217,12 +3281,12 @@ _translations.dispose();
       if (mounted && identical(_activeUpload, task)) setState(() { _activeUpload = null; _uploadProgress = null; });
     });
   }
-  Future<TaskSnapshot> _uploadBytes(Reference ref, Uint8List bytes, SettableMetadata metadata) async {
+  Future<ProtectedUploadResult> _uploadBytes(Reference ref, Uint8List bytes, SettableMetadata metadata) async {
     _uploadFailed = false;
     try { return await StorageUploadService.putData(ref, bytes, metadata, onTask: _trackUpload); }
     catch (_) { _uploadFailed = true; rethrow; }
   }
-  Future<TaskSnapshot> _uploadFile(Reference ref, File file, SettableMetadata metadata) async {
+  Future<ProtectedUploadResult> _uploadFile(Reference ref, File file, SettableMetadata metadata) async {
     _uploadFailed = false;
     try { return await StorageUploadService.putFile(ref, file, metadata, onTask: _trackUpload); }
     catch (_) { _uploadFailed = true; rethrow; }
@@ -3517,9 +3581,21 @@ _translations.dispose();
   String _nickname = '';
   String _wallpaperUrl = '';
   String _wallpaper = 'default';
-  int _bubbleColor = 0xFF0D9488;
+  int _bubbleColor = 0xFF00483F;
   List<Color>? _bubbleGradient;
   bool _autoTranslate = false;
+  bool _translationConsentGranted = false;
+  int _translationConsentGeneration = 0;
+  Future<void> _refreshTranslationConsent(bool enabled) async {
+    final generation = ++_translationConsentGeneration;
+    final uid = _me.id;
+    final session = _liveSessionKey;
+    bool granted = false;
+    try { granted = await hasChatTranslationConsent(uid); } catch (_) { }
+    if (!mounted || generation != _translationConsentGeneration ||
+        session != _liveSessionKey || FirebaseAuth.instance.currentUser?.uid != uid) return;
+    setState(() { _translationConsentGranted = granted; _autoTranslate = enabled && granted; });
+  }
   String _autoTranslateLang = 'auto';
   DateTime? _chatStartedAt;
 
@@ -3705,11 +3781,12 @@ _translations.dispose();
         _wallpaperUrl = preferences.wallpaperUrl;
         _bubbleColor = preferences.bubbleColor;
         _bubbleGradient = preferences.bubbleGradient?.map((color) => Color(color)).toList();
-        _autoTranslate = preferences.autoTranslate;
+        _autoTranslate = preferences.autoTranslate && _translationConsentGranted;
         _autoTranslateLang = preferences.autoTranslateLang;
         _chatStartedAt = started is Timestamp ? started.toDate() : null;
         _clearedAt = cr is Timestamp ? cr.toDate() : null;
       });
+      unawaited(_refreshTranslationConsent(preferences.autoTranslate));
       if (initialMetadata) unawaited(_markChatRead());
     }, onError: (Object error) {
       if (error is FirebaseException && error.code == 'permission-denied') _revokeConversationAccess();
@@ -3872,7 +3949,7 @@ _translations.dispose();
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(shellText(context, "إلغاء"))),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            style: FilledButton.styleFrom(foregroundColor: Colors.white, backgroundColor: const Color(0xFFDC2626)),
             child: Text(shellText(context, "مسح")),
           ),
         ],
@@ -4111,7 +4188,7 @@ _translations.dispose();
           .child('chats/${widget.chatId}/images/$id.$ext');
 
       await _uploadBytes(ref, bytes, SettableMetadata(contentType: contentType));
-      final url = await ref.getDownloadURL();
+      final url = StorageUploadService.locator(ref);
 
       await _publishMessage({
         'type': isGif ? 'gif' : 'image',
@@ -4158,7 +4235,7 @@ _translations.dispose();
         ),
       );
 
-      final url = await ref.getDownloadURL();
+      final url = StorageUploadService.locator(ref);
       final size = await file.length();
 
       await _publishMessage({
@@ -4439,6 +4516,20 @@ _translations.dispose();
 
   Future<void> _translate(String text) async {
     if (text.trim().isEmpty) return;
+    final uid = _me.id;
+    final session = _liveSessionKey;
+    bool current() => mounted && FirebaseAuth.instance.currentUser?.uid == uid &&
+        _liveSessionKey == session && _chatActivity.isCurrent && !_accessUnavailable;
+    try {
+      if (!await hasChatTranslationConsent(uid)) {
+        if (!current() || !await confirmChatTranslation(context)) return;
+        if (!current()) return;
+        await recordChatTranslationConsent(uid);
+      }
+    } catch (_) {
+      return; // Never send private text when consent could not be persisted.
+    }
+    if (!current()) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -4537,7 +4628,7 @@ _translations.dispose();
     final session = _openedSession;
     final uid = _me.id;
     File? prepared;
-    StreamSubscription<TaskSnapshot>? subscription;
+    StreamSubscription<ProtectedUploadSnapshot>? subscription;
     void guard() {
       if (!mounted || session != _liveSessionKey || !_chatPreferences.isCurrent) {
         throw StateError('Conversation session changed');
@@ -4559,7 +4650,7 @@ _translations.dispose();
         }, onError: (Object _) {});
       });
       guard();
-      final uploaded = Uri.parse(await ref.getDownloadURL());
+      final uploaded = Uri.parse(StorageUploadService.locator(ref));
       final url = uploaded.replace(queryParameters: {...uploaded.queryParameters,
         'v': DateTime.now().microsecondsSinceEpoch.toString()}).toString();
       guard();
@@ -4646,7 +4737,7 @@ _translations.dispose();
           .child('chats/${widget.chatId}/images/$id.${format.extension}');
 
       await _uploadBytes(ref, bytes, SettableMetadata(contentType: format.contentType));
-      final url = await ref.getDownloadURL();
+      final url = StorageUploadService.locator(ref);
 
       await _publishMessage({
         'type': format.isGif ? 'gif' : 'image',
@@ -4706,7 +4797,7 @@ _translations.dispose();
         await _uploadBytes(ref, bytes, SettableMetadata(contentType: format.contentType));
       }
 
-      final url = await ref.getDownloadURL();
+      final url = StorageUploadService.locator(ref);
 
       await _publishMessage({
         'type': 'video',
@@ -4927,15 +5018,9 @@ _translations.dispose();
           onTap: _openPeerProfile,
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundImage: (widget.peerPhotoUrl ?? '').isNotEmpty
-                    ? NetworkImage(widget.peerPhotoUrl!)
-                    : null,
-                child: (widget.peerPhotoUrl ?? '').isEmpty
-                    ? Icon(_isGroup ? Icons.group_outlined : Icons.person_outline, size: 18)
-                    : null,
-              ),
+              SizedBox.square(dimension: 36, child: ChatProfileAvatar(
+                name: _conversationName,
+                photoUrl: _isGroup ? _conversationData['photoUrl'] as String? : widget.peerPhotoUrl)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -4958,7 +5043,7 @@ _translations.dispose();
                         shellText(context, "يكتب الآن…"),
                         style: TextStyle(
                           fontSize: 12,
-                          color: AppTeal.main,
+                          color: AppTeal.foreground(context),
                           fontWeight: FontWeight.w600,
                         ),
                       )
@@ -5010,60 +5095,7 @@ _translations.dispose();
               onPressed: () {
                 if (!_chatPreferences.isCurrent) return;
                 if (_isGroup) { unawaited(_openGroupDetails()); return; }
-                showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => _ChatDetailsPage(
-                    chatId: widget.chatId,
-                    peerId: widget.peerId,
-                    peerName: widget.peerName ?? shellText(context, "محادثة"),
-                    peerPhotoUrl: widget.peerPhotoUrl,
-                    muted: _muted,
-                    nickname: _nickname,
-                    wallpaper: _wallpaper,
-                    wallpaperUrl: _wallpaperUrl,
-                    bubbleColor: _bubbleColor,
-                    autoTranslate: _autoTranslate,
-                    autoTranslateLang: _autoTranslateLang,
-                    startedAt: _chatStartedAt,
-                    messages: _messages,
-                    onStarredMessages: () { Navigator.of(context).pop(); _openStarredMessages(); },
-                    onSearch: () {
-                      Navigator.pop(context);
-                      setState(() => _searching = true);
-                    },
-                    onOpenProfile: _openPeerProfile,
-                    preferences: _chatPreferences,
-                    onClear: _clearChat,
-                    onWallpaperPhoto: _setPhotoWallpaper,
-                    onWallpaperChanged: (id) {
-                      setState(() {
-                        _wallpaper = id;
-                        if (id != 'photo') _wallpaperUrl = '';
-                      });
-                    },
-                    onBubbleColorChanged: (c) {
-                      setState(() {
-                        _bubbleColor = c;
-                        _bubbleGradient = null;
-                      });
-                    },
-                    onBubbleGradientChanged: (g) {
-                      setState(() {
-                        _bubbleGradient = g
-                            ?.map((e) => Color(e))
-                            .toList();
-                      });
-                    },
-                    onWallpaperUrlChanged: (url) {
-                      setState(() {
-                        _wallpaper = 'photo';
-                        _wallpaperUrl = url;
-                      });
-                    },
-                  ),
-                );
+                _openConversationDetails();
               },
             ),
           ],
@@ -5355,7 +5387,7 @@ class _SwipeToReplyState extends State<_SwipeToReply> {
               child: Icon(
                 Icons.reply_rounded,
                 size: 20,
-                color: AppTeal.main,
+                color: AppTeal.foreground(context),
               ),
             ),
           ),
@@ -5372,10 +5404,10 @@ class _SwipeToReplyState extends State<_SwipeToReply> {
 class _AllEmojiSheet extends StatelessWidget {
   const _AllEmojiSheet();
 
-  static const Color _darkBackground = Color(0xFF18191C);
-  static const Color _darkSurface = Color(0xFF222428);
-  static const Color _lightBackground = Color(0xFFF7F8FA);
-  static const Color _lightSurface = Colors.white;
+  static const Color _darkBackground = UniSpaceColors.darkBackground;
+  static const Color _darkSurface = UniSpaceColors.darkSurface;
+  static const Color _lightBackground = UniSpaceColors.ivory;
+  static const Color _lightSurface = UniSpaceColors.lightSurface;
 
   @override
   Widget build(BuildContext context) {
@@ -5550,7 +5582,7 @@ class _EmojiPickerSearchBar extends StatelessWidget {
         : const Color(0xFF8A8F98);
     final fill = isDark
         ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFF0F1F3);
+        : UniSpaceColors.lightField;
 
     return Material(
       color: surfaceColor,
@@ -5731,7 +5763,7 @@ class _ChatSearchBar extends StatelessWidget {
                       child: Text(
                         '$resultCount',
                         style: TextStyle(
-                          color: AppTeal.main,
+                          color: AppTeal.foreground(context),
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
                         ),
@@ -5893,8 +5925,14 @@ class _MessageBubbleTileState extends State<_MessageBubbleTile>
         ? (widget.accent ?? AppTeal.main)
         : theme.colorScheme.surface.withValues(alpha: .96);
     final bubbleGradient = mine ? widget.accentGradient : null;
-    final textColor =
-    mine ? Colors.white : theme.colorScheme.onSurface;
+    final bubbleStops = bubbleGradient?.colors ?? [bubbleColor];
+    final luminances = bubbleStops.map((color) =>
+        Color.alphaBlend(color, theme.colorScheme.surface).computeLuminance());
+    final whiteContrast = 1.05 / (luminances.reduce(max) + .05);
+    final blackContrast = (luminances.reduce(min) + .05) / .05;
+    final textColor = mine
+        ? (whiteContrast >= blackContrast ? Colors.white : Colors.black)
+        : theme.colorScheme.onSurface;
 
     Widget content;
     if (message.metadata?['richData'] is Map) {
@@ -5913,6 +5951,7 @@ class _MessageBubbleTileState extends State<_MessageBubbleTile>
         scope: widget.mediaScope,
         url: message.uri,
         mine: mine,
+        foregroundColor: textColor,
         totalDuration: message.duration,
       );
     } else if (message is types.FileMessage) {
@@ -5987,9 +6026,9 @@ class _MessageBubbleTileState extends State<_MessageBubbleTile>
               border: Border(
                 left: mine
                     ? BorderSide.none
-                    : BorderSide(color: AppTeal.main, width: 2.5),
+                    : BorderSide(color: AppTeal.foreground(context), width: 2.5),
                 right: mine
-                    ? BorderSide(color: AppTeal.main, width: 2.5)
+                    ? BorderSide(color: AppTeal.foreground(context), width: 2.5)
                     : BorderSide.none,
               ),
             ),
@@ -6009,7 +6048,7 @@ class _MessageBubbleTileState extends State<_MessageBubbleTile>
                         Text(
                           quoteName,
                           style: TextStyle(
-                            color: AppTeal.main,
+                            color: AppTeal.foreground(context),
                             fontWeight: FontWeight.w800,
                             fontSize: 11,
                           ),
@@ -6047,7 +6086,7 @@ class _MessageBubbleTileState extends State<_MessageBubbleTile>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
+                color: isDark ? UniSpaceColors.darkContainer : UniSpaceColors.lightSurface,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: (isDark ? Colors.white : Colors.black)
@@ -6245,7 +6284,7 @@ class _TypingBubbleState extends State<_TypingBubble> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: widget.isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF0F0F0),
+        color: widget.isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightField,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(18),
           topRight: Radius.circular(18),
@@ -7017,7 +7056,7 @@ class VoiceLockFollowLayer extends StatelessWidget {
             : Colors.white;
         final fg = vis.canceling || ready
             ? Colors.white
-            : const Color(0xFF1C1C1E);
+            : UniSpaceColors.darkSurface;
         return IgnorePointer(
           child: Stack(
             children: [
@@ -7114,7 +7153,7 @@ class VoiceRecordingDock extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final accent = canceling ? kVoiceDanger : kVoiceAccent;
-    final surface = isDark ? const Color(0xFF1D1D24) : Colors.white;
+    final surface = isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface;
     final paused = voice.isPaused;
     final live = voice.isLive;
     final holdOnly = holding && !locked;
@@ -7836,7 +7875,7 @@ class _ReplyPreview extends StatelessWidget {
             width: 3,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFF0095F6),
+              color: UniSpaceColors.emerald,
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -7850,7 +7889,7 @@ class _ReplyPreview extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF0095F6),
+                    color: UniSpaceColors.emerald,
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                   ),
@@ -7923,13 +7962,13 @@ class _WhatsAppMediaSheetState extends State<_WhatsAppMediaSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
-    final bg = isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF7F7F8);
-    final surface = isDark ? const Color(0xFF2C2C2E) : Colors.white;
+    final bg = isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightField;
+    final surface = isDark ? UniSpaceColors.darkContainer : UniSpaceColors.lightSurface;
     final muted = isDark
         ? Colors.white.withValues(alpha: 0.45)
         : const Color(0xFF8E8E93);
     final primary = isDark ? Colors.white : const Color(0xFF111111);
-    final accent = const Color(0xFF25D366); // أخضر واتساب
+    final accent = UniSpaceColors.accent(isDark);
 
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final screenH = MediaQuery.sizeOf(context).height;
@@ -8022,7 +8061,7 @@ class _WhatsAppMediaSheetState extends State<_WhatsAppMediaSheet> {
                     Text(
                       shellText(context, "Customize"),
                       style: TextStyle(
-                        color: const Color(0xFF53BDEB),
+                        color: UniSpaceColors.accent(isDark),
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -8109,8 +8148,8 @@ class _WhatsAppMediaSheetState extends State<_WhatsAppMediaSheet> {
                         onTap: widget.onOpenCamera,
                         child: Container(
                           color: isDark
-                              ? const Color(0xFF3A3A3C)
-                              : const Color(0xFFE5E5EA),
+                              ? UniSpaceColors.darkContainer
+                              : UniSpaceColors.lightBorder,
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -8130,8 +8169,8 @@ class _WhatsAppMediaSheetState extends State<_WhatsAppMediaSheet> {
                         onTap: widget.onPickImage,
                         child: Container(
                           color: isDark
-                              ? const Color(0xFF3A3A3C)
-                              : const Color(0xFFE5E5EA),
+                              ? UniSpaceColors.darkContainer
+                              : UniSpaceColors.lightBorder,
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -8555,7 +8594,7 @@ class _ModernMessageActionsSheetState extends State<_ModernMessageActionsSheet>
 
     final bubbleColor = widget.isMine
         ? AppTeal.main
-        : (isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF0F0F0));
+        : (isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightField);
     final bubbleTextColor =
     widget.isMine ? Colors.white : (isDark ? Colors.white : Colors.black87);
 
@@ -8607,7 +8646,7 @@ class _ModernMessageActionsSheetState extends State<_ModernMessageActionsSheet>
                                     horizontal: 10, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: isDark
-                                      ? const Color(0xFF2C2C2E)
+                                      ? UniSpaceColors.darkContainer
                                       : Colors.white,
                                   borderRadius: BorderRadius.circular(30),
                                   boxShadow: [
@@ -8641,7 +8680,7 @@ class _ModernMessageActionsSheetState extends State<_ModernMessageActionsSheet>
                               builder: (sheetCtx) {
                                 return Material(
                                   color: isDark
-                                      ? const Color(0xFF1C1C1E)
+                                      ? UniSpaceColors.darkSurface
                                       : Colors.white,
                                   borderRadius: const BorderRadius.vertical(
                                     top: Radius.circular(22),
@@ -8728,7 +8767,7 @@ class _ModernMessageActionsSheetState extends State<_ModernMessageActionsSheet>
                                 width: 240,
                                 decoration: BoxDecoration(
                                   color: isDark
-                                      ? const Color(0xFF2C2C2E)
+                                      ? UniSpaceColors.darkContainer
                                       : Colors.white,
                                   borderRadius: BorderRadius.circular(18),
                                   boxShadow: [
@@ -9001,7 +9040,7 @@ class _PinnedMessageActionsOverlayState extends State<_PinnedMessageActionsOverl
     if (m is types.ImageMessage) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image.network(
+        child: ProtectedImage.network(
           m.uri,
           width: r.width,
           height: r.height,
@@ -9326,7 +9365,7 @@ class _ChatTranslateSheetState extends State<_ChatTranslateSheet> {
           const SizedBox(height: 14),
           FilledButton(
             onPressed: _loading ? null : _run,
-            style: FilledButton.styleFrom(backgroundColor: AppTeal.main),
+            style: FilledButton.styleFrom(foregroundColor: Colors.white, backgroundColor: AppTeal.main),
             child: _loading
                 ? const SizedBox(
               width: 18,
@@ -9408,7 +9447,7 @@ class VoiceLockGhost extends StatelessWidget {
     required this.position,
     required this.progress,
     required this.canceling,
-    this.primary = const Color(0xFF0E7A72),
+    this.primary = UniSpaceColors.forest,
     this.danger = const Color(0xFFDC3A2C),
   });
 
@@ -9497,7 +9536,7 @@ class PulseVoiceDock extends StatelessWidget {
     required this.onResume,
     required this.onDelete,
     required this.onSend,
-    this.primary = const Color(0xFF0E7A72),
+    this.primary = UniSpaceColors.forest,
     this.danger = const Color(0xFFDC3A2C),
   });
 
@@ -9521,7 +9560,7 @@ class PulseVoiceDock extends StatelessWidget {
         final paused = session.paused;
         final accent = canceling ? danger : primary;
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final surface = isDark ? const Color(0xFF1D1D24) : Colors.white;
+        final surface = isDark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface;
         final holdOnly = (holding && !locked) || session.busy || session.phase == VoicePhase.starting;
 
         return Column(
@@ -9757,7 +9796,7 @@ class PulseVoiceHost extends StatefulWidget {
     required this.onSendVoice,
     this.onBeforeStart,
     this.onStartFailed,
-    this.primary = const Color(0xFF0E7A72),
+    this.primary = UniSpaceColors.forest,
   });
 
   final VoiceSessionController session;
@@ -10156,7 +10195,7 @@ class _PulseVoiceHostState extends State<PulseVoiceHost> with WidgetsBindingObse
                       const SizedBox(width: 8),
                       widget.hasText
                           ? _RoundBtn(
-                        color: const Color(0xFF0095F6),
+                        color: UniSpaceColors.emerald,
                         onTap: widget.sending ? null : widget.onSendText,
                         child: widget.sending
                             ? const SizedBox(
@@ -10196,7 +10235,7 @@ class _MicVisual extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: const BoxDecoration(
-        color: Color(0xFF0095F6),
+        color: UniSpaceColors.emerald,
         shape: BoxShape.circle,
       ),
       child: const Icon(Icons.mic_rounded, color: Colors.white, size: 22),

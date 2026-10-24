@@ -1,6 +1,8 @@
+import 'package:UniSpace/core/brand_palette.dart';
 import 'package:UniSpace/l10n/auth_settings_strings.dart';
 import 'package:UniSpace/services/storage_upload_service.dart';
 import '../../services/media_upload_limits.dart';
+import '../../widgets/image_assignment_crop.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -14,7 +16,7 @@ import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:UniSpace/core/branding.dart';
+import '../../widgets/unispace_brand.dart';
 import 'package:UniSpace/ui/settings/app_settings.dart';
 import 'package:UniSpace/ui/settings/user_profile_service.dart';
 
@@ -83,11 +85,14 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
   static final _usernameRegex = RegExp(r'^[a-zA-Z0-9_]{3,20}$');
 
   bool get _dark => Theme.of(context).brightness == Brightness.dark;
-  Color get _bg => _dark ? const Color(0xFF071114) : const Color(0xFFF2F7F6);
-  Color get _ink => _dark ? const Color(0xFFF4FBFA) : const Color(0xFF102027);
-  Color get _muted => _dark ? const Color(0xFF9BB0B8) : const Color(0xFF5B6E75);
-  Color get _field => _dark ? const Color(0xFF111C21) : const Color(0xFFF4F8F8);
-  Color get _stroke => _dark ? const Color(0xFF24343C) : const Color(0xFFD5E2E4);
+  Color get _bg => UniSpaceColors.background(_dark);
+  Color get _ink => UniSpaceColors.ink(_dark);
+  Color get _muted => _dark ? UniSpaceColors.darkMuted : UniSpaceColors.lightMuted;
+  Color get _field => _dark ? UniSpaceColors.darkField : UniSpaceColors.lightField;
+  Color get _stroke => _dark ? UniSpaceColors.darkBorder : UniSpaceColors.lightBorder;
+
+  Color get _accent => _dark ? UniSpaceColors.mint : UniSpaceBrand.forest;
+  Color get _sheet => _dark ? UniSpaceColors.darkSurface : UniSpaceColors.lightSurface;
 
   List<_SignUpPage> get _pages {
     if (widget.skipAccountCreation) {
@@ -345,21 +350,45 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     validateMediaUploadSize(await image.length(), video: false);
     if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError(authSettingsText(context, 'تغيّر الحساب'));
     await StorageUploadService.putFile(ref, image, SettableMetadata(contentType: 'image/jpeg'));
-    final url = await ref.getDownloadURL();
+    final url = StorageUploadService.locator(ref);
     if (FirebaseAuth.instance.currentUser?.uid != uid) throw StateError(authSettingsText(context, 'تغيّر الحساب'));
     return url;
   }
 
   Future<void> _pick({required bool cover}) async {
-    final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-    if (file == null) return;
-    setState(() {
-      if (cover) {
-        _cover = file;
-      } else {
-        _photo = file;
-      }
-    });
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+      if (file == null || !mounted) return;
+      final cropped = await cropImageForAssignment(
+        context,
+        File(file.path),
+        aspectRatio: cover ? 16 / 9 : 1,
+        circle: !cover,
+      );
+      if (cropped == null || !mounted) return;
+      setState(() {
+        if (cover) {
+          _cover = XFile(cropped.path);
+        } else {
+          _photo = XFile(cropped.path);
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      final language = Localizations.localeOf(context).languageCode;
+      _snack(language == 'ar'
+          ? 'تعذر تعديل الصورة. حاول مجددًا.'
+          : language == 'fr'
+              ? 'Impossible de modifier la photo. Réessayez.'
+              : 'Could not edit the photo. Please try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _finish({required bool skipAcademic}) async {
@@ -500,7 +529,7 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: AppTeal.main, width: 1.4),
+        borderSide: BorderSide(color: _accent, width: 1.4),
       ),
     );
   }
@@ -510,78 +539,74 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     required String subtitle,
     required Widget child,
   }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: _busy ? null : _back,
-                icon: Icon(Icons.arrow_back_rounded, color: _ink),
-              ),
-              Expanded(
-                child: Row(
-                  children: List.generate(_pages.length, (i) {
-                    return Expanded(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 240),
-                        height: 4,
-                        margin: EdgeInsets.only(left: i == _pages.length - 1 ? 0 : 5),
-                        decoration: BoxDecoration(
-                          color: i <= _index ? AppTeal.main : _stroke,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-              if (_canSkip)
-                TextButton(
-                  onPressed: _busy ? null : _skip,
-                  child: Text(authSettingsText(context, 'تخطي'), style: TextStyle(color: _muted)),
-                )
-              else
-                const SizedBox(width: 64),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Text(
-            title,
-            style: TextStyle(
-              color: _ink,
-              fontSize: 30,
-              height: 1.15,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.8,
+          Row(children: [
+            IconButton(
+              tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+              onPressed: _busy ? null : _back,
+              icon: Icon(Icons.arrow_back_rounded, color: _ink),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(subtitle, style: TextStyle(color: _muted, fontSize: 15, height: 1.45)),
+            Expanded(child: Text('UniSpace', textAlign: TextAlign.center,
+              style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w800))),
+            const UniSpaceBrandMark(width: 44),
+          ]),
           const SizedBox(height: 20),
-          Expanded(child: child),
-          SizedBox(
-            height: 54,
-            child: FilledButton(
-              onPressed: _busy ? null : _next,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTeal.main,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              ),
-              child: _busy
-                  ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-                  : Text(
-                _lastPage ? authSettingsText(context, 'إنهاء والدخول') : authSettingsText(context, 'متابعة'),
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+          Row(children: List.generate(_pages.length, (i) => Expanded(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              height: 4,
+              margin: EdgeInsetsDirectional.only(end: i == _pages.length - 1 ? 0 : 6),
+              decoration: BoxDecoration(
+                color: i <= _index ? _accent : _stroke,
+                borderRadius: BorderRadius.circular(99),
               ),
             ),
+          ))),
+          const SizedBox(height: 22),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: _sheet,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: _stroke.withValues(alpha: 0.7)),
+              boxShadow: [BoxShadow(color: UniSpaceBrand.forest.withValues(alpha: _dark ? 0.12 : 0.05),
+                blurRadius: 28, offset: const Offset(0, 12))],
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(title, style: TextStyle(color: _ink, fontSize: 28,
+                height: 1.25, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              Text(subtitle, style: TextStyle(color: _muted, fontSize: 15, height: 1.5)),
+              const SizedBox(height: 26),
+              child,
+              const SizedBox(height: 26),
+              FilledButton(
+                key: const ValueKey('signup-continue'),
+                onPressed: _busy ? null : _next,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(54),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  backgroundColor: _accent,
+                  foregroundColor: _dark ? UniSpaceBrand.forest : Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                ),
+                child: _busy
+                  ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(
+                      strokeWidth: 2, color: _dark ? UniSpaceBrand.forest : Colors.white))
+                  : Text(_lastPage ? authSettingsText(context, 'إنهاء والدخول') : authSettingsText(context, 'متابعة'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              ),
+              if (_canSkip) ...[
+                const SizedBox(height: 8),
+                TextButton(onPressed: _busy ? null : _skip,
+                  child: Text(authSettingsText(context, 'تخطي'), style: TextStyle(color: _muted))),
+              ],
+            ]),
           ),
         ],
       ),
@@ -604,10 +629,10 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppTeal.main.withValues(alpha: _dark ? 0.22 : 0.12),
+                color: _accent.withValues(alpha: _dark ? 0.22 : 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: AppTeal.main, size: 20),
+              child: Icon(icon, color: _accent, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -638,55 +663,10 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     return _shell(
       title: authSettingsText(context, 'مرحبًا بك في UniSpace.'),
       subtitle: authSettingsText(context, 'من الطلاب، للطلاب.'),
-      child: ListView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: SizedBox(
-              width: 128,
-              height: 128,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppTeal.main.withValues(alpha: 0.28),
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 86,
-                    height: 86,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(26),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppTeal.main,
-                          Color.lerp(AppTeal.main, Colors.black, 0.22)!,
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTeal.main.withValues(alpha: _dark ? 0.5 : 0.3),
-                          blurRadius: 28,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.school_rounded,
-                      color: Colors.white,
-                      size: 42,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          const Center(child: UniSpaceBrandMark(width: 128)),
           const SizedBox(height: 8),
           Text(
             'UniSpace',
@@ -725,7 +705,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       subtitle: authSettingsText(context, 'البريد وكلمة المرور لإنشاء الحساب.'),
       child: Form(
         key: _accountKey,
-        child: ListView(
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextFormField(
               controller: _email,
@@ -790,13 +771,14 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     return _shell(
       title: S.of(context).verifyEmailTitle,
       subtitle: S.of(context).verifyEmailToContinue,
-      child: ListView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(S.of(context).verifyEmailHelper, style: TextStyle(color: _muted, fontSize: 13)),
           const SizedBox(height: 20),
           TextButton(
             onPressed: _busy ? null : _openEmailApp,
-            child: Text(authSettingsText(context, 'فتح البريد'), style: TextStyle(color: AppTeal.main, fontWeight: FontWeight.w800)),
+            child: Text(authSettingsText(context, 'فتح البريد'), style: TextStyle(color: _accent, fontWeight: FontWeight.w800)),
           ),
           const SizedBox(height: 8),
           TextButton(
@@ -819,7 +801,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
       subtitle: authSettingsText(context, 'سيظهر في ملفك الشخصي.'),
       child: Form(
         key: _usernameKey,
-        child: ListView(
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextFormField(
               controller: _username,
@@ -865,7 +848,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     return _shell(
       title: authSettingsText(context, 'صورتك'),
       subtitle: authSettingsText(context, 'غلاف وصورة شخصية. يمكنك التخطي.'),
-      child: ListView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
             height: 210,
@@ -921,7 +905,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     return _shell(
       title: authSettingsText(context, 'من أنت؟'),
       subtitle: authSettingsText(context, 'الاسم إلزامي. الباقي اختياري.'),
-      child: ListView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextField(
             controller: _first,
@@ -970,12 +955,12 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
                 ChoiceChip(
                   label: Text(authSettingsText(context, g)),
                   selected: _gender == g,
-                  selectedColor: AppTeal.main.withValues(alpha: 0.22),
+                  selectedColor: _accent.withValues(alpha: 0.22),
                   labelStyle: TextStyle(
-                    color: _gender == g ? AppTeal.main : _ink,
+                    color: _gender == g ? _accent : _ink,
                     fontWeight: FontWeight.w700,
                   ),
-                  side: BorderSide(color: _gender == g ? AppTeal.main : _stroke),
+                  side: BorderSide(color: _gender == g ? _accent : _stroke),
                   backgroundColor: _field,
                   onSelected: (_) => setState(() => _gender = g),
                 ),
@@ -990,7 +975,8 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
     return _shell(
       title: authSettingsText(context, 'دراستك'),
       subtitle: authSettingsText(context, 'الكلية والتخصص والمستوى — يمكن تخطيها.'),
-      child: ListView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextField(controller: _college, style: TextStyle(color: _ink), decoration: _deco(label: authSettingsText(context, 'الكلية / الجامعة'))),
           const SizedBox(height: 12),
@@ -1025,39 +1011,35 @@ class _SignUpFlowScreenState extends State<SignUpFlowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      resizeToAvoidBottomInset: true,
-      body: Stack(
-        children: [
-          Positioned(
-            top: -80,
-            right: -70,
-            child: IgnorePointer(
-              child: Container(
-                width: 240,
-                height: 240,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      AppTeal.main.withValues(alpha: _dark ? 0.45 : 0.2),
-                      AppTeal.main.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        textTheme: theme.textTheme.apply(fontFamily: 'Tajawal'),
+        colorScheme: theme.colorScheme.copyWith(primary: _accent,
+          onPrimary: _dark ? UniSpaceBrand.forest : Colors.white),
+      ),
+      child: Scaffold(
+        backgroundColor: _bg,
+        resizeToAvoidBottomInset: true,
+        body: DecoratedBox(
+          decoration: BoxDecoration(gradient: LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [_bg, UniSpaceColors.field(_dark)],
+          )),
+          child: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Builder(builder: (context) => PageView(
+                  controller: _pageCtrl,
+                  physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: (i) => setState(() => _index = i),
+                  children: _pages.map(_buildPage).toList(),
+                )),
               ),
             ),
           ),
-          SafeArea(
-            child: PageView(
-              controller: _pageCtrl,
-              physics: const NeverScrollableScrollPhysics(),
-              onPageChanged: (i) => setState(() => _index = i),
-              children: _pages.map(_buildPage).toList(),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

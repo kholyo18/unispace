@@ -59,14 +59,16 @@ class _SecurityPrivacyScreenState extends State<SecurityPrivacyScreen> {
               textDirection: Directionality.of(context),
               child: CupertinoSlidingSegmentedControl<_SecurityPrivacySegment>(
                 groupValue: _segment,
+                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                thumbColor: Theme.of(context).colorScheme.primary,
                 children: {
                   _SecurityPrivacySegment.security: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(s.securitySegmentTitle),
+                    child: Text(s.securitySegmentTitle, style: TextStyle(color: _segment == _SecurityPrivacySegment.security ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.onSurface)),
                   ),
                   _SecurityPrivacySegment.privacy: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(s.privacySegmentTitle),
+                    child: Text(s.privacySegmentTitle, style: TextStyle(color: _segment == _SecurityPrivacySegment.privacy ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.onSurface)),
                   ),
                 },
                 onValueChanged: (value) {

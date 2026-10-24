@@ -78,10 +78,26 @@ jobs:
             throw new Error('duplicate Android permissions: ' + [...new Set(duplicates)].join(', '));
           }
 
-          const forbiddenMediaPermissions = [
+          // Inline chat galleries use PhotoManager. Preserve their read grants;
+          // this source check does not establish Play policy approval.
+          const requiredMediaPermissions = [
             'android.permission.READ_MEDIA_IMAGES',
             'android.permission.READ_MEDIA_VIDEO',
-            'android.permission.READ_EXTERNAL_STORAGE',
+            'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+          ];
+          for (const permission of requiredMediaPermissions) {
+            if (!permissions.includes(permission)) throw new Error('Inline gallery grant missing: ' + permission);
+          }
+          const legacyRead = manifest.match(/<uses-permission\b[^>]*android:name="android.permission.READ_EXTERNAL_STORAGE"[^>]*\/>/)?.[0];
+          if (!legacyRead || !legacyRead.includes('android:maxSdkVersion="32"')) {
+            throw new Error('Legacy external read access must be capped at API 32');
+          }
+          const forbiddenMediaPermissions = [
+            'android.permission.MANAGE_EXTERNAL_STORAGE',
+            'android.permission.ACCESS_BACKGROUND_LOCATION',
+            'android.permission.ACCESS_MEDIA_LOCATION',
+            'android.permission.READ_CONTACTS',
+            'android.permission.WRITE_CONTACTS',
             'android.permission.WRITE_EXTERNAL_STORAGE',
           ];
           const forbiddenPresent = forbiddenMediaPermissions.filter(permission =>
@@ -89,7 +105,8 @@ jobs:
           );
           if (forbiddenPresent.length) {
             throw new Error(
-              'broad media/storage permissions are not allowed: ' + forbiddenPresent.join(', ')
+              'Unneeded sensitive permissions are not allowed: ' + forbiddenPresent.join(', ')
             );
           }
+          console.log('Repository release configuration passed. Play media-access review and signed-device testing remain required.');
           NODE
